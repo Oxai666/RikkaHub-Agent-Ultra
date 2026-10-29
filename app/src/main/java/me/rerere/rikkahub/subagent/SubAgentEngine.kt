@@ -522,7 +522,26 @@ class SubAgentEngine(
             // claim 的文件凭据必须落到真实磁盘路径。Conversation.workspaceCwd 只是工作区
             // 内的相对子目录（多数会话就是 null，表示工作区根），真正的根在 WorkspaceEntity.root。
             val claimRoot = resolveWorkspaceRootForClaim(parentAsstUuid, settings, workspaceCwdForClaim)
-            val claimReview = reviewSubAgentClaim(finalText, claimRoot, request.writePaths.orEmpty())
+            // 存在性检查必须走 WorkspaceManager 的 rootfs 视图（readText），
+            // 不能直接 File(root, path)：工作区的 /workspace 是 rootfs 内的挂载点，
+            // 用宿主机路径去拼会永远找不到文件，把"真的写了"判成"没写"。
+            val claimWorkspaceId = settings.assistants
+                .firstOrNull { it.id == parentAsstUuid }
+                ?.workspaceId
+                ?.toString()
+            val claimFileExists: (String) -> Boolean = { path ->
+                claimWorkspaceId != null && runCatching {
+                    org.koin.java.KoinJavaComponent.getKoin()
+                        .get<me.rerere.rikkahub.data.repository.WorkspaceRepository>()
+                        .readText(claimWorkspaceId, path)
+                }.isSuccess
+            }
+            val claimReview = reviewSubAgentClaim(
+                finalText = finalText,
+                workspaceCwd = claimRoot ?: claimWorkspaceId,
+                leasePaths = request.writePaths.orEmpty(),
+                fileExists = claimFileExists,
+            )
             if (claimReview != null) {
                 Log.i(
                     TAG,
