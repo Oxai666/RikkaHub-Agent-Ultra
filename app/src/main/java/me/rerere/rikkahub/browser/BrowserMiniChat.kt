@@ -65,6 +65,18 @@ import kotlin.uuid.Uuid
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Sparkles
+import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.ui.components.message.ChatMessage
+import me.rerere.rikkahub.ui.context.LocalSettings
+import org.koin.compose.koinInject
 
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
