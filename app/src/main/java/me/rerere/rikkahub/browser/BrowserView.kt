@@ -1,5 +1,13 @@
 package me.rerere.rikkahub.browser
 
+/**
+ * 页内 hook 的逻辑 tab 标识。
+ *
+ * RikkaHub 没有多 tab 池（一会话一个 WebView），前台与 headless 共用同一个逻辑会话，
+ * 规则按这个 id 归属；将来真做 tab 池时换成真实 tabId 即可。
+ */
+internal const val HOOK_TAB_ID = "foreground"
+
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.util.Log
@@ -18,6 +26,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import androidx.webkit.WebViewAssetLoader
+import me.rerere.rikkahub.browser.hook.HookInstaller
+import org.koin.compose.koinInject
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -135,6 +145,8 @@ private fun WebViewHost(
     onCanGoForwardChange: (Boolean) -> Unit,
 ) {
     val ctx = LocalContext.current
+    // 页内 hook 安装器（Koin 单例）：document-start 注入 + 规则推送都靠它。
+    val hookInstaller = koinInject<HookInstaller>()
     // Construct the WebView ONCE — `remember` survives recomp + (with key=Unit) survives
     // configuration changes (the Activity declares `configChanges` so the system never
     // recreates us). Recreating per-recomp would reset history, scroll, and JS state.
@@ -163,6 +175,10 @@ private fun WebViewHost(
             // lives in configureWebViewForRikka so foreground + headless behave
             // identically. See BrowserWebViewConfig.kt for the why.
             configureWebViewForRikka(this)
+
+            // 页内 hook 运行时：document-start 注入 hook_runtime.js + RikkaBridge。
+            // tabId 暂时固定 —— RikkaHub 没有多 tab 池，前台 headless 共用一个逻辑会话。
+            hookInstaller?.onWebViewCreated(HOOK_TAB_ID, this)
 
             // Profile dir is informational — the global WebView databases live where the
             // WebView wants. We create the dir ourselves in BrowserActivity.onCreate so
@@ -203,12 +219,14 @@ private fun WebViewHost(
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     super.onPageStarted(view, url, favicon)
                     if (url != null) onUrlChange(url)
+                    view?.let { hookInstaller?.injectFallback(it) }
                 }
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     if (url != null) onUrlChange(url)
                     onCanGoBackChange(view?.canGoBack() == true)
                     onCanGoForwardChange(view?.canGoForward() == true)
+                    view?.let { hookInstaller?.verifyInstalled(it) }
                     // Adb-friendly white-page diagnostic. Tag = "RikkaWebView". Filter:
                     //   adb logcat -s RikkaWebView
                     // Dumps body innerText length + first 100 chars + meta viewport so

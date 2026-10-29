@@ -50,6 +50,15 @@ val appModule = module {
     single { TelegramChatRepository(get<me.rerere.rikkahub.data.db.AppDatabase>().telegramChatDao()) }
     single { TelegramBotPreferences(get()) }
     single { me.rerere.rikkahub.browser.BrowserPreferences(get()) }
+
+    // --- 浏览器 Hook 事件链 -------------------------------------------------------------
+    single { me.rerere.rikkahub.browser.BrowserEventBus() }
+    single { me.rerere.rikkahub.browser.hook.HookRuleStore(maxBodyBytes = 256 * 1024) }
+    single { me.rerere.rikkahub.browser.hook.NetworkBodyStore() }
+    single {
+        me.rerere.rikkahub.browser.hook.HookEventPipeline(get(), get(), get()).also { it.start() }
+    }
+    single { me.rerere.rikkahub.browser.hook.HookInstaller(androidContext(), get(), get()) }
     single { me.rerere.rikkahub.data.preferences.TermuxPreferences(get()) }
     // Pass 3: Telegram-bound screenshot streamer for headless browser mode. Bound to the
     // [BrowserScreenshotStreamer] interface so [BrowserController.streamScreenshotIfHeadless]
