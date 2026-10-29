@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.ai.tools.local
 
 import android.content.Context
+import android.os.Process
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import kotlinx.coroutines.CancellationException
@@ -341,12 +342,23 @@ fun browserDebugTargetsTool(): Tool = Tool(
         "Empty targets with errors means the CDP path is broken at that step — read errors first.",
     parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
     execute = {
-        val out = withTimeoutOrNull(toolTimeoutMs) {
+        val out = if (!BrowserController.isBound()) {
+            // devtools 服务端点属于 WebView 自己：WebView 销毁后 socket 一并消失，
+            // 这时候连 socket 只会超时，模型会误判成"服务端坏了"。
+            // 直接说清楚，别让它瞎猜。
+            buildJsonObject {
+                put("error", "no_active_webview")
+                put("pid", Process.myPid())
+                put("hint", "浏览器没打开或 WebView 已销毁。devtools socket 随 WebView 生灭，" +
+                    "先用 browser_open 打开一个页面，再调本工具。")
+            }
+        } else withTimeoutOrNull(toolTimeoutMs) {
             runCatching { CdpProbe.listTargets() }.fold(
                 onSuccess = { r ->
                     buildJsonObject {
                         put("socket", r.socketName)
                         put("provider", r.diagnostics)
+                        put("pid", r.pid)
                         put("count", r.targets.size)
                         putJsonArray("targets") {
                             r.targets.forEach { t ->
@@ -358,6 +370,9 @@ fun browserDebugTargetsTool(): Tool = Tool(
                                     put("ws", t.webSocketDebuggerUrl)
                                 })
                             }
+                        }
+                        if (r.candidates.isNotEmpty()) {
+                            putJsonArray("candidates") { r.candidates.forEach { add(JsonPrimitive(it)) } }
                         }
                         if (r.errors.isNotEmpty()) {
                             putJsonArray("errors") { r.errors.forEach { add(JsonPrimitive(it)) } }

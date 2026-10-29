@@ -21,6 +21,60 @@ private val supportedTypes = setOf(
     "image/webp",
 )
 
+
+/** 只放行服务端真正接受的四种图片格式；其它一律转码。 */
+internal fun normalizeImageMime(raw: String): String? {
+    val base = raw.substringBefore("+").substringBefore(";").trim().lowercase()
+    return when (base) {
+        "image/jpeg", "image/jpg" -> "image/jpeg"
+        "image/png", "image/gif", "image/webp" -> base
+        else -> null
+    }
+}
+
+/** 用魔数判断真实图片格式；判断不出来返回 null。 */
+private fun sniffImageMime(base64Payload: String): String? = runCatching {
+    val head = Base64.decode(base64Payload.take(32), Base64.DEFAULT)
+    if (head.size < 12) return@runCatching null
+    if (head[0] == 0xFF.toByte() && head[1] == 0xD8.toByte()) return@runCatching "image/jpeg"
+    if (head.copyOfRange(0, 8).contentEquals(
+            byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+        )
+    ) return@runCatching "image/png"
+    if (head.copyOfRange(0, 4).toString(Charsets.US_ASCII) == "RIFF" &&
+        head.copyOfRange(8, 12).toString(Charsets.US_ASCII) == "WEBP"
+    ) return@runCatching "image/webp"
+    val gif = head.copyOfRange(0, 6).toString(Charsets.US_ASCII)
+    if (gif == "GIF89a" || gif == "GIF87a") return@runCatching "image/gif"
+    // HEIF/HEIC/AVIF：ftyp box
+    if (head.copyOfRange(4, 8).toString(Charsets.US_ASCII) == "ftyp") return@runCatching "image/heif"
+    null
+}.getOrNull()
+
+/** 解码 data URL 并统一重编码为 JPEG；解不出来就让本次编码失败（上层降级为文本）。 */
+private fun transcodeDataUrlToJpeg(
+    base64Payload: String,
+    withPrefix: Boolean,
+    reason: String,
+): EncodedImage {
+    val bytes = Base64.decode(base64Payload, Base64.DEFAULT)
+    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        ?: throw IllegalArgumentException("cannot decode image data URL ($reason)")
+    return try {
+        val out = ByteArrayOutputStream()
+        Base64OutputStream(out, Base64.NO_WRAP).use { stream ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, stream)
+        }
+        val encoded = out.toString(Charsets.ISO_8859_1.name())
+        EncodedImage(
+            base64 = if (withPrefix) "data:image/jpeg;base64,$encoded" else encoded,
+            mimeType = "image/jpeg",
+        )
+    } finally {
+        bitmap.recycle()
+    }
+}
+
 data class EncodedImage(
     val base64: String,
     val mimeType: String
@@ -71,13 +125,35 @@ fun UIMessagePart.Image.encodeBase64(withPrefix: Boolean = true): Result<Encoded
         }
 
         this.url.startsWith("data:") -> {
-            // 从 data URL 提取 mime type
-            val mimeType = url.substringAfter("data:").substringBefore(";")
+            // 从 data URL 提取 mime type（去掉 ;charset=... 之类的参数）
+            val declaredMime = url.substringAfter("data:").substringBefore(";").substringBefore(",")
+                .trim().lowercase()
             // withPrefix=false must return the bare base64 payload, not the whole
             // "data:<mime>;base64,<payload>" URL — callers that pass withPrefix=false
             // expect exactly what the file:// branch above returns for that flag.
-            val payload = if (withPrefix) url else url.substringAfter(",", missingDelimiterValue = "")
-            EncodedImage(base64 = payload, mimeType = mimeType)
+            val payload = url.substringAfter(",", missingDelimiterValue = "")
+            if (payload.isBlank()) {
+                // 空载荷以前会被原样透传给服务端，换回一条
+                // ".messages[n].image[0]: You have uploaded an unsupported image"，
+                // 然后整轮对话反复重试都发不出去。这里直接失败，由调用方降级成文本。
+                throw IllegalArgumentException("empty data URL payload (mime=$declaredMime)")
+            }
+            val normalizedMime = normalizeImageMime(declaredMime)
+            if (normalizedMime != null) {
+                // 声明的 mime 在白名单内，再抽查一次魔数：迁移过的历史里存在
+                // "声明 png、实际是 HEIC/AVIF" 的情况，光信声明仍会被服务端拒。
+                val sniffed = sniffImageMime(payload)
+                if (sniffed == null || sniffed == normalizedMime) {
+                    EncodedImage(
+                        base64 = if (withPrefix) url else payload,
+                        mimeType = normalizedMime,
+                    )
+                } else {
+                    transcodeDataUrlToJpeg(payload, withPrefix, "mismatched mime $declaredMime -> $sniffed")
+                }
+            } else {
+                transcodeDataUrlToJpeg(payload, withPrefix, "unsupported mime $declaredMime")
+            }
         }
         this.url.startsWith("http") -> {
             // HTTP URL 无法确定 mime type，默认使用 image/png

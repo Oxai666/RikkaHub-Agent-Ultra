@@ -1,7 +1,9 @@
 package me.rerere.rikkahub.browser.cdp
 
+import android.os.Process
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 
@@ -23,6 +25,8 @@ object CdpProbe {
         val targets: List<CdpTargetInfo>,
         val diagnostics: String,
         val errors: List<String>,
+        val pid: Int = Process.myPid(),
+        val candidates: List<String> = emptyList(),
     )
 
     suspend fun listTargets(): Result = withContext(Dispatchers.IO) {
@@ -38,32 +42,48 @@ object CdpProbe {
         val discovery = DevToolsSocketResolver.discover()
         discovery.scanError?.let { errors += "scan /proc/net/unix: $it" }
 
-        for (socketName in discovery.candidates) {
-            val conn = runCatching { LocalSocketCdpTransport(socketName).open() }
-                .onFailure { errors += "$socketName: connect ${it.javaClass.simpleName}: ${it.message}" }
-                .getOrNull() ?: continue
+        // WebView 刚创建时 devtools 服务端可能还没开始 accept，按 300ms × 3 重试。
+        // 太墟的 CdpManager 也是这个节奏（失败重试 3×300ms），照抄。
+        for (attempt in 0 until 3) {
+            for (socketName in discovery.candidates) {
+                val conn = runCatching { LocalSocketCdpTransport(socketName).open() }
+                    .onFailure {
+                        if (attempt == 2) {
+                            errors += "$socketName: connect ${it.javaClass.simpleName}: ${it.message}"
+                        }
+                    }
+                    .getOrNull() ?: continue
 
-            try {
-                val body = HttpOverSocket.get(conn, "/json")
-                val targets = runCatching {
-                    json.decodeFromString<List<CdpTargetInfo>>(body)
-                }.onFailure {
-                    errors += "$socketName: parse /json ${it.javaClass.simpleName}: ${it.message}"
-                }.getOrDefault(emptyList())
+                try {
+                    val body = HttpOverSocket.get(conn, "/json")
+                    val targets = runCatching {
+                        json.decodeFromString<List<CdpTargetInfo>>(body)
+                    }.onFailure {
+                        errors += "$socketName: parse /json ${it.javaClass.simpleName}: ${it.message}"
+                    }.getOrDefault(emptyList())
 
-                if (targets.isNotEmpty()) {
-                    Log.i("RikkaCdp", "probe ok via $socketName: ${targets.size} targets")
-                    return@withContext Result(socketName, targets, WebViewDebugging.diagnostics(), errors)
+                    if (targets.isNotEmpty()) {
+                        Log.i("RikkaCdp", "probe ok via $socketName: ${targets.size} targets (attempt ${attempt + 1})")
+                        return@withContext Result(
+                            socketName, targets, WebViewDebugging.diagnostics(), errors,
+                            Process.myPid(), discovery.candidates,
+                        )
+                    }
+                    if (attempt == 2) {
+                        errors += "$socketName: /json returned no target (WebView alive but no page?)"
+                    }
+                } catch (e: Exception) {
+                    if (attempt == 2) {
+                        errors += "$socketName: GET /json ${e.javaClass.simpleName}: ${e.message}"
+                    }
+                } finally {
+                    runCatching { conn.close() }
                 }
-                errors += "$socketName: /json returned no target (no live WebView)"
-            } catch (e: Exception) {
-                errors += "$socketName: GET /json ${e.javaClass.simpleName}: ${e.message}"
-            } finally {
-                runCatching { conn.close() }
             }
+            if (attempt < 2) delay(300)
         }
 
-        Log.w("RikkaCdp", "probe failed: ${errors.joinToString("; ")}")
-        Result("", emptyList(), WebViewDebugging.diagnostics(), errors)
+        Log.w("RikkaCdp", "probe failed: pid=${Process.myPid()} candidates=${discovery.candidates} errors=${errors.joinToString("; ")}")
+        Result("", emptyList(), WebViewDebugging.diagnostics(), errors, Process.myPid(), discovery.candidates)
     }
 }
