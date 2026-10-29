@@ -1,13 +1,5 @@
 package me.rerere.rikkahub.browser
 
-/**
- * 页内 hook 的逻辑 tab 标识。
- *
- * RikkaHub 没有多 tab 池（一会话一个 WebView），前台与 headless 共用同一个逻辑会话，
- * 规则按这个 id 归属；将来真做 tab 池时换成真实 tabId 即可。
- */
-internal const val HOOK_TAB_ID = "foreground"
-
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.util.Log
@@ -42,6 +34,13 @@ import me.rerere.rikkahub.BuildConfig
 import java.io.File
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
+/**
+ * 页内 hook 的逻辑 tab 标识。
+ *
+ * RikkaHub 没有多 tab 池（一会话一个 WebView），前台与 headless 共用同一个逻辑会话，
+ * 规则按这个 id 归属；将来真做 tab 池时换成真实 tabId 即可。
+ */
+internal const val HOOK_TAB_ID = "foreground"
 
 /**
  * Top-level Compose root for [BrowserActivity]. Lays out:

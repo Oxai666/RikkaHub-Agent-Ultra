@@ -462,8 +462,10 @@ private suspend fun pushHookRules(): Boolean {
     val installer = runCatching { hookInstaller() }.getOrNull() ?: return false
     return withTimeoutOrNull(2_000) {
         runCatching {
+            // withController 的 block 必须返回 JsonObject（它用返回值当工具结果）。
             BrowserControllerHandle.withController {
                 withContext(Dispatchers.Main) { installer.pushRules(HOOK_TAB_ID, webView) }
+                buildJsonObject { put("pushed", true) }
             }
         }.isSuccess
     } ?: false
