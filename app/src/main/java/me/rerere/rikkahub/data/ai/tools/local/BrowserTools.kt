@@ -29,6 +29,13 @@ import me.rerere.rikkahub.browser.BrowserAiActionKind
 import me.rerere.rikkahub.browser.BrowserController
 import me.rerere.rikkahub.browser.BrowserControllerHandle
 import me.rerere.rikkahub.browser.BrowserDiffHelper
+import me.rerere.rikkahub.browser.BrowserEventBus
+import me.rerere.rikkahub.browser.HOOK_TAB_ID
+import me.rerere.rikkahub.browser.hook.HookAction
+import me.rerere.rikkahub.browser.hook.HookInstaller
+import me.rerere.rikkahub.browser.hook.HookRule
+import me.rerere.rikkahub.browser.hook.HookRuleStore
+import me.rerere.rikkahub.browser.hook.HookType
 import me.rerere.rikkahub.browser.BrowserToolDefaults
 import me.rerere.rikkahub.browser.cdp.CdpAttach
 import me.rerere.rikkahub.browser.cdp.CdpProbe
@@ -422,6 +429,226 @@ fun browserDebugEvalTool(): Tool = Tool(
                     },
                 )
             } ?: timeoutEnvelope(BrowserToolDefaults.DEBUG_EVAL)
+        }
+        textPart(out)
+    },
+)
+
+// ---------------------------------------------------------------------------------------------
+// Hook 工具（移植自太墟 hook 引擎）
+// ---------------------------------------------------------------------------------------------
+
+private fun hookStore(): HookRuleStore =
+    org.koin.java.KoinJavaComponent.getKoin().get()
+
+private fun hookInstaller(): HookInstaller =
+    org.koin.java.KoinJavaComponent.getKoin().get()
+
+private fun hookEventBus(): BrowserEventBus =
+    org.koin.java.KoinJavaComponent.getKoin().get()
+
+private fun actionLabel(action: HookAction): String = when (action) {
+    is HookAction.Log -> "log"
+    is HookAction.Block -> "block"
+    is HookAction.Redirect -> "redirect:" + action.url
+    is HookAction.Mock -> "mock:" + action.status
+    is HookAction.ModifyHeaders -> "headers"
+    is HookAction.Replace -> "replace"
+    is HookAction.FakeValue -> "fake:" + action.value
+}
+
+/** 规则变化后推给已加载页面；浏览器没开就只存规则，下次加载页面自动生效。 */
+private suspend fun pushHookRules(): Boolean {
+    val installer = runCatching { hookInstaller() }.getOrNull() ?: return false
+    return withTimeoutOrNull(2_000) {
+        runCatching {
+            BrowserControllerHandle.withController {
+                withContext(Dispatchers.Main) { installer.pushRules(HOOK_TAB_ID, webView) }
+            }
+        }.isSuccess
+    } ?: false
+}
+
+fun browserHookCreateTool(): Tool = Tool(
+    name = BrowserToolDefaults.HOOK_CREATE,
+    description = "Install a page hook rule. Wraps the page's fetch / XHR / WebSocket / function / property at document-start. " +
+        "Action: log (record hits), block (abort), redirect (rewrite URL), mock (fabricate response body). " +
+        "pattern is a URL glob for fetch/xhr/websocket (e.g. https://api.example.com/*) or a function path (e.g. JSON.parse). " +
+        "Returns {id, applied}. Rules persist for the session and take effect on the next page load even if the browser is closed.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("pattern", buildJsonObject {
+                put("type", "string")
+                put("description", "URL glob for fetch/xhr/websocket, or function/property path")
+            })
+            put("action", buildJsonObject {
+                put("type", "string")
+                put("description", "log | block | redirect | mock")
+            })
+            put("type", buildJsonObject {
+                put("type", "string")
+                put("description", "fetch (default) | xhr | websocket | function | property")
+            })
+            put("value", buildJsonObject {
+                put("type", "string")
+                put("description", "redirect target URL / mock body / replace code")
+            })
+            put("status", buildJsonObject {
+                put("type", "integer")
+                put("description", "mock HTTP status, default 200")
+            })
+        }, required = listOf("pattern", "action"))
+    },
+    execute = { input ->
+        val pattern = input.jsonObject["pattern"]?.jsonPrimitive?.contentOrNull?.trim()
+        val actionName = input.jsonObject["action"]?.jsonPrimitive?.contentOrNull?.trim()?.lowercase()
+        val typeName = input.jsonObject["type"]?.jsonPrimitive?.contentOrNull?.trim()?.lowercase()
+        val value = input.jsonObject["value"]?.jsonPrimitive?.contentOrNull
+        val status = input.jsonObject["status"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 200
+
+        val hookType = when (typeName) {
+            null, "", "fetch" -> HookType.FETCH
+            "xhr" -> HookType.XHR
+            "websocket", "ws" -> HookType.WEBSOCKET
+            "function" -> HookType.FUNCTION
+            "method" -> HookType.METHOD
+            "property" -> HookType.PROPERTY
+            else -> HookType.FETCH
+        }
+        val action = when (actionName) {
+            "log" -> HookAction.Log()
+            "block" -> HookAction.Block()
+            "redirect" -> value?.takeIf { it.isNotBlank() }?.let { HookAction.Redirect(it) }
+            "mock" -> HookAction.Mock(
+                status = status,
+                body = value.orEmpty(),
+                headers = mapOf("content-type" to "application/json"),
+            )
+            else -> null
+        }
+
+        val out = if (pattern.isNullOrBlank()) {
+            missingArgEnvelope("pattern", "pattern is required")
+        } else if (action == null) {
+            missingArgEnvelope("action", "action must be one of log / block / redirect / mock" +
+                if (actionName == "redirect") "（redirect 需要 value）" else "")
+        } else {
+            val store = hookStore()
+            val rule = HookRule(
+                id = "rikka-" + System.currentTimeMillis(),
+                type = hookType,
+                target = pattern,
+                scopeTabId = HOOK_TAB_ID,
+                actions = listOf(action),
+            )
+            store.install(rule)
+            val applied = pushHookRules()
+            buildJsonObject {
+                put("id", rule.id)
+                put("type", hookType.name.lowercase())
+                put("target", pattern)
+                put("action", actionLabel(action))
+                put("applied", applied)
+                if (!applied) put("note", "规则已保存，浏览器下次加载页面时生效")
+            }
+        }
+        textPart(out)
+    },
+)
+
+fun browserHookListTool(): Tool = Tool(
+    name = BrowserToolDefaults.HOOK_LIST,
+    description = "List installed hook rules with hit counts. {count, rules:[{id,type,target,action,enabled,hits}]}.",
+    parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
+    execute = {
+        val store = runCatching { hookStore() }.getOrNull()
+        val out = if (store == null) {
+            buildJsonObject { put("error", "hook store unavailable") }
+        } else {
+            val rules = store.list()
+            buildJsonObject {
+                put("count", rules.size)
+                putJsonArray("rules") {
+                    rules.forEach { rule ->
+                        add(buildJsonObject {
+                            put("id", rule.id)
+                            put("type", rule.type.name.lowercase())
+                            put("target", rule.target)
+                            put("action", rule.actions.joinToString(",") { actionLabel(it) })
+                            put("enabled", rule.enabled)
+                            put("hits", store.hitCount(rule.id))
+                        })
+                    }
+                }
+            }
+        }
+        textPart(out)
+    },
+)
+
+fun browserHookRemoveTool(): Tool = Tool(
+    name = BrowserToolDefaults.HOOK_REMOVE,
+    description = "Remove a hook rule by id. Returns {removed, applied}.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("id", buildJsonObject {
+                put("type", "string")
+                put("description", "rule id from browser_hook_list")
+            })
+        }, required = listOf("id"))
+    },
+    execute = { input ->
+        val id = input.jsonObject["id"]?.jsonPrimitive?.contentOrNull?.trim()
+        val out = if (id.isNullOrBlank()) {
+            missingArgEnvelope("id", "id is required")
+        } else {
+            val store = runCatching { hookStore() }.getOrNull()
+            val removed = store?.remove(id) == true
+            val applied = if (removed) pushHookRules() else false
+            buildJsonObject {
+                put("id", id)
+                put("removed", removed)
+                put("applied", applied)
+            }
+        }
+        textPart(out)
+    },
+)
+
+fun browserHookHitsTool(): Tool = Tool(
+    name = BrowserToolDefaults.HOOK_HITS,
+    description = "Recent hook hits (which rule matched which request/call, when). {count, hits:[{hookId,type,target,phase,summary,at}]}. " +
+        "Empty means no rule matched yet — check browser_hook_list that targets line up with real requests.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("limit", buildJsonObject {
+                put("type", "integer")
+                put("description", "max entries, default 30")
+            })
+        })
+    },
+    execute = { input ->
+        val limit = input.jsonObject["limit"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()?.coerceIn(1, 200) ?: 30
+        val bus = runCatching { hookEventBus() }.getOrNull()
+        val out = if (bus == null) {
+            buildJsonObject { put("error", "event bus unavailable") }
+        } else {
+            val hits = bus.hookHits.value.takeLast(limit)
+            buildJsonObject {
+                put("count", hits.size)
+                putJsonArray("hits") {
+                    hits.forEach { hit ->
+                        add(buildJsonObject {
+                            put("hookId", hit.hookId)
+                            put("type", hit.type.name.lowercase())
+                            put("target", hit.target)
+                            put("phase", hit.phase)
+                            put("summary", hit.summary)
+                            put("at", hit.at)
+                        })
+                    }
+                }
+            }
         }
         textPart(out)
     },
@@ -1653,6 +1880,10 @@ fun createBrowserTool(
     BrowserToolDefaults.CURRENT_URL -> browserCurrentUrlTool()
     BrowserToolDefaults.DEBUG_TARGETS -> browserDebugTargetsTool()
     BrowserToolDefaults.DEBUG_EVAL -> browserDebugEvalTool()
+    BrowserToolDefaults.HOOK_CREATE -> browserHookCreateTool()
+    BrowserToolDefaults.HOOK_LIST -> browserHookListTool()
+    BrowserToolDefaults.HOOK_REMOVE -> browserHookRemoveTool()
+    BrowserToolDefaults.HOOK_HITS -> browserHookHitsTool()
     BrowserToolDefaults.SCREENSHOT -> browserScreenshotTool(context)
     BrowserToolDefaults.GET_TEXT -> browserGetTextTool()
     BrowserToolDefaults.GET_DOM -> browserGetDomTool()

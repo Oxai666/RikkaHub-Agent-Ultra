@@ -24,6 +24,11 @@ object BrowserToolDefaults {
     const val WAIT_FOR = "browser_wait_for"
     /** CDP 探针：列当前进程的 WebView 调试目标。只读、不碰页面，默认开。 */
     const val DEBUG_TARGETS = "browser_debug_targets"
+    /** Hook 规则管理：读类默认开，写类默认关。 */
+    const val HOOK_LIST = "browser_hook_list"
+    const val HOOK_HITS = "browser_hook_hits"
+    const val HOOK_CREATE = "browser_hook_create"
+    const val HOOK_REMOVE = "browser_hook_remove"
 
     // --- Write tools (default OFF) -----------------------------------------------------------
     const val CLICK = "browser_click"
@@ -48,10 +53,13 @@ object BrowserToolDefaults {
     val READ_TOOLS: Set<String> = setOf(
         OPEN, CURRENT_URL, SCREENSHOT, GET_TEXT, GET_DOM, GET_LINKS, BACK, FORWARD, WAIT_FOR,
         DEBUG_TARGETS,
+        HOOK_LIST,
+        HOOK_HITS,
     )
 
     val WRITE_TOOLS: Set<String> = setOf(
         CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ, DEBUG_EVAL,
+        HOOK_CREATE, HOOK_REMOVE,
     )
 
     val LOOP_CONTROL_TOOLS: Set<String> = setOf(DONE)
@@ -60,8 +68,11 @@ object BrowserToolDefaults {
     val ALL_TOOLS: List<String> = listOf(
         OPEN, CURRENT_URL, SCREENSHOT, GET_TEXT, GET_DOM, GET_LINKS, BACK, FORWARD, WAIT_FOR,
         DEBUG_TARGETS,
+        HOOK_LIST,
+        HOOK_HITS,
         CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ,
         DEBUG_EVAL,
+        HOOK_CREATE, HOOK_REMOVE,
         DONE,
     )
 
