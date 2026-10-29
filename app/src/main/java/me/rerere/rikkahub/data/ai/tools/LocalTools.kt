@@ -956,6 +956,7 @@ class LocalTools(
                 )
             )
             tools.add(me.rerere.rikkahub.subagent.subagentListTool(subAgentRegistry))
+            tools.add(me.rerere.rikkahub.subagent.subagentRolesTool())
             tools.add(me.rerere.rikkahub.subagent.subagentGetTool(subAgentRegistry))
             tools.add(me.rerere.rikkahub.subagent.subagentCancelTool(subAgentRegistry))
         }
