@@ -34,6 +34,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
+import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.browser.BrowserActivity
 import me.rerere.rikkahub.browser.BrowserPreferences
 import me.rerere.rikkahub.browser.BrowserToolDefaults
@@ -122,14 +123,18 @@ internal fun FilesPicker(
     // 浏览器入口：只有「浏览器」工具开着时才出现在 + 菜单里，避免没开就点了进不去。
     val browserPreferences: BrowserPreferences = koinInject()
     val appContext = LocalContext.current
-    var browserEntryEnabled by remember { mutableStateOf(false) }
+    var browserToolGloballyEnabled by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
-        browserEntryEnabled = try {
+        browserToolGloballyEnabled = try {
             browserPreferences.isToolEnabled(BrowserToolDefaults.OPEN)
         } catch (e: Throwable) {
             false
         }
     }
+    // 助手自己也要开着浏览器工具（助手设置 → 本地工具 → 浏览器）才显示入口，
+    // 否则全局开着、助手没开，点进去 AI 也用不了。
+    val browserEntryEnabled = browserToolGloballyEnabled &&
+        assistant.localTools.contains(LocalToolOption.Browser)
     val workspaces by workspaceRepository.listFlow().collectAsState(initial = emptyList())
 
     Column(
