@@ -87,7 +87,8 @@ object CdpAttach {
             override suspend fun onEvent(method: String, params: JsonObject, sessionId: String?) = Unit
             override suspend fun onClosed() = Unit
         })
-        try {
+        // block body 的函数不会把最后一条语句当返回值，必须显式 return。
+        return try {
             session.send(method, params, sessionId = null, timeoutMs = timeoutMs)
         } finally {
             runCatching { session.close() }
