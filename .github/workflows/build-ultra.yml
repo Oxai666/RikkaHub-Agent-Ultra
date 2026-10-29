@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: ultra-${{ github.ref }}
@@ -101,13 +102,43 @@ jobs:
           pnpm --version
           pnpm run build
 
+      - name: List unit-test tasks
+        run: |
+          set -o pipefail
+          chmod +x gradlew
+          ./gradlew :app:tasks --all 2>&1 | grep -iE "unittest|test.*Debug" | head -n 40 \
+            | tee /tmp/test-tasks.log || true
+          cat /tmp/test-tasks.log
+
       - name: Armor unit tests
         run: |
-          set -e
+          set -o pipefail
           chmod +x gradlew
           ./gradlew :app:testGithubDebugUnitTest \
             --tests "me.rerere.rikkahub.data.ai.armor.*" \
-            --no-daemon --no-configuration-cache --stacktrace
+            --no-daemon --no-configuration-cache --stacktrace 2>&1 | tee /tmp/armor-test.log
+
+      # 日志接口要 admin 权限，匿名读不到；失败时把尾部贴到公开 issue，
+      # 这样不登录也能看到到底哪一行红的。
+      - name: Publish failure log to issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          LOG=/tmp/armor-test.log
+          [ -f "$LOG" ] || LOG=/tmp/test-tasks.log
+          [ -f "$LOG" ] || { echo "没有日志文件"; exit 0; }
+          TITLE="CI failure: $(date -u +%Y-%m-%dT%H:%MZ) @ ${GITHUB_SHA:0:7}"
+          {
+            echo "run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "commit: $GITHUB_SHA"
+            echo ""
+            echo '```'
+            tail -c 60000 "$LOG" | sed 's/\r$//'
+            echo '```'
+          } > /tmp/issue-body.md
+          gh issue create --title "$TITLE" --body-file /tmp/issue-body.md || true
 
       - name: Upload test report
         if: always()
