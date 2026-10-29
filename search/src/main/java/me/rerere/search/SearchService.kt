@@ -202,7 +202,7 @@ sealed class SearchServiceOptions {
             GrokOptions::class to "Grok",
             TinyfishOptions::class to "Tinyfish",
             SerperOptions::class to "Serper",
-            DeepSeekOptions::class to "DeepSeek",
+            DeepSeekOptions::class to "大肥鱼",
             CustomJsOptions::class to "Custom JS",
         )
     }
