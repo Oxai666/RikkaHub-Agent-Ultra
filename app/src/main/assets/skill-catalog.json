@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-05-07",
+  "updated_at": "2026-10-30",
   "skills": [
     {
       "name": "auto-reply",
@@ -120,6 +120,46 @@
       "license": "Apache-2.0",
       "size_kb": 7884,
       "compatibility": "js",
+      "is_bundled": true
+    },
+    {
+      "name": "ascript-device",
+      "title": "AScript 真机自动化",
+      "description": "在万象内使用 AScript 真机自动化：驱动 Android/iOS/Windows 设备、读控件树与截图、OCR 找字、 找色比色、执行设备端 Python（eval_python）、上传运行工程与看运行日志。当用户提到 AScript、 AScript App、真机自动化、设备服务 9096 端口、局域网或 USB/ADB 连设备、控件树、选择器、 自",
+      "category": "automation",
+      "license": "MIT",
+      "size_kb": 37,
+      "compatibility": "any",
+      "is_bundled": true
+    },
+    {
+      "name": "ctf-kb",
+      "title": "CTF 全方向知识库",
+      "description": "CTF 竞赛全方向知识库技能。基于 Hello CTF 知识技能树整理，覆盖 13 个方向： Web 安全、密码学、安全杂项、二进制安全、逆向工程、人工智能安全、云安全、 数据安全、区块链安全、工控安全、物联网安全、应急响应、渗透测试。 当用户提到以下任意关键词时必须触发本技能：CTF、夺旗赛、ctf 题目、解题、 比赛题、writeup、re 题、pwn ",
+      "category": "security",
+      "license": "See skill LICENSE",
+      "size_kb": 650,
+      "compatibility": "any",
+      "is_bundled": true
+    },
+    {
+      "name": "eight-honors",
+      "title": "AI 编码八荣八耻",
+      "description": "AI编码同志精神纲领——\"八荣八耻\"。这是一套价值观体系， 旨在从根本上塑造 Claude Code、Codex 等 AI 编码智能体的工作品格与责任意识。 在以下场景中必须触发此技能：任何涉及代码生成、代码修改、接口调用、架构变更、 bug修复、重构、技术方案设计的任务。当 AI 准备动手写代码时，先完成精神自检， 让每一行代码都承载对人类信任的敬畏。 即",
+      "category": "coding",
+      "license": "MIT",
+      "size_kb": 34,
+      "compatibility": "any",
+      "is_bundled": true
+    },
+    {
+      "name": "src-bughunt",
+      "title": "SRC 挖洞与白盒审计",
+      "description": "SRC 漏洞挖掘 + 白盒 0day 审计全流程技能。覆盖国内大厂、中小企业、 政府/教育/医疗等目标类型。包含：JS 逆向接口发现、越权/注入/逻辑漏洞测试、 WAF 绕过、白盒代码审计（Linux Kernel/Chromium/Laravel/Spring/Django）、以及中文 SRC 报告生成。 当用户提到以下任意关键词时必须触发本技能： SRC",
+      "category": "security",
+      "license": "MIT",
+      "size_kb": 747,
+      "compatibility": "any",
       "is_bundled": true
     }
   ]
