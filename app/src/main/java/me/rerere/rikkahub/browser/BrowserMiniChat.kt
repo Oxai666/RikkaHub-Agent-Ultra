@@ -72,14 +72,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 
 
-/** 小窗里的单条消息：把 Reasoning / Tool / Text 三类 part 摊平成可渲染的结构。 */
-private data class MiniMessage(
-    val fromUser: Boolean,
-    val reasoning: String?,
-    val tools: List<String>,
-    val text: String,
-)
-
 /**
  * 浏览器里的「缩小版会话」浮窗。
  *
@@ -98,6 +90,8 @@ fun BrowserMiniChat(
     if (conversationId == null) return
 
     val chatService = koinInject<ChatService>()
+    val settingsStore: SettingsStore = koinInject()
+    val settings by settingsStore.settingsFlow.collectAsStateWithLifecycle()
     val conversation by chatService.getConversationFlow(conversationId).collectAsStateWithLifecycle()
     val processingStatus by chatService
         .getProcessingStatusFlow(conversationId)
@@ -105,28 +99,9 @@ fun BrowserMiniChat(
 
     val isGenerating = processingStatus != null
 
-    val messages = conversation.currentMessages.mapNotNull { msg ->
-        val reasoning = msg.parts.filterIsInstance<UIMessagePart.Reasoning>()
-            .joinToString("\n") { it.reasoning }
-            .trim()
-            .ifBlank { null }
-        val tools = msg.parts.filterIsInstance<UIMessagePart.Tool>().map { tool ->
-            tool.toolName + if (tool.output.isNotEmpty()) " ✓" else " …"
-        }
-        val text = msg.parts.filterIsInstance<UIMessagePart.Text>()
-            .joinToString("\n") { it.text }
-            .trim()
-        if (reasoning == null && tools.isEmpty() && text.isEmpty()) {
-            null
-        } else {
-            MiniMessage(
-                fromUser = msg.role == MessageRole.USER,
-                reasoning = reasoning,
-                tools = tools,
-                text = text,
-            )
-        }
-    }.takeLast(40)
+    // 直接用会话里的 MessageNode，渲染交给 ChatMessage —— 小窗要「和会话一模一样」，
+    // 手搓气泡永远追不上主界面的工具卡片/思考折叠/Markdown。
+    val nodes = conversation.messageNodes
 
     var expanded by remember { mutableStateOf(false) }
     // 悬浮窗位置：以右下角为原点，offset 为负值（向左上）。
@@ -160,7 +135,8 @@ fun BrowserMiniChat(
         ) {
             if (expanded) {
                 BrowserMiniChatCard(
-                    messages = messages,
+                    nodes = nodes,
+                    settings = settings,
                     isGenerating = isGenerating,
                     onSend = { text ->
                         chatService.sendMessage(
@@ -172,8 +148,11 @@ fun BrowserMiniChat(
                 )
             } else {
                 BrowserMiniChatPill(
-                    preview = messages.lastOrNull()?.let { m ->
-                        m.text.ifBlank { m.tools.lastOrNull().orEmpty() }
+                    preview = nodes.lastOrNull()?.let { node ->
+                        node.messages.lastOrNull()?.parts
+                            ?.filterIsInstance<UIMessagePart.Text>()
+                            ?.joinToString(" ") { it.text }
+                            ?.takeIf { it.isNotBlank() }
                     },
                     isGenerating = isGenerating,
                     onClick = { expanded = true },
@@ -232,7 +211,8 @@ private fun BrowserMiniChatPill(
 /** 展开态：缩小版会话（气泡 + 思考 + 工具 + 输入框）。 */
 @Composable
 private fun BrowserMiniChatCard(
-    messages: List<MiniMessage>,
+    nodes: List<MessageNode>,
+    settings: Settings,
     isGenerating: Boolean,
     onSend: (String) -> Unit,
     onCollapse: () -> Unit,
@@ -242,9 +222,9 @@ private fun BrowserMiniChatCard(
     val listState = rememberLazyListState()
 
     // 每次消息内容变化都滚到底 —— 用 text 长度而不是条数，流式输出才会跟手。
-    LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length, isGenerating) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.lastIndex)
+    LaunchedEffect(nodes.size, nodes.lastOrNull()?.messages?.lastOrNull()?.parts, isGenerating) {
+        if (nodes.isNotEmpty()) {
+            listState.animateScrollToItem(nodes.lastIndex)
         }
     }
 
@@ -280,13 +260,29 @@ private fun BrowserMiniChatCard(
                 }
             }
 
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.weight(1f).fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                itemsIndexed(messages) { _, message -> MiniMessageBubble(message) }
-                if (isGenerating) {
+            // 直接用主界面的 ChatMessage 渲染：工具卡片、思考折叠、Markdown、分支标记
+            // 全部与会话页一致，小窗只是缩小了宽度。
+            CompositionLocalProvider(LocalSettings provides settings) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    itemsIndexed(nodes) { index, node ->
+                        ChatMessage(
+                            node = node,
+                            loading = isGenerating && index == nodes.lastIndex,
+                            generationActive = isGenerating,
+                            lastMessage = index == nodes.lastIndex,
+                            onFork = {},
+                            onRegenerate = {},
+                            onEdit = {},
+                            onShare = {},
+                            onDelete = {},
+                            onUpdate = {},
+                        )
+                    }
+                    if (isGenerating) {
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp)
@@ -297,6 +293,7 @@ private fun BrowserMiniChatCard(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                    }
                     }
                 }
             }
@@ -362,49 +359,3 @@ private fun BrowserMiniChatCard(
     }
 }
 
-@Composable
-private fun MiniMessageBubble(message: MiniMessage) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (message.fromUser) Arrangement.End else Arrangement.Start,
-    ) {
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = if (message.fromUser) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
-            },
-            modifier = Modifier.widthIn(max = 300.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                message.reasoning?.let { reasoning ->
-                    Text(
-                        text = "💭 $reasoning",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-                message.tools.forEach { tool ->
-                    Text(
-                        text = "🔧 $tool",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                if (message.text.isNotBlank()) {
-                    Text(
-                        text = message.text,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-            }
-        }
-    }
-}
