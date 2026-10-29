@@ -9,6 +9,10 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
@@ -41,6 +45,8 @@ internal fun encodeRun(run: SubAgentRun): kotlinx.serialization.json.JsonObject 
     put("tokens_in", run.tokensIn)
     put("tokens_out", run.tokensOut)
     put("trip_count", run.tripCount)
+    run.claimStatus?.let { put("claim_status", it) }
+    run.claimReport?.let { put("claim_report", it) }
 }
 
 /**
@@ -60,6 +66,10 @@ fun subagentDispatchTool(
     profiles: List<SubAgentProfile> = emptyList(),
 ): Tool {
     val enabledProfiles = SubAgentProfileResolver.enabledProfiles(profiles)
+    // 内置角色库只给部门索引，不逐条列 136 个角色：那会把工具描述撑成几千 token，
+    // 而且每一轮请求都要重发。模型按"部门 + 关键词"自己路由，引擎侧再逐级降级。
+    val builtinDepartmentIndex = BuiltinSubAgents.departmentIndex()
+    val builtinRoleCount = BuiltinSubAgents.agents().size
     val description = buildString {
         append(
             """
@@ -79,6 +89,11 @@ fun subagentDispatchTool(
 
                 Approval-required: every dispatch needs explicit confirmation. Eligible for
                 Always Allow if the user trusts the assistant to delegate freely.
+
+                Result carries a claim report when the sub-agent appended one: `files` criteria are
+                verified against the workspace, `verification` commands are left UNVERIFIED for you
+                to re-run yourself, and a self-reported `complete` with no backed criterion is
+                downgraded to `partial`. Treat `partial` as unfinished work, not as a success.
             """.trimIndent()
         )
         if (enabledProfiles.isNotEmpty()) {
@@ -86,6 +101,18 @@ fun subagentDispatchTool(
             appendLine()
             append("Named sub-agent profiles (pass the name as `agent`):\n")
             append(enabledProfiles.joinToString("\n") { "- ${it.name}: ${it.description}" })
+        }
+        if (builtinDepartmentIndex.isNotEmpty()) {
+            appendLine()
+            appendLine()
+            append("Built-in role library — $builtinRoleCount specialist personas. Pass `agent` as a role ")
+            append("name (e.g. \"Code Reviewer\") or 2-5 keywords (e.g. \"android kotlin\", \"security audit\"). ")
+            append("Departments:\n")
+            append(builtinDepartmentIndex)
+            appendLine()
+            appendLine()
+            append("Use `subagent_roles` to look up exact role names inside a department before ")
+            append("passing a name you are unsure about.")
         }
     }
     return Tool(
@@ -96,7 +123,7 @@ fun subagentDispatchTool(
                 properties = buildJsonObject {
                     put("task", buildJsonObject { put("type", "string") })
                     put("label", buildJsonObject { put("type", "string") })
-                    if (enabledProfiles.isNotEmpty()) {
+                    if (enabledProfiles.isNotEmpty() || builtinDepartmentIndex.isNotEmpty()) {
                         put("agent", buildJsonObject {
                             put("type", "string")
                             put(
@@ -137,6 +164,16 @@ fun subagentDispatchTool(
                     })
                     put("timeout_seconds", buildJsonObject { put("type", "integer") })
                     put("max_trips", buildJsonObject { put("type", "integer") })
+                    put("write_paths", buildJsonObject {
+                        put("type", "array")
+                        put("items", buildJsonObject { put("type", "string") })
+                        put(
+                            "description",
+                            "Write lease for this sub-agent, enforced by the workspace write tools: " +
+                                "omit for no restriction, [] for read-only, [\"*\"] for the whole workspace, " +
+                                "otherwise path prefixes it may write under. The shell tool is NOT covered.",
+                        )
+                    })
                 },
                 required = listOf("task"),
             )
@@ -170,6 +207,9 @@ fun subagentDispatchTool(
                 maxTrips = params["max_trips"]?.jsonPrimitive?.intOrNull
                     ?: SubAgentDefaults.DEFAULT_MAX_TRIPS,
                 label = params["label"]?.jsonPrimitive?.contentOrNull,
+                writePaths = params["write_paths"]?.let { element ->
+                    runCatching { element.jsonArray }.getOrNull()
+                }?.mapNotNull { it.jsonPrimitive.contentOrNull },
             )
             // The engine's recursion guard checks `HeadlessConversations.isHeadless(parentChatId)`
             // — if the calling conversation is itself headless (cron / sub-agent / workflow /
@@ -271,3 +311,109 @@ fun subagentCancelTool(registry: SubAgentRegistry): Tool = Tool(
         }.toString()))
     },
 )
+
+
+/**
+ * 内置角色库检索工具。
+ *
+ * 为什么需要它：136 个角色名不可能全塞进 `subagent_dispatch` 的描述（几千 token，每轮重发），
+ * 只靠关键词路由又等于让模型盲猜。给它一个"先查后派"的入口，比让它硬猜角色名可靠。
+ */
+fun subagentRolesTool(): Tool = Tool(
+    name = "subagent_roles",
+    description = """
+        Search the built-in sub-agent role library. Call this before subagent_dispatch when you
+        are not certain which specialist fits: filter by department id and/or keywords, then pass
+        the EXACT role name returned here as `agent`. Read-only.
+    """.trimIndent().replace("\n", " "),
+    parameters = {
+        InputSchema.Obj(
+            properties = buildJsonObject {
+                put("department", buildJsonObject {
+                    put("type", "string")
+                    put(
+                        "description",
+                        "Department id: engineering, design, product, project-management, testing, " +
+                            "security, game-development, spatial-computing, specialized",
+                    )
+                })
+                put("query", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Keywords matched against role name, id and description")
+                })
+                put("limit", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Max roles to return. Default 20, max 60.")
+                })
+            },
+        )
+    },
+    execute = { args ->
+        val params = args.jsonObject
+        val department = params["department"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        val query = params["query"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        val limit = (params["limit"]?.jsonPrimitive?.intOrNull ?: 20).coerceIn(1, 60)
+        val payload = searchBuiltinRoles(
+            agents = BuiltinSubAgents.agents(),
+            departments = BuiltinSubAgents.departments(),
+            department = department,
+            query = query,
+            limit = limit,
+        )
+        listOf(UIMessagePart.Text(payload))
+    },
+)
+
+/**
+ * 检索本体，纯函数以便单测。
+ * 返回 JSON：`{scope_department, matched, returned, roles:[{name,department,description}], departments:[…]}`
+ */
+internal fun searchBuiltinRoles(
+    agents: List<BuiltinAgent>,
+    departments: List<BuiltinDepartment>,
+    department: String? = null,
+    query: String? = null,
+    limit: Int = 20,
+): String {
+    val tokens = query
+        ?.lowercase()
+        ?.split(Regex("[\\s,;:/|]+"))
+        ?.filter { it.length >= 2 }
+        .orEmpty()
+
+    val inScope = agents.filter { department == null || it.departmentId == department }
+    val matched = inScope.filter { agent ->
+        tokens.isEmpty() || tokens.any { token ->
+            agent.name.lowercase().contains(token) ||
+                agent.id.lowercase().contains(token) ||
+                agent.description.lowercase().contains(token) ||
+                agent.departmentId.lowercase().contains(token)
+        }
+    }.sortedBy { it.sortOrder }
+
+    return buildJsonObject {
+        department?.let { put("scope_department", it) }
+        put("matched", matched.size)
+        put("returned", minOf(limit, matched.size))
+        putJsonArray("roles") {
+            matched.take(limit).forEach { agent ->
+                addJsonObject {
+                    put("name", agent.name)
+                    put("department", agent.departmentId)
+                    put("description", agent.description.take(200))
+                }
+            }
+        }
+        if (department == null) {
+            putJsonArray("departments") {
+                departments.sortedBy { it.sortOrder }.forEach { dept ->
+                    addJsonObject {
+                        put("id", dept.id)
+                        put("name", dept.name)
+                        put("roles", agents.count { it.departmentId == dept.id })
+                    }
+                }
+            }
+        }
+    }.toString()
+}

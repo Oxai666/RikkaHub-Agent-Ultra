@@ -216,6 +216,32 @@ private fun AssistantPromptContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
+                    Text(stringResource(R.string.assistant_page_armor_enabled))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_armor_enabled_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.armorEnabled,
+                        onCheckedChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    armorEnabled = it
+                                )
+                            )
+                        }
+                    )
+                }
+            )
+        }
+
+        Card(
+            colors = CustomColors.cardColorsOnSurfaceContainer
+        ) {
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
                     Text(stringResource(R.string.assistant_page_allow_conversation_system_prompt))
                 },
                 description = {

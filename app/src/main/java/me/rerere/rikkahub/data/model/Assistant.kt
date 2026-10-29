@@ -70,6 +70,8 @@ data class Assistant(
     val fastPathRouterEnabled: Boolean = false,
     val allowConversationSystemPrompt: Boolean = false, // 允许对话单独重写 system prompt
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
+    /** 辅助破甲：本轮被判定为拒答/截断时注入纠正与续写指令。默认关闭。 */
+    val armorEnabled: Boolean = false,
 )
 
 @Serializable

@@ -14,6 +14,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.toMetadata
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.subagent.SubAgentWriteLease
 import me.rerere.rikkahub.utils.generateUnifiedDiff
 import me.rerere.workspace.BackgroundStatus
 import me.rerere.workspace.WorkspaceCommandResult
@@ -45,6 +46,8 @@ suspend fun createWorkspaceTools(
     workspaceId: String?,
     workspaceRepository: WorkspaceRepository,
     cwd: String? = null,
+    /** 子智能体写租约；null = 不限制（普通对话）。shell 工具不受租约约束。 */
+    writeLease: SubAgentWriteLease? = null,
 ): List<Tool> {
     if (workspaceId.isNullOrBlank()) return emptyList()
     val approvalOverrides = workspaceRepository.getById(workspaceId)?.toolApprovalOverrides().orEmpty()
@@ -54,9 +57,9 @@ suspend fun createWorkspaceTools(
 
     return listOf(
         createReadFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createWriteFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createEditFileTool(workspaceId, ::needsApproval, workspaceRepository),
-        createCreateFolderTool(workspaceId, ::needsApproval, workspaceRepository),
+        createWriteFileTool(workspaceId, ::needsApproval, workspaceRepository, writeLease),
+        createEditFileTool(workspaceId, ::needsApproval, workspaceRepository, writeLease),
+        createCreateFolderTool(workspaceId, ::needsApproval, workspaceRepository, writeLease),
         createReadFolderTool(workspaceId, ::needsApproval, workspaceRepository),
         createShellTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
         createRunBackgroundTool(workspaceId, ::needsApproval, workspaceRepository, shellCwd),
@@ -114,6 +117,7 @@ private fun createWriteFileTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
+    writeLease: SubAgentWriteLease? = null,
 ) = Tool(
     name = "workspace_write_file",
     description = """
@@ -140,6 +144,14 @@ private fun createWriteFileTool(
     execute = {
         val params = it.jsonObject
         val path = params.absolutePath("path")
+        writeLease?.let { lease ->
+            if (!lease.allows(path)) {
+                error(
+                    "写租约拦截：${lease.describe()}；被拒路径 $path。" +
+                        " 需要写这个位置请让父智能体重新派发并扩大 write_paths。",
+                )
+            }
+        }
         val text = params.string("text") ?: error("text is required")
         val overwrite = params["overwrite"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: true
         val entry = workspaceRepository.writeTextInRootfs(workspaceId, path, text, overwrite)
@@ -151,6 +163,7 @@ private fun createEditFileTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
+    writeLease: SubAgentWriteLease? = null,
 ) = Tool(
     name = "workspace_edit_file",
     description = """
@@ -183,6 +196,14 @@ private fun createEditFileTool(
     execute = {
         val params = it.jsonObject
         val path = params.absolutePath("path")
+        writeLease?.let { lease ->
+            if (!lease.allows(path)) {
+                error(
+                    "写租约拦截：${lease.describe()}；被拒路径 $path。" +
+                        " 需要写这个位置请让父智能体重新派发并扩大 write_paths。",
+                )
+            }
+        }
         val oldText = params.string("old_text") ?: error("old_text is required")
         val newText = params.string("new_text") ?: error("new_text is required")
         val replaceAll = params["replace_all"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull() ?: false
@@ -217,6 +238,7 @@ private fun createCreateFolderTool(
     workspaceId: String,
     needsApproval: (String) -> Boolean,
     workspaceRepository: WorkspaceRepository,
+    writeLease: SubAgentWriteLease? = null,
 ) = Tool(
     name = "workspace_create_folder",
     description = """
@@ -235,6 +257,14 @@ private fun createCreateFolderTool(
     needsApproval = { needsApproval("workspace_create_folder") || it.pathOutsideWritableRoots("path") },
     execute = {
         val path = it.jsonObject.absolutePath("path")
+        writeLease?.let { lease ->
+            if (!lease.allows(path)) {
+                error(
+                    "写租约拦截：${lease.describe()}；被拒路径 $path。" +
+                        " 需要写这个位置请让父智能体重新派发并扩大 write_paths。",
+                )
+            }
+        }
         val entry = workspaceRepository.createFolderInRootfs(workspaceId, path)
         listOf(UIMessagePart.Text(entry.toJson().toString()))
     },

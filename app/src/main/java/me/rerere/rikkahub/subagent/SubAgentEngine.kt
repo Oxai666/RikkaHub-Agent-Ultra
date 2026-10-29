@@ -17,6 +17,7 @@ import me.rerere.rikkahub.data.agentrun.AgentRunKind
 import me.rerere.rikkahub.data.agentrun.AgentRunRepository
 import me.rerere.rikkahub.data.agentrun.AgentRunStatus
 import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -380,8 +381,25 @@ class SubAgentEngine(
             is SubAgentProfileResolver.Result.NotRequested -> null
             is SubAgentProfileResolver.Result.Resolved -> profileResolution.profile
             is SubAgentProfileResolver.Result.Failed -> {
-                markTerminal(runId, SubAgentStatus.FAILED, profileResolution.message)
-                return
+                // 用户 profile 没命中 → 回退内置角色库（136 个只读角色）。
+                // 但"同名 profile 冲突"必须继续报错：那是配置错误，换成内置角色会把错误藏起来。
+                val nameMatches = SubAgentProfileResolver.enabledProfiles(settings.subAgents)
+                    .count { it.name.equals(request.agentName, ignoreCase = true) }
+                if (nameMatches > 1) {
+                    markTerminal(runId, SubAgentStatus.FAILED, profileResolution.message)
+                    return
+                }
+                val builtin = request.agentName?.let { BuiltinSubAgents.route(it) }
+                if (builtin == null) {
+                    markTerminal(runId, SubAgentStatus.FAILED, profileResolution.message)
+                    return
+                }
+                Log.i(
+                    TAG,
+                    "sub-agent \"${request.label ?: request.task.take(30)}\" resolved to builtin role " +
+                        "${builtin.agent.name} via ${builtin.via}",
+                )
+                BuiltinSubAgents.toProfile(builtin.agent)
             }
         }
         val modelResolution = resolveSubAgentModel(
@@ -403,6 +421,13 @@ class SubAgentEngine(
         val effectiveTask = profile?.systemPrompt?.trim()?.takeIf { it.isNotEmpty() }
             ?.let { "$it\n\n${request.task}" }
             ?: request.task
+        // 子会话继承父会话的工作区。不继承的话即使 assistant 绑了工作区，
+        // 子智能体的 shell cwd 与相对路径也会落到根目录，写出来的文件跟父级看不到同一个位置；
+        // assistant 自己没绑工作区时这里同样是 null，workspace 工具照旧不出现（那是配置问题）。
+        val parentWorkspaceCwd = parentChatId
+            ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+            ?.let { runCatching { conversationRepo.getConversationById(it) }.getOrNull() }
+            ?.workspaceCwd
         val conv = Conversation.ofId(
             id = Uuid.random(),
             assistantId = parentAsstUuid,
@@ -410,10 +435,15 @@ class SubAgentEngine(
         ).copy(
             title = "[Sub-agent] ${request.label?.take(40) ?: request.task.take(40)}",
             chatModelId = resolvedChatModelId,
+            workspaceCwd = parentWorkspaceCwd,
         )
         conversationRepo.insertConversation(conv)
         chatService.initializeConversation(conv.id)
         HeadlessConversations.mark(conv.id)
+        // 写租约登记在子智能体会话 id 上；工具层按会话查，越界写直接被拒。
+        request.writePaths?.let { paths ->
+            SubAgentWriteLeases.attach(conv.id, SubAgentWriteLease(paths))
+        }
         try {
             // Prepend a wrap-up instruction. Some models naturally write a summary paragraph
             // after their tool-call sequence; others stop after the last tool result and emit
@@ -424,6 +454,40 @@ class SubAgentEngine(
                 appendLine()
                 appendLine()
                 append("When you have finished, end with one short paragraph in plain text that summarises what you did and what you found. Do NOT stop on a tool call — finish with assistant text. The dispatcher harvests only your final text reply, so this paragraph is the entire response the parent sees.")
+                appendLine()
+                appendLine()
+                // 父 assistant 没绑工作区时，子智能体根本没有文件工具。提前说清楚，
+                // 免得它把 12 次 trip 全花在"试着读文件然后报错"上。
+                val parentHasWorkspace = settings.assistants
+                    .firstOrNull { it.id == parentAsstUuid }
+                    ?.workspaceId != null
+                if (!parentHasWorkspace) {
+                    appendLine()
+                    appendLine()
+                    append("Note: this run has NO filesystem tools (no read/write/shell) — the parent ")
+                    append("assistant is not bound to a workspace. Do not attempt file operations. ")
+                    append("Judge only from what you were given and say so explicitly in your summary; ")
+                    append("do not claim files were written or commands were run.")
+                }
+                request.writePaths?.let { paths ->
+                    val lease = SubAgentWriteLease(paths)
+                    appendLine()
+                    appendLine()
+                    append("Write lease for this run: ")
+                    append(lease.describe())
+                    append(". Writes outside it are rejected by the tool layer — plan accordingly and do not retry with a different path.")
+                }
+                appendLine()
+                appendLine()
+                append(
+                    "If you produced verifiable artifacts, append ONE final json code block so the dispatcher can check your work instead of taking your word for it:\n" +
+                        "{\"status\":\"complete|partial|failed\",\"summary\":\"one line\",\"acceptance_criteria\":[" +
+                        "{\"type\":\"files\",\"paths\":[\"relative/path/you/wrote\"],\"claim\":\"...\"}," +
+                        "{\"type\":\"verification\",\"command\":\"the command you actually ran\",\"claim\":\"...\"}]}\n" +
+                        "Only list files you actually wrote, and keep paths relative to the workspace. " +
+                        "A `complete` claim with a missing file, or with no verifiable criterion at all, is downgraded to `partial`. " +
+                        "Omit the block entirely when there is nothing verifiable.",
+                )
             }
             chatService.sendMessage(conv.id, listOf(UIMessagePart.Text(taskWithWrapup)))
             // The naive form `withTimeoutOrNull { …first { it == null } }` followed by a
@@ -450,10 +514,56 @@ class SubAgentEngine(
             // text parts from the last assistant message. This mirrors how the
             // CronJobWorker treats LLM-mode jobs.
             val finalText = harvestFinalText(conv.id)
+            // claim 核验：子智能体自报"完成"不算数，files 必须真实落盘。
+            // verification 类命令不在父级自动执行（避免绕过审批层跑任意命令），标 UNVERIFIED。
+            val workspaceCwdForClaim = runCatching {
+                conversationRepo.getConversationById(conv.id)?.workspaceCwd
+            }.getOrNull() ?: conv.workspaceCwd
+            // claim 的文件凭据必须落到真实磁盘路径。Conversation.workspaceCwd 只是工作区
+            // 内的相对子目录（多数会话就是 null，表示工作区根），真正的根在 WorkspaceEntity.root。
+            val claimRoot = resolveWorkspaceRootForClaim(parentAsstUuid, settings, workspaceCwdForClaim)
+            // 存在性检查必须走 WorkspaceManager 的 rootfs 视图（readText），
+            // 不能直接 File(root, path)：工作区的 /workspace 是 rootfs 内的挂载点，
+            // 用宿主机路径去拼会永远找不到文件，把"真的写了"判成"没写"。
+            val claimWorkspaceId = settings.assistants
+                .firstOrNull { it.id == parentAsstUuid }
+                ?.workspaceId
+                ?.toString()
+            // 回调是同步 lambda，而 readText 是 suspend 的：这里已经在 Dispatchers.IO 上，
+            // 且只在收尾时对少数几条租约路径调用一次，用 runBlocking 桥一下不影响主线程。
+            val claimFileExists: (String) -> Boolean = { path ->
+                claimWorkspaceId != null && runCatching {
+                    kotlinx.coroutines.runBlocking {
+                        org.koin.java.KoinJavaComponent.getKoin()
+                            .get<me.rerere.rikkahub.data.repository.WorkspaceRepository>()
+                            .readText(claimWorkspaceId, path)
+                    }
+                }.isSuccess
+            }
+            val claimReview = reviewSubAgentClaim(
+                finalText = finalText,
+                workspaceCwd = claimRoot ?: claimWorkspaceId,
+                leasePaths = request.writePaths.orEmpty(),
+                fileExists = claimFileExists,
+            )
+            if (claimReview != null) {
+                Log.i(
+                    TAG,
+                    "sub-agent claim: reported=${claimReview.reportedStatus} " +
+                        "effective=${claimReview.effectiveStatus}",
+                )
+            }
+            val resultText = if (claimReview != null) {
+                finalText.trimEnd() + "\n\n" + claimReview.report
+            } else {
+                finalText
+            }
             registry.update(runId) {
                 it.copy(
                     status = SubAgentStatus.SUCCEEDED,
-                    result = finalText,
+                    result = resultText,
+                    claimStatus = claimReview?.effectiveStatus,
+                    claimReport = claimReview?.report,
                     finishedAtMs = System.currentTimeMillis(),
                 )
             }
@@ -469,8 +579,33 @@ class SubAgentEngine(
             notifyParentIfBackground(parentChatId, registry.get(runId))
         } finally {
             HeadlessConversations.unmark(conv.id)
+            SubAgentWriteLeases.detach(conv.id)
             registry.clearJob(runId)
         }
+    }
+
+    /**
+     * 把"助手绑定的工作区 + 会话内的相对子目录"翻译成真实磁盘路径，供 claim 文件校验用。
+     * 解析失败就退回 [cwd]（可能为 null，此时 claim 的文件项会标 UNVERIFIED 而不是误判失败）。
+     */
+    private suspend fun resolveWorkspaceRootForClaim(
+        assistantId: Uuid,
+        settings: Settings,
+        cwd: String?,
+    ): String? {
+        val workspaceId = settings.assistants
+            .firstOrNull { it.id == assistantId }
+            ?.workspaceId
+            ?.toString()
+            ?: return cwd
+        val root = runCatching {
+            org.koin.java.KoinJavaComponent.getKoin()
+                .get<me.rerere.rikkahub.data.repository.WorkspaceRepository>()
+                .getById(workspaceId)
+                ?.root
+        }.getOrNull() ?: return cwd
+        val relative = cwd?.trim('/')?.takeIf { it.isNotEmpty() }
+        return if (relative == null) root else java.io.File(root, relative).absolutePath
     }
 
     private suspend fun markTerminal(runId: String, status: SubAgentStatus, error: String?) {

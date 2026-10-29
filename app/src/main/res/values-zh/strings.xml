@@ -42,6 +42,8 @@
   <string name="assistant_page_add">添加</string>
   <string name="assistant_page_add_body">添加 Body</string>
   <string name="assistant_page_add_header">添加 Header</string>
+  <string name="assistant_page_armor_enabled">开启辅助破甲</string>
+  <string name="assistant_page_armor_enabled_desc">回复被拒或被截断时自动注入纠正与续写指令（默认关闭）</string>
   <string name="assistant_page_allow_conversation_system_prompt">独立对话系统提示</string>
   <string name="assistant_page_allow_conversation_system_prompt_desc">允许每个对话单独设置系统提示词</string>
   <string name="assistant_page_allow_conversation_prompt_injection">独立对话提示词注入</string>

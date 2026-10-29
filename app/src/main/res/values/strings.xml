@@ -42,6 +42,8 @@
   <string name="assistant_page_add">Add</string>
   <string name="assistant_page_add_body">Add Body</string>
   <string name="assistant_page_add_header">Add Header</string>
+  <string name="assistant_page_armor_enabled">Armor Assist</string>
+  <string name="assistant_page_armor_enabled_desc">Inject a correction or resume instruction when a reply gets refused or cut off (off by default)</string>
   <string name="assistant_page_allow_conversation_system_prompt">Per-Conversation System Prompt</string>
   <string name="assistant_page_allow_conversation_system_prompt_desc">Allow each conversation to override the assistant\'s system prompt</string>
   <string name="assistant_page_allow_conversation_prompt_injection">Per-Conversation Prompt Injections</string>
