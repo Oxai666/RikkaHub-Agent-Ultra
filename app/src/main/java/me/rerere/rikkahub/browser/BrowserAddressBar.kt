@@ -202,7 +202,7 @@ fun BrowserAddressBar(
  * 默认引擎来自 [BrowserSearchEngines]（必应 cn.bing.com）。原版写死 DuckDuckGo，
  * 那个域名国内直连不通，只要输入的是关键词就等于把用户送进一个打不开的页面。
  */
-fun normalizeBrowserQuery(raw: String): String {
+fun normalizeBrowserQuery(raw: String, engineId: String? = null): String {
     val q = raw.trim()
     if (q.isEmpty()) return "about:blank"
     val lower = q.lowercase()
@@ -214,5 +214,5 @@ fun normalizeBrowserQuery(raw: String): String {
     ) return q
     // Heuristic: if it contains a dot OR a colon (port/scheme), treat as URL.
     val looksLikeHost = (q.contains('.') || q.contains(':')) && !q.contains(' ')
-    return if (looksLikeHost) "https://$q" else BrowserSearchEngines.buildSearchUrl(q)
+    return if (looksLikeHost) "https://$q" else BrowserSearchEngines.buildSearchUrl(q, engineId)
 }

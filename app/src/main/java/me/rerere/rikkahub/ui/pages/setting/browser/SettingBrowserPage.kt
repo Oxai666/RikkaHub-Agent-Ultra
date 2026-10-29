@@ -1,8 +1,14 @@
 package me.rerere.rikkahub.ui.pages.setting.browser
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.RadioButton
+import androidx.compose.ui.Alignment
+import me.rerere.rikkahub.browser.BrowserSearchEngines
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -67,6 +73,8 @@ fun SettingBrowserPage(
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     var showClearConfirm by remember { mutableStateOf(false) }
+    var showEnginePicker by remember { mutableStateOf(false) }
+    val searchEngineId by vm.searchEngineId.collectAsStateWithLifecycle()
     val cleared = stringResource(R.string.setting_browser_clear_data_done)
 
     if (showClearConfirm) {
@@ -87,6 +95,44 @@ fun SettingBrowserPage(
             dismissButton = {
                 TextButton(onClick = { showClearConfirm = false }) {
                     Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
+    if (showEnginePicker) {
+        AlertDialog(
+            onDismissRequest = { showEnginePicker = false },
+            title = { Text(stringResource(R.string.setting_browser_search_engine)) },
+            text = {
+                Column {
+                    BrowserSearchEngines.engines.forEach { engine ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    vm.setSearchEngine(engine.id)
+                                    showEnginePicker = false
+                                }
+                                .padding(vertical = 8.dp, horizontal = 4.dp),
+                        ) {
+                            RadioButton(
+                                selected = engine.id == searchEngineId,
+                                onClick = null,
+                            )
+                            Text(
+                                text = engine.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showEnginePicker = false }) {
+                    Text(stringResource(android.R.string.ok))
                 }
             },
         )
@@ -168,9 +214,15 @@ fun SettingBrowserPage(
             CardGroup(
                 title = { Text(stringResource(R.string.setting_browser_section_defaults)) },
             ) {
+                // 之前这里只有一行静态文案（写着 DuckDuckGo，切换"将在发布后生效"），
+                // 实际引擎是硬编码的。现在点开可选，值存 BrowserPreferences，
+                // 地址栏与起始页共用同一份 BrowserSearchEngines。
                 item(
                     headlineContent = { Text(stringResource(R.string.setting_browser_search_engine)) },
-                    supportingContent = { Text(stringResource(R.string.setting_browser_search_engine_desc)) },
+                    supportingContent = {
+                        Text(BrowserSearchEngines.byId(searchEngineId).name)
+                    },
+                    modifier = Modifier.clickable { showEnginePicker = true },
                 )
                 // Per-tool timeout — editable, expressed in seconds. Clamped to 10 s..10 min
                 // in BrowserPreferences before persist (GitHub issue #4).

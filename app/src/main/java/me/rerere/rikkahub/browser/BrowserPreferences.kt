@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,9 @@ class BrowserPreferences(private val context: Context) {
 
     private val perToolTimeoutKey = longPreferencesKey("per_tool_timeout_ms")
     private val singleTaskTimeoutKey = longPreferencesKey("single_task_timeout_ms")
+
+    // --- 搜索引擎（地址栏输入关键词时用哪个） --------------------------------------------
+    private val searchEngineKey = stringPreferencesKey("search_engine_id")
 
     init {
         // Push the persisted (or default) timeout values into [BrowserController] — the
@@ -84,6 +88,15 @@ class BrowserPreferences(private val context: Context) {
     }
 
     /** Persist the single-task timeout. Input is clamped before write. */
+    /** 当前搜索引擎 id；未设置时落在 [BrowserSearchEngines.default]（必应 cn.bing.com）。 */
+    fun searchEngineFlow(): Flow<String> = store.data.map { prefs ->
+        BrowserSearchEngines.byId(prefs[searchEngineKey]).id
+    }
+
+    suspend fun setSearchEngine(engineId: String) {
+        store.edit { it[searchEngineKey] = BrowserSearchEngines.byId(engineId).id }
+    }
+
     suspend fun setSingleTaskTimeoutMs(ms: Long) {
         store.edit { it[singleTaskTimeoutKey] = BrowserToolDefaults.clampSingleTaskTimeoutMs(ms) }
     }

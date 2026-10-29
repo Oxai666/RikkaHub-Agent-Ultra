@@ -2,6 +2,8 @@ package me.rerere.rikkahub.browser
 
 import android.content.Intent
 import android.os.Bundle
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import android.webkit.CookieManager
 import android.webkit.WebView
 import androidx.activity.ComponentActivity
@@ -104,7 +106,19 @@ class BrowserActivity : ComponentActivity() {
                     onRefreshTap = { webView?.reload() },
                     onStopAi = { BrowserController.stopCurrentTask() },
                     onNavigate = { raw ->
-                        webView?.loadUrl(normalizeBrowserQuery(raw))
+                        // 引擎来自设置（BrowserPreferences），默认必应 cn.bing.com。
+                        lifecycleScope.launch {
+                            // first() 是 suspend，不能塞进 runCatching 的普通 lambda，用 try/catch。
+                            val engineId = try {
+                                org.koin.java.KoinJavaComponent.getKoin()
+                                    .get<BrowserPreferences>()
+                                    .searchEngineFlow()
+                                    .first()
+                            } catch (e: Throwable) {
+                                null
+                            }
+                            webView?.loadUrl(normalizeBrowserQuery(raw, engineId))
+                        }
                     },
                     // 原版默认 about:blank：打开浏览器是一片白，敲关键词又跳 DuckDuckGo（国内不通）。
                     // 现在默认落在本地起始页，国内直连可用。
