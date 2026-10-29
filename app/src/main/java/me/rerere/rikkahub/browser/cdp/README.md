@@ -32,6 +32,7 @@ LocalSocket().connect(LocalSocketAddress("webview_devtools_remote_$pid", ABSTRAC
 | `CdpTargetMatcher.kt` | tab 与 target 的匹配（marker probe） | 无 |
 | `CdpGlob.kt` | url glob 匹配 | 无 |
 | `WebViewDebugging.kt` | 调试开关 + 诊断 | 无 |
+| `CdpCommandApi.kt` | **本仓库新增**：命令发送接口（原定义在 CdpDebugController 里） | 无 |
 | `CdpProbe.kt` | **本仓库新增**：连通性探针，串起全链路 | 以上 |
 
 尚未移植（依赖事件总线与 Hook 层，等后续阶段）：
@@ -49,3 +50,6 @@ CdpFetchDecision.kt   hook 决策（依赖 HookAction/HookRule）
 - 包名 `top.wkbin.taixu.runtime.browser.cdp` → `me.rerere.rikkahub.browser.cdp`
 - 页面内 tab 标记 `window.__taixuTabId` → `window.__rikkaTabId`
 - 新增 `CdpProbe`（原项目没有这个独立探针）
+- 抽出 `CdpCommandApi`：它原本定义在未移植的 `CdpDebugController.kt` 里
+- `CdpTargetMatcher` 里补 `sessionId = null`：`CdpCommandApi` 的默认参数在
+  override 时不继承，具体类型调用点必须显式传

@@ -104,6 +104,7 @@ class CdpTargetMatcher(
                     put("expression", "window.__rikkaTabId || ''")
                     put("returnByValue", true)
                 },
+                sessionId = null,
                 timeoutMs = 3_000,
             )
             (resp["result"] as? JsonObject)
