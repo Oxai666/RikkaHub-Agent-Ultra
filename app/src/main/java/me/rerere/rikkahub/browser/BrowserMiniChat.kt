@@ -5,6 +5,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -41,13 +45,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import kotlin.math.roundToInt
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.uuid.ExperimentalUuidApi
@@ -96,12 +106,8 @@ fun BrowserMiniChat(
         .collectAsStateWithLifecycle()
 
     val isGenerating = processingStatus != null
-    // Keying remember on the whole `conversation` object re-fires the lambda on every
-    // recomposition (the StateFlow emits a new instance per update). Key on stable,
-    // identity-cheap signals — message count + last message id — so the lambda only
-    // re-runs when there's actually a new assistant message to extract text from.
-    // 之前只显示「最后一条助手文本」，用户进浏览器后看不到上下文，也看不到自己刚说的话。
-    // 改成最近 6 条（用户 + 助手），每条截断，进浏览器默认展开，能看能回。
+    // 最近 6 条（用户 + 助手），每条截断。之前只取「最后一条助手文本」，
+    // 用户进浏览器看不到上下文，也看不到自己刚说的话。
     val recentMessages = remember(
         conversation.currentMessages.size,
         conversation.currentMessages.lastOrNull()?.id,
@@ -112,70 +118,114 @@ fun BrowserMiniChat(
                     .filterIsInstance<UIMessagePart.Text>()
                     .joinToString("\n") { it.text }
                     .trim()
-                if (text.isEmpty()) null
-                else (msg.role == MessageRole.USER) to text.take(800)
+                if (text.isEmpty()) null else (msg.role == MessageRole.USER) to text.take(800)
             }
             .takeLast(6)
     }
 
-    var expanded by remember { mutableStateOf(true) }
+    var expanded by remember { mutableStateOf(false) }
+    // 悬浮窗位置：以右下角为原点，offset 为负值（向左上）。拖动即改这两个数。
+    var pos by remember { mutableStateOf(Offset(-16f, -16f)) }
+    var contentSize by remember { mutableStateOf(IntSize.Zero) }
 
-    Box(
-        // imePadding lifts the entire overlay above the soft keyboard when it slides up;
-        // navigationBarsPadding clears the gesture bar when the keyboard is hidden so the
-        // pill / card never sits under the system handles. Combined modifiers run in
-        // outer-first order — the IME inset wins when it's larger than the nav bar inset.
+    BoxWithConstraints(
         modifier = modifier
             .imePadding()
             .navigationBarsPadding(),
-        contentAlignment = Alignment.BottomEnd,
     ) {
-        AnimatedVisibility(
-            visible = !expanded,
-            enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
-            exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
+        val boundsW = constraints.maxWidth.toFloat()
+        val boundsH = constraints.maxHeight.toFloat()
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .offset { IntOffset(pos.x.roundToInt(), pos.y.roundToInt()) }
+                .onSizeChanged { contentSize = it }
+                .pointerInput(boundsW, boundsH) {
+                    detectDragGestures { change, drag ->
+                        change.consume()
+                        val minX = -(boundsW - contentSize.width).coerceAtLeast(0f)
+                        val minY = -(boundsH - contentSize.height).coerceAtLeast(0f)
+                        pos = Offset(
+                            (pos.x + drag.x).coerceIn(minX, 0f),
+                            (pos.y + drag.y).coerceIn(minY, 0f),
+                        )
+                    }
+                },
         ) {
-            // Pill: floating action-button-sized circle bottom-right.
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
-                tonalElevation = 4.dp,
-                shadowElevation = 6.dp,
-                modifier = Modifier
-                    .padding(end = 16.dp, bottom = 16.dp)
-                    .size(56.dp),
-            ) {
-                IconButton(
+            if (expanded) {
+                BrowserMiniChatExpandedCard(
+                    recentMessages = recentMessages,
+                    isGenerating = isGenerating,
+                    onSend = { text ->
+                        chatService.sendMessage(
+                            conversationId = conversationId,
+                            content = listOf(UIMessagePart.Text(text)),
+                        )
+                    },
+                    onCollapse = { expanded = false },
+                    modifier = Modifier.width(320.dp),
+                )
+            } else {
+                BrowserMiniChatPill(
+                    preview = recentMessages.lastOrNull()?.second,
+                    isGenerating = isGenerating,
                     onClick = { expanded = true },
-                    modifier = Modifier.size(56.dp),
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.Sparkles,
-                        contentDescription = stringResource(R.string.browser_mini_chat_open),
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    )
-                }
+                )
             }
         }
+    }
+}
 
-        AnimatedVisibility(
-            visible = expanded,
-            enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
-            exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 }),
+/**
+ * 收起态：一条挂在页面上的消息条（不是圆圈图标）。
+ *
+ * 用户反馈「那个死人小球狗用啊」—— 一个 Sparkles 圆球既看不到内容也看不出在等什么。
+ * 换成条状：左边显示最新一条消息的摘要，生成中显示转圈，点一下展开成对话窗，可拖动。
+ */
+@Composable
+private fun BrowserMiniChatPill(
+    preview: String?,
+    isGenerating: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+        modifier = Modifier
+            .width(240.dp)
+            .clickable(onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            BrowserMiniChatExpandedCard(
-                recentMessages = recentMessages,
-                isGenerating = isGenerating,
-                onSend = { text ->
-                    chatService.sendMessage(
-                        conversationId = conversationId,
-                        content = listOf(UIMessagePart.Text(text)),
-                    )
+            if (isGenerating) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(14.dp),
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(
+                    imageVector = HugeIcons.Sparkles,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = when {
+                    isGenerating -> "AI 正在处理…"
+                    preview.isNullOrBlank() -> "问 AI 点什么"
+                    else -> preview.replace("\n", " ")
                 },
-                onCollapse = { expanded = false },
-                modifier = Modifier
-                    .padding(horizontal = 12.dp, vertical = 12.dp)
-                    .fillMaxWidth(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
