@@ -99,7 +99,9 @@ object DeepSeekSearchService : SearchService<SearchServiceOptions.DeepSeekOption
                     SearchResultItem(
                         title = result.title,
                         url = result.url,
-                        text = result.summary.ifBlank { result.snippet },
+                        // summary 是 DeepSeek 自研引擎的摘要，snippet 是原文片段，
+                        // content 只有 fetch 才填；三级兜底，三者都空时至少留个空串
+                        text = result.summary.ifBlank { result.snippet.ifBlank { result.content } },
                         publishedDate = result.date,
                     )
                 }
