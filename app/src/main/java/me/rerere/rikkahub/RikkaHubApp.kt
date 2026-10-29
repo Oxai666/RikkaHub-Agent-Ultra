@@ -38,6 +38,7 @@ import me.rerere.rikkahub.data.sync.BackupManager
 import me.rerere.rikkahub.data.sync.RestoreFailedException
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.service.WebServerService
+import me.rerere.rikkahub.subagent.BuiltinSubAgents
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
 import me.rerere.rikkahub.data.repository.WorkspaceRepository
@@ -86,6 +87,10 @@ class RikkaHubApp : Application() {
         // Restore any headless conversation IDs that survived a process kill; must run
         // before any cron worker fires so mark/unmark are consistent.
         HeadlessConversations.init(this)
+
+        // 内置子智能体角色库：只读 assets/agency_agents，读不出来就退化成"没有内置角色"，
+        // 不影响启动，也不影响用户自定义 profile。
+        BuiltinSubAgents.init(this)
 
         // Sweep orphan headless conversations created by workers that were killed mid-execute.
         sweepOrphanHeadlessConversations()

@@ -60,6 +60,10 @@ fun subagentDispatchTool(
     profiles: List<SubAgentProfile> = emptyList(),
 ): Tool {
     val enabledProfiles = SubAgentProfileResolver.enabledProfiles(profiles)
+    // 内置角色库只给部门索引，不逐条列 136 个角色：那会把工具描述撑成几千 token，
+    // 而且每一轮请求都要重发。模型按"部门 + 关键词"自己路由，引擎侧再逐级降级。
+    val builtinDepartmentIndex = BuiltinSubAgents.departmentIndex()
+    val builtinRoleCount = BuiltinSubAgents.agents().size
     val description = buildString {
         append(
             """
@@ -87,6 +91,14 @@ fun subagentDispatchTool(
             append("Named sub-agent profiles (pass the name as `agent`):\n")
             append(enabledProfiles.joinToString("\n") { "- ${it.name}: ${it.description}" })
         }
+        if (builtinDepartmentIndex.isNotEmpty()) {
+            appendLine()
+            appendLine()
+            append("Built-in role library — $builtinRoleCount specialist personas. Pass `agent` as a role ")
+            append("name (e.g. \"Code Reviewer\") or 2-5 keywords (e.g. \"android kotlin\", \"security audit\"). ")
+            append("Departments:\n")
+            append(builtinDepartmentIndex)
+        }
     }
     return Tool(
         name = "subagent_dispatch",
@@ -96,7 +108,7 @@ fun subagentDispatchTool(
                 properties = buildJsonObject {
                     put("task", buildJsonObject { put("type", "string") })
                     put("label", buildJsonObject { put("type", "string") })
-                    if (enabledProfiles.isNotEmpty()) {
+                    if (enabledProfiles.isNotEmpty() || builtinDepartmentIndex.isNotEmpty()) {
                         put("agent", buildJsonObject {
                             put("type", "string")
                             put(

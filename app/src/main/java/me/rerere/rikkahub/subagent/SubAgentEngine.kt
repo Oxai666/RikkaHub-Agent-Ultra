@@ -380,8 +380,25 @@ class SubAgentEngine(
             is SubAgentProfileResolver.Result.NotRequested -> null
             is SubAgentProfileResolver.Result.Resolved -> profileResolution.profile
             is SubAgentProfileResolver.Result.Failed -> {
-                markTerminal(runId, SubAgentStatus.FAILED, profileResolution.message)
-                return
+                // 用户 profile 没命中 → 回退内置角色库（136 个只读角色）。
+                // 但"同名 profile 冲突"必须继续报错：那是配置错误，换成内置角色会把错误藏起来。
+                val nameMatches = SubAgentProfileResolver.enabledProfiles(settings.subAgents)
+                    .count { it.name.equals(request.agentName, ignoreCase = true) }
+                if (nameMatches > 1) {
+                    markTerminal(runId, SubAgentStatus.FAILED, profileResolution.message)
+                    return
+                }
+                val builtin = request.agentName?.let { BuiltinSubAgents.route(it) }
+                if (builtin == null) {
+                    markTerminal(runId, SubAgentStatus.FAILED, profileResolution.message)
+                    return
+                }
+                Log.i(
+                    TAG,
+                    "sub-agent \"${request.label ?: request.task.take(30)}\" resolved to builtin role " +
+                        "${builtin.agent.name} via ${builtin.via}",
+                )
+                BuiltinSubAgents.toProfile(builtin.agent)
             }
         }
         val modelResolution = resolveSubAgentModel(
