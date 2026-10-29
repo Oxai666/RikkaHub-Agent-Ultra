@@ -114,7 +114,9 @@ jobs:
         run: |
           set -o pipefail
           chmod +x gradlew
-          ./gradlew :app:testGithubDebugUnitTest \
+          # 本 fork 没有 distribution flavor（那是上游 3.1.1 才有的），
+          # 变体只有一个 debug，任务名是 testDebugUnitTest。
+          ./gradlew :app:testDebugUnitTest \
             --tests "me.rerere.rikkahub.data.ai.armor.*" \
             --no-daemon --no-configuration-cache --stacktrace 2>&1 | tee /tmp/armor-test.log
 
@@ -145,7 +147,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: armor-test-report
-          path: app/build/reports/tests/testGithubDebugUnitTest/
+          path: app/build/reports/tests/testDebugUnitTest/
           if-no-files-found: ignore
           retention-days: 14
 
@@ -153,7 +155,7 @@ jobs:
         run: |
           set -e
           chmod +x gradlew
-          ./gradlew :app:assembleGithubDebug \
+          ./gradlew :app:assembleDebug \
             --no-daemon --no-configuration-cache --stacktrace --warning-mode summary
 
       - name: Package APK
@@ -165,7 +167,7 @@ jobs:
           OUT="rikkahub-agent-armor-${STAMP}"
           mkdir -p dist
           shopt -s nullglob
-          apks=(app/build/outputs/apk/github/debug/*.apk)
+          apks=(app/build/outputs/apk/debug/*.apk)
           if [ ${#apks[@]} -eq 0 ]; then
             echo "::error::没有找到 APK"
             exit 1
