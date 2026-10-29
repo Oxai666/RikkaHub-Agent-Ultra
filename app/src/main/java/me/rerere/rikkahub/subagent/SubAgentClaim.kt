@@ -189,13 +189,16 @@ private fun reviewFiles(
             detail = "声明了 files 凭据但没有给出任何路径",
         )
     }
-    val missing = criterion.paths.filterNot { path ->
-        // 绝对路径与越界路径都不接受：凭据必须落在本工作区里
-        val normalized = path.trim()
-        normalized.isNotEmpty() &&
-            !normalized.startsWith("/") &&
-            !normalized.split('/', '\\').contains("..") &&
-            fileExists(normalized)
+    val missing = criterion.paths.filterNot { raw ->
+        val path = raw.trim()
+        if (path.isEmpty()) return@filterNot false
+        // 绝对路径只认工作区内写法 /workspace/…（模型习惯这么写，真机上确实是真的）；
+        // 其它绝对路径（/etc/passwd 之类）一律算越界。
+        val insideWorkspace = path == "/workspace" || path.startsWith("/workspace/")
+        if (path.startsWith("/") && !insideWorkspace) return@filterNot false
+        if (path.split('/', '\\').contains("..")) return@filterNot false
+        val relative = normalizeWorkspacePath(path)
+        relative.isNotEmpty() && fileExists(relative)
     }
     return if (missing.isEmpty()) {
         CriterionReview(

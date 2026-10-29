@@ -32,7 +32,12 @@ data class SubAgentWriteLease(val paths: List<String>) {
         if (target.isEmpty()) return false
         return paths.any { raw ->
             val prefix = normalizeWorkspacePath(raw)
-            prefix.isNotEmpty() && (target == prefix || target.startsWith("$prefix/"))
+            if (prefix.isEmpty()) return@any false
+            target == prefix ||
+                target.startsWith("$prefix/") ||
+                // 写 out/review.md 之前得先建出 out/ 目录：租约项的祖先目录必须放行，
+                // 否则 create_folder 会被拦，子智能体只能靠 write_file 的隐式建目录绕过去。
+                prefix.startsWith("$target/")
         }
     }
 

@@ -77,4 +77,20 @@ class SubAgentWriteLeaseTest {
         assertTrue(SubAgentWriteLease(listOf("*")).describe().contains("full workspace"))
         assertTrue(SubAgentWriteLease(listOf("out")).describe().contains("out"))
     }
+
+    @Test
+    fun `ancestor directory of a leased file may be created`() {
+        // 真机踩到过：租约只给 out/review.md，子智能体先 create_folder("out") 被拦，
+        // 只能靠 write_file 的隐式建目录绕过去。祖先目录必须放行。
+        val lease = SubAgentWriteLease(listOf("out/review.md"))
+        assertTrue(lease.allows("/workspace/out"))
+        assertTrue(lease.allows("out"))
+    }
+
+    @Test
+    fun `sibling file under the ancestor directory is still denied`() {
+        val lease = SubAgentWriteLease(listOf("out/review.md"))
+        assertFalse(lease.allows("out/evil.md"))
+        assertFalse(lease.allows("out2"))
+    }
 }

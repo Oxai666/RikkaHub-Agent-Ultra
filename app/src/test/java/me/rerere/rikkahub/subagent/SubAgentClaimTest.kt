@@ -228,4 +228,35 @@ class SubAgentClaimTest {
         assertTrue(result.report.contains("1 verified"))
         assertTrue(result.report.contains("1 unverified"))
     }
+
+    @Test
+    fun `absolute workspace path is accepted as file evidence`() {
+        // 真机上子智能体就是写 /workspace/out/report.md；归一化后要能对上工作区相对路径
+        val text = """
+            ```json
+            {"status":"complete","acceptance_criteria":[
+              {"type":"files","paths":["/workspace/out/report.md"],"claim":"报告"}
+            ]}
+            ```
+        """.trimIndent()
+
+        val result = review(text)!!
+        assertEquals(ClaimVerdict.VERIFIED, result.criteria.single().verdict)
+        assertEquals("complete", result.effectiveStatus)
+    }
+
+    @Test
+    fun `absolute path outside workspace is still rejected`() {
+        val text = """
+            ```json
+            {"status":"complete","acceptance_criteria":[
+              {"type":"files","paths":["/data/local/tmp/x.md"],"claim":"别处"}
+            ]}
+            ```
+        """.trimIndent()
+
+        val result = review(text)!!
+        assertEquals(ClaimVerdict.FAILED, result.criteria.single().verdict)
+        assertEquals("partial", result.effectiveStatus)
+    }
 }
