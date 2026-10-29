@@ -116,9 +116,17 @@ jobs:
           chmod +x gradlew
           # 本 fork 没有 distribution flavor（那是上游 3.1.1 才有的），
           # 变体只有一个 debug，任务名是 testDebugUnitTest。
-          ./gradlew :app:testDebugUnitTest \
-            --tests "me.rerere.rikkahub.data.ai.armor.*" \
-            --no-daemon --no-configuration-cache --stacktrace 2>&1 | tee /tmp/armor-test.log
+          #
+          # --tests 过滤器在没有匹配测试时会直接判失败（No tests found）。
+          # main 分支上还没有 armor 移植，所以先看源文件在不在，避免"选错分支"看起来像编译错误。
+          if ls app/src/test/java/me/rerere/rikkahub/data/ai/armor/*.kt >/dev/null 2>&1; then
+            ./gradlew :app:testDebugUnitTest \
+              --tests "me.rerere.rikkahub.data.ai.armor.*" \
+              --no-daemon --no-configuration-cache --stacktrace 2>&1 | tee /tmp/armor-test.log
+          else
+            echo "::warning::这个 ref 上没有 armor 单测（未移植 armor），跳过该步骤"
+            echo "no armor tests on this ref: $(git rev-parse --short HEAD)" | tee /tmp/armor-test.log
+          fi
 
       # 日志接口要 admin 权限，匿名读不到；失败时把尾部贴到公开 issue，
       # 这样不登录也能看到到底哪一行红的。
