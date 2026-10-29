@@ -8,9 +8,14 @@ name: build-ultra-apk
 # 要出包时到 Actions 页面点 Run workflow，或告我一声我帮你触发。
 on:
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: '编完把 APK 挂到 Release（公开可下，永不过期）'
+        type: boolean
+        default: true
 
 permissions:
-  contents: read
+  contents: write
   issues: write
 
 concurrency:
@@ -193,3 +198,28 @@ jobs:
           path: dist/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      # artifact 下载要登录 GitHub；Release 资源是公开的，手机点一下就能下，
+      # 我这边的脚本也能直接 curl 取包做安装验证。
+      - name: Publish release
+        if: success() && inputs.publish_release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAMP: ${{ steps.pkg.outputs.stamp }}
+          OUT: ${{ steps.pkg.outputs.out }}
+        run: |
+          set -euo pipefail
+          TAG="ultra-${STAMP}"
+          {
+            echo "commit: \`${GITHUB_SHA}\`"
+            echo ""
+            echo "分支: \`${GITHUB_REF_NAME}\`"
+            echo ""
+            echo "内置 136 个子智能体角色、armor 破甲链路、DeepSeek 联网搜索。debug 签名，自用。"
+          } > /tmp/notes.md
+          gh release create "$TAG" dist/*.apk \
+            --title "$OUT" \
+            --prerelease \
+            --notes-file /tmp/notes.md
+          echo "已发布: $TAG"
