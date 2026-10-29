@@ -106,7 +106,9 @@ class BrowserActivity : ComponentActivity() {
                     onNavigate = { raw ->
                         webView?.loadUrl(normalizeBrowserQuery(raw))
                     },
-                    initialUrl = intent?.getStringExtra(EXTRA_INITIAL_URL) ?: "about:blank",
+                    // 原版默认 about:blank：打开浏览器是一片白，敲关键词又跳 DuckDuckGo（国内不通）。
+                    // 现在默认落在本地起始页，国内直连可用。
+                    initialUrl = intent?.getStringExtra(EXTRA_INITIAL_URL) ?: BrowserSearchEngines.NEW_TAB_URL,
                     conversationId = conversationId,
                 )
             }

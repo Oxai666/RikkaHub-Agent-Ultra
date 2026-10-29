@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
+import android.webkit.WebResourceResponse
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
+import androidx.webkit.WebViewAssetLoader
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -167,7 +169,23 @@ private fun WebViewHost(
             // Pass 3's "Clear browsing data" has a stable target to wipe.
             File(ctx.filesDir, "browser-profile").apply { if (!exists()) mkdirs() }
 
+            // 起始页（newtab.html）通过虚拟 https origin 提供：
+            //  - 比 file:///android_asset 多一个正常 origin，localStorage 才存得住用户选的引擎
+            //  - 跨站跳转不会被 file:// 的隔离规则拦住
+            val assetLoader = WebViewAssetLoader.Builder()
+                .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(ctx))
+                .build()
+
             webViewClient = object : WebViewClient() {
+                override fun shouldInterceptRequest(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                ): WebResourceResponse? {
+                    val url = request?.url ?: return null
+                    return assetLoader.shouldInterceptRequest(url)
+                        ?: super.shouldInterceptRequest(view, request)
+                }
+
                 override fun shouldOverrideUrlLoading(
                     view: WebView?,
                     request: WebResourceRequest?,

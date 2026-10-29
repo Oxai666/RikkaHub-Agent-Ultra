@@ -197,10 +197,10 @@ fun BrowserAddressBar(
  *
  *  - already absolute (`http://`, `https://`, `file://`, `about:`, `data:`) → unchanged
  *  - looks like a host (`example.com`, `foo.bar/baz`, `192.168.1.1:8080`) → prepend `https://`
- *  - everything else (no dot, no colon, has a space) → search query via DuckDuckGo
+ *  - everything else (no dot, no colon, has a space) → search query via the default engine
  *
- * Search engine is hardcoded to DuckDuckGo in v1 — the spec's pref dropdown is a no-op
- * stub for v1.5. Wire through `BrowserPreferences` once Pass 2 lands the read path.
+ * 默认引擎来自 [BrowserSearchEngines]（必应 cn.bing.com）。原版写死 DuckDuckGo，
+ * 那个域名国内直连不通，只要输入的是关键词就等于把用户送进一个打不开的页面。
  */
 fun normalizeBrowserQuery(raw: String): String {
     val q = raw.trim()
@@ -214,5 +214,5 @@ fun normalizeBrowserQuery(raw: String): String {
     ) return q
     // Heuristic: if it contains a dot OR a colon (port/scheme), treat as URL.
     val looksLikeHost = (q.contains('.') || q.contains(':')) && !q.contains(' ')
-    return if (looksLikeHost) "https://$q" else "https://duckduckgo.com/?q=${java.net.URLEncoder.encode(q, "UTF-8")}"
+    return if (looksLikeHost) "https://$q" else BrowserSearchEngines.buildSearchUrl(q)
 }
