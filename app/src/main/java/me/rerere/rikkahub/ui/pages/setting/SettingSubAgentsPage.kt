@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.setting
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,6 +27,7 @@ import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVertica
 import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -47,6 +49,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
@@ -63,6 +66,9 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.subagent.BuiltinAgent
+import me.rerere.rikkahub.subagent.BuiltinDepartment
+import me.rerere.rikkahub.subagent.BuiltinSubAgents
 import me.rerere.rikkahub.subagent.SubAgentProfile
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -84,6 +90,10 @@ import org.koin.androidx.compose.koinViewModel
 fun SettingSubAgentsPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val profiles = settings.subAgents
+    val builtinDepartments = remember { BuiltinSubAgents.departments() }
+    val builtinAgents = remember { BuiltinSubAgents.agents() }
+    var viewingBuiltin by remember { mutableStateOf<BuiltinAgent?>(null) }
+    var collapsedDepartments by rememberSaveable { mutableStateOf(setOf<String>()) }
     var expanded by rememberSaveable { mutableStateOf(true) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val editState = useEditState<SubAgentProfile> { edited ->
@@ -120,26 +130,62 @@ fun SettingSubAgentsPage(vm: SettingVM = koinViewModel()) {
                 contentPadding = innerPadding + PaddingValues(16.dp) + PaddingValues(bottom = 128.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                if (profiles.isEmpty()) {
-                    item {
-                        Column(
-                            modifier = Modifier
-                                .fillParentMaxHeight(0.8f)
-                                .fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                        ) {
-                            Text(
-                                text = stringResource(R.string.setting_sub_agents_page_empty),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = stringResource(R.string.setting_sub_agents_page_empty_hint),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            )
+                if (builtinAgents.isNotEmpty()) {
+                    item(key = "builtin_header") {
+                        SubAgentSectionHeader(
+                            title = stringResource(R.string.setting_sub_agents_page_builtin_title),
+                            subtitle = stringResource(
+                                R.string.setting_sub_agents_page_builtin_hint,
+                                builtinAgents.size,
+                                builtinDepartments.size,
+                            ),
+                        )
+                    }
+                    builtinDepartments.forEach { department ->
+                        val departmentAgents = builtinAgents.filter { it.departmentId == department.id }
+                        if (departmentAgents.isNotEmpty()) {
+                            val collapsed = department.id in collapsedDepartments
+                            item(key = "dept_${department.id}") {
+                                DepartmentHeader(
+                                    department = department,
+                                    count = departmentAgents.size,
+                                    collapsed = collapsed,
+                                    onToggle = {
+                                        collapsedDepartments = if (collapsed) {
+                                            collapsedDepartments - department.id
+                                        } else {
+                                            collapsedDepartments + department.id
+                                        }
+                                    },
+                                )
+                            }
+                            if (!collapsed) {
+                                items(departmentAgents, key = { "builtin_${it.id}" }) { agent ->
+                                    BuiltinAgentCard(
+                                        agent = agent,
+                                        onClick = { viewingBuiltin = agent },
+                                    )
+                                }
+                            }
                         }
+                    }
+                }
+
+                item(key = "custom_header") {
+                    SubAgentSectionHeader(
+                        title = stringResource(R.string.setting_sub_agents_page_custom_title),
+                        subtitle = profiles.size.toString(),
+                    )
+                }
+
+                if (profiles.isEmpty()) {
+                    item(key = "custom_empty") {
+                        Text(
+                            text = stringResource(R.string.setting_sub_agents_page_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
                     }
                 } else {
                     items(profiles, key = { it.id }) { profile ->
@@ -175,6 +221,39 @@ fun SettingSubAgentsPage(vm: SettingVM = koinViewModel()) {
         }
     }
 
+    viewingBuiltin?.let { agent ->
+        val prompt = remember(agent.id) { BuiltinSubAgents.systemPrompt(agent) }
+        ModalBottomSheet(
+            onDismissRequest = { viewingBuiltin = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(agent.name, style = MaterialTheme.typography.titleLarge)
+                if (agent.description.isNotBlank()) {
+                    Text(
+                        text = agent.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                HorizontalDivider()
+                Text(
+                    text = prompt.ifBlank {
+                        stringResource(R.string.setting_sub_agents_page_prompt_empty)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+
     if (editState.isEditing) {
         editState.currentState?.let { state ->
             SubAgentProfileEditSheet(
@@ -185,6 +264,73 @@ fun SettingSubAgentsPage(vm: SettingVM = koinViewModel()) {
                 onConfirm = { editState.confirm() },
                 onEdit = { editState.currentState = it },
             )
+        }
+    }
+}
+
+@Composable
+private fun SubAgentSectionHeader(title: String, subtitle: String) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "  $subtitle",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        HorizontalDivider(modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+@Composable
+private fun DepartmentHeader(
+    department: BuiltinDepartment,
+    count: Int,
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TextButton(onClick = onToggle) {
+            Icon(
+                imageVector = HugeIcons.ArrowDown01,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(16.dp)
+                    .rotate(if (collapsed) -90f else 0f),
+            )
+            Text(
+                text = "${department.name.ifBlank { department.id }} · $count",
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BuiltinAgentCard(agent: BuiltinAgent, onClick: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = CustomColors.listItemColors.containerColor,
+        ),
+        modifier = Modifier.clickable(onClick = onClick),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+            Text(agent.name, style = MaterialTheme.typography.titleSmall)
+            if (agent.description.isNotBlank()) {
+                Text(
+                    text = agent.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

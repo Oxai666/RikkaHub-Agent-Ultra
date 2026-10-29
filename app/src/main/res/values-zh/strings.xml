@@ -2254,4 +2254,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_detail_compatibility_mode">兼容模式</string>
   <string name="workspace_detail_compatibility_mode_desc">如果终端无法启动，请尝试启用此功能。这可能会降低性能。适用于新的终端标签页及后续命令。</string>
   <string name="workspace_detail_settings_save_failed">保存设置失败</string>
+    <string name="setting_sub_agents_page_builtin_title">内置角色</string>
+    <string name="setting_sub_agents_page_builtin_hint">%1$d 个 · %2$d 个部门 · 只读，可直接按名字派发</string>
+    <string name="setting_sub_agents_page_custom_title">自定义配置</string>
+    <string name="setting_sub_agents_page_prompt_empty">该角色没有正文</string>
 </resources>

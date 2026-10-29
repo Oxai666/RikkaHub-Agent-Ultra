@@ -2543,4 +2543,8 @@
   <string name="workspace_detail_compatibility_mode">Compatibility mode</string>
   <string name="workspace_detail_compatibility_mode_desc">Try enabling this if the terminal fails to start. It may reduce performance. Applies to new terminal tabs and subsequent commands.</string>
   <string name="workspace_detail_settings_save_failed">Failed to save settings</string>
+    <string name="setting_sub_agents_page_builtin_title">Built-in roles</string>
+    <string name="setting_sub_agents_page_builtin_hint">%1$d roles · %2$d departments · read-only, dispatchable by name</string>
+    <string name="setting_sub_agents_page_custom_title">Custom profiles</string>
+    <string name="setting_sub_agents_page_prompt_empty">This role has no prompt text</string>
 </resources>
