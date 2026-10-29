@@ -96,6 +96,11 @@ data class SubAgentRequest(
     val timeoutSeconds: Int = SubAgentDefaults.DEFAULT_TIMEOUT_SECONDS,
     val maxTrips: Int = SubAgentDefaults.DEFAULT_MAX_TRIPS,
     val label: String? = null,
+    /**
+     * 写租约。null = 不限制（旧行为）；[] = 只读；["*"] = 整工作区；其余按前缀匹配。
+     * 执行期由工作区写工具强制，不是给模型看的建议。
+     */
+    val writePaths: List<String>? = null,
 )
 
 object SubAgentRequestValidator {

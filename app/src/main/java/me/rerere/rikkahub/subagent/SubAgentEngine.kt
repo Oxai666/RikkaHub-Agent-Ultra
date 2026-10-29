@@ -431,6 +431,10 @@ class SubAgentEngine(
         conversationRepo.insertConversation(conv)
         chatService.initializeConversation(conv.id)
         HeadlessConversations.mark(conv.id)
+        // 写租约登记在子智能体会话 id 上；工具层按会话查，越界写直接被拒。
+        request.writePaths?.let { paths ->
+            SubAgentWriteLeases.attach(conv.id, SubAgentWriteLease(paths))
+        }
         try {
             // Prepend a wrap-up instruction. Some models naturally write a summary paragraph
             // after their tool-call sequence; others stop after the last tool result and emit
@@ -441,6 +445,16 @@ class SubAgentEngine(
                 appendLine()
                 appendLine()
                 append("When you have finished, end with one short paragraph in plain text that summarises what you did and what you found. Do NOT stop on a tool call — finish with assistant text. The dispatcher harvests only your final text reply, so this paragraph is the entire response the parent sees.")
+                appendLine()
+                appendLine()
+                request.writePaths?.let { paths ->
+                    val lease = SubAgentWriteLease(paths)
+                    appendLine()
+                    appendLine()
+                    append("Write lease for this run: ")
+                    append(lease.describe())
+                    append(". Writes outside it are rejected by the tool layer — plan accordingly and do not retry with a different path.")
+                }
                 appendLine()
                 appendLine()
                 append(
@@ -517,6 +531,7 @@ class SubAgentEngine(
             notifyParentIfBackground(parentChatId, registry.get(runId))
         } finally {
             HeadlessConversations.unmark(conv.id)
+            SubAgentWriteLeases.detach(conv.id)
             registry.clearJob(runId)
         }
     }
