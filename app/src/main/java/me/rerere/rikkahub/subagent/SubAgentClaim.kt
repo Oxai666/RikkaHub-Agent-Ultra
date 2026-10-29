@@ -78,15 +78,20 @@ fun parseSubAgentClaim(text: String): SubAgentClaim? {
 fun reviewSubAgentClaim(
     finalText: String,
     workspaceCwd: String?,
+    /** 本次派发的写租约。租约本身就是一份可核验的合同：范围内的产物是否存在，是硬证据。 */
+    leasePaths: List<String> = emptyList(),
     fileExists: (String) -> Boolean = { path ->
         val root = workspaceCwd
-        root != null && runCatching { File(root, path).isFile }.getOrDefault(false)
+        root != null && runCatching { File(root, path).exists() }.getOrDefault(false)
     },
 ): ClaimReview? {
-    val claim = parseSubAgentClaim(finalText) ?: return null
-    val reported = claim.status.trim().lowercase().ifEmpty { "complete" }
+    val claim = parseSubAgentClaim(finalText)
+    val leaseReviews = leaseArtifactReviews(leasePaths, workspaceCwd, fileExists)
+    // 模型没给 claim 块、但租约里有可核验产物时，仍然产出一份核验报告
+    if (claim == null && leaseReviews.isEmpty()) return null
+    val reported = claim?.status?.trim()?.lowercase()?.ifEmpty { "complete" } ?: "complete"
 
-    val reviews = claim.criteria.map { criterion ->
+    val reviews = (claim?.criteria ?: emptyList()).map { criterion ->
         when (criterion.type.trim().lowercase()) {
             "files" -> reviewFiles(criterion, workspaceCwd, fileExists)
             "verification" -> CriterionReview(
@@ -106,7 +111,7 @@ fun reviewSubAgentClaim(
                 detail = "未知凭据类型 \"${criterion.type}\"，按未核验处理",
             )
         }
-    }
+    } + leaseReviews
 
     val failures = reviews.count { it.verdict == ClaimVerdict.FAILED }
     val verified = reviews.count { it.verdict == ClaimVerdict.VERIFIED }
@@ -145,9 +150,9 @@ fun reviewSubAgentClaim(
 
     val report = buildString {
         append(header)
-        if (claim.summary.isNotBlank()) {
+        claim?.summary?.takeIf { it.isNotBlank() }?.let {
             append("\n- 子智能体自述：")
-            append(claim.summary.trim())
+            append(it.trim())
         }
         if (body.isNotBlank()) {
             append('\n')
@@ -168,6 +173,29 @@ fun reviewSubAgentClaim(
         criteria = reviews,
         report = report,
     )
+}
+
+/**
+ * 把写租约转成凭据项：租约里列出的每个具体路径，存在即 VERIFIED，缺失即 FAILED。
+ *
+ * 这一条不依赖模型自报 —— 合约是父级自己下的，核对也是父级自己做。
+ */
+private fun leaseArtifactReviews(
+    leasePaths: List<String>,
+    workspaceCwd: String?,
+    fileExists: (String) -> Boolean,
+): List<CriterionReview> {
+    val concrete = leasePaths.map { it.trim() }.filter { it.isNotEmpty() && it != "*" }
+    if (concrete.isEmpty() || workspaceCwd == null) return emptyList()
+    return concrete.map { path ->
+        val criterion = SubAgentCriterion(
+            type = "lease",
+            claim = "写租约范围内的产物",
+            paths = listOf(path),
+        )
+        val review = reviewFiles(criterion, workspaceCwd, fileExists)
+        review.copy(detail = "租约核对 · " + review.detail)
+    }
 }
 
 private fun reviewFiles(

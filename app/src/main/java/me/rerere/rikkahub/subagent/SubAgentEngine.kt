@@ -522,7 +522,7 @@ class SubAgentEngine(
             // claim 的文件凭据必须落到真实磁盘路径。Conversation.workspaceCwd 只是工作区
             // 内的相对子目录（多数会话就是 null，表示工作区根），真正的根在 WorkspaceEntity.root。
             val claimRoot = resolveWorkspaceRootForClaim(parentAsstUuid, settings, workspaceCwdForClaim)
-            val claimReview = reviewSubAgentClaim(finalText, claimRoot)
+            val claimReview = reviewSubAgentClaim(finalText, claimRoot, request.writePaths.orEmpty())
             if (claimReview != null) {
                 Log.i(
                     TAG,

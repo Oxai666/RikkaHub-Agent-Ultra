@@ -259,4 +259,57 @@ class SubAgentClaimTest {
         assertEquals(ClaimVerdict.FAILED, result.criteria.single().verdict)
         assertEquals("partial", result.effectiveStatus)
     }
+
+    // ------------------------------------------------------------------
+    // 写租约本身就是凭据：不依赖模型自报
+    // ------------------------------------------------------------------
+
+    @Test
+    fun `leased artifact counts as evidence even without a claim block`() {
+        // 模型只说了句"写完了"，没给 claim 块。租约里的 out/report.md 真实存在 → 应判完成
+        val result = reviewSubAgentClaim(
+            finalText = "已写入 out/report.md。",
+            workspaceCwd = "/workspace/proj",
+            leasePaths = listOf("out/report.md"),
+        ) { it in files }!!
+
+        assertEquals(ClaimVerdict.VERIFIED, result.criteria.single().verdict)
+        assertEquals("complete", result.effectiveStatus)
+        assertTrue(result.report.contains("租约核对"))
+    }
+
+    @Test
+    fun `leased artifact missing downgrades to partial`() {
+        val result = reviewSubAgentClaim(
+            finalText = "已写入 out/report.md。",
+            workspaceCwd = "/workspace/proj",
+            leasePaths = listOf("out/report.md", "out/missing.md"),
+        ) { it in files }!!
+
+        assertEquals("partial", result.effectiveStatus)
+        assertEquals(1, result.criteria.count { it.verdict == ClaimVerdict.VERIFIED })
+        assertEquals(1, result.criteria.count { it.verdict == ClaimVerdict.FAILED })
+    }
+
+    @Test
+    fun `empty claim plus empty lease means no review at all`() {
+        assertNull(
+            reviewSubAgentClaim(
+                finalText = "没有任何声明",
+                workspaceCwd = "/workspace/proj",
+                leasePaths = emptyList(),
+            ) { it in files },
+        )
+    }
+
+    @Test
+    fun `wildcard lease is not used as evidence`() {
+        assertNull(
+            reviewSubAgentClaim(
+                finalText = "没有 claim",
+                workspaceCwd = "/workspace/proj",
+                leasePaths = listOf("*"),
+            ) { it in files },
+        )
+    }
 }
