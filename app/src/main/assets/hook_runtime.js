@@ -2,9 +2,9 @@
  * TaiXu 注入式 hook 运行时（阶段 1）。
  *
  * 约束：ES5 语法（无反引号 / 无模板字符串 / 无箭头函数 / 无 let-const），
- * 单 IIFE，幂等（window.__taixuHooks 守卫），仅顶层 frame。
+ * 单 IIFE，幂等（window.__rikkaHooks 守卫），仅顶层 frame。
  *
- * 桥协议（window.TaixuBridge，addJavascriptInterface 注入）：
+ * 桥协议（window.RikkaBridge，addJavascriptInterface 注入）：
  *   - T.onEvent(json)：异步上报事件 envelope {v, seq, ts, kind, data}，绝不阻塞；
  *   - T.getRules()：同步返回规则 payload JSON（页内同步决策 block/mock 的关键）。
  *
@@ -14,8 +14,8 @@
 (function () {
   'use strict';
 
-  if (window.__taixuHooks) { return; }
-  var T = window.TaixuBridge;
+  if (window.__rikkaHooks) { return; }
+  var T = window.RikkaBridge;
   if (!T) { return; }
   if (window.top !== window.self) { return; } // 仅顶层 frame
 
@@ -395,7 +395,7 @@
         statusText: status === 0 ? '' : 'OK',
         responseText: body,
         response: body,
-        responseURL: xhr.__taixuUrl || ''
+        responseURL: xhr.__rikkaUrl || ''
       };
       for (var k in props) {
         if (Object.prototype.hasOwnProperty.call(props, k)) {
@@ -431,7 +431,7 @@
         try {
           meta.method = String(m || 'GET').toUpperCase();
           meta.url = String(u || '');
-          xhr.__taixuUrl = meta.url;
+          xhr.__rikkaUrl = meta.url;
         } catch (e) { /* 保持原行为 */ }
         return origOpen.apply(xhr, arguments);
       };
@@ -470,7 +470,7 @@
           try {
             target = d.redirect ? d.redirect.url : meta.url;
             origOpen.call(xhr, meta.method, target); // 重定向：以新 URL 重新 open（保持默认异步）
-            xhr.__taixuUrl = target;
+            xhr.__rikkaUrl = target;
             if (d.modify) {
               var merged = mergeHeaders(meta.reqHeaders, d.modify.request || {});
               for (var k in merged) {
@@ -887,11 +887,11 @@
   installCryptoWrapper();
 
   try {
-    Object.defineProperty(window, '__taixuHooks', { value: state, enumerable: false, configurable: false });
-    Object.defineProperty(window, '__taixuApplyRules', { value: applyRules, enumerable: false, configurable: false });
+    Object.defineProperty(window, '__rikkaHooks', { value: state, enumerable: false, configurable: false });
+    Object.defineProperty(window, '__rikkaApplyRules', { value: applyRules, enumerable: false, configurable: false });
   } catch (e) { /* 不可定义则退化为直接赋值 */ 
-    window.__taixuHooks = state;
-    window.__taixuApplyRules = applyRules;
+    window.__rikkaHooks = state;
+    window.__rikkaApplyRules = applyRules;
   }
 
   try {

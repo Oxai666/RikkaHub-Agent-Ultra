@@ -129,7 +129,7 @@ data class InjectedScript(
     val scopeTabId: String? = null,
 )
 
-/** pushRules payload 的 envelope（发往页内 `window.__taixuApplyRules(<payload>)`）。 */
+/** pushRules payload 的 envelope（发往页内 `window.__rikkaApplyRules(<payload>)`）。 */
 @Serializable
 data class HookRulesPayload(
     val v: Int = 1,
