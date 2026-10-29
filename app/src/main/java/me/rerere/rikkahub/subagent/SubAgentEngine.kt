@@ -441,6 +441,17 @@ class SubAgentEngine(
                 appendLine()
                 appendLine()
                 append("When you have finished, end with one short paragraph in plain text that summarises what you did and what you found. Do NOT stop on a tool call — finish with assistant text. The dispatcher harvests only your final text reply, so this paragraph is the entire response the parent sees.")
+                appendLine()
+                appendLine()
+                append(
+                    "If you produced verifiable artifacts, append ONE final json code block so the dispatcher can check your work instead of taking your word for it:\n" +
+                        "{\"status\":\"complete|partial|failed\",\"summary\":\"one line\",\"acceptance_criteria\":[" +
+                        "{\"type\":\"files\",\"paths\":[\"relative/path/you/wrote\"],\"claim\":\"...\"}," +
+                        "{\"type\":\"verification\",\"command\":\"the command you actually ran\",\"claim\":\"...\"}]}\n" +
+                        "Only list files you actually wrote, and keep paths relative to the workspace. " +
+                        "A `complete` claim with a missing file, or with no verifiable criterion at all, is downgraded to `partial`. " +
+                        "Omit the block entirely when there is nothing verifiable.",
+                )
             }
             chatService.sendMessage(conv.id, listOf(UIMessagePart.Text(taskWithWrapup)))
             // The naive form `withTimeoutOrNull { …first { it == null } }` followed by a
@@ -467,10 +478,30 @@ class SubAgentEngine(
             // text parts from the last assistant message. This mirrors how the
             // CronJobWorker treats LLM-mode jobs.
             val finalText = harvestFinalText(conv.id)
+            // claim 核验：子智能体自报"完成"不算数，files 必须真实落盘。
+            // verification 类命令不在父级自动执行（避免绕过审批层跑任意命令），标 UNVERIFIED。
+            val workspaceCwdForClaim = runCatching {
+                conversationRepo.getConversationById(conv.id)?.workspaceCwd
+            }.getOrNull() ?: conv.workspaceCwd
+            val claimReview = reviewSubAgentClaim(finalText, workspaceCwdForClaim)
+            if (claimReview != null) {
+                Log.i(
+                    TAG,
+                    "sub-agent claim: reported=${claimReview.reportedStatus} " +
+                        "effective=${claimReview.effectiveStatus}",
+                )
+            }
+            val resultText = if (claimReview != null) {
+                finalText.trimEnd() + "\n\n" + claimReview.report
+            } else {
+                finalText
+            }
             registry.update(runId) {
                 it.copy(
                     status = SubAgentStatus.SUCCEEDED,
-                    result = finalText,
+                    result = resultText,
+                    claimStatus = claimReview?.effectiveStatus,
+                    claimReport = claimReview?.report,
                     finishedAtMs = System.currentTimeMillis(),
                 )
             }

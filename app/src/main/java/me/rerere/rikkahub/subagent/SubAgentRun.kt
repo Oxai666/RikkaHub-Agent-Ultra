@@ -33,6 +33,13 @@ data class SubAgentRun(
     val tokensIn: Long = 0,
     val tokensOut: Long = 0,
     val tripCount: Int = 0,
+    /**
+     * claim 核验后的有效状态：complete / partial / failed。
+     * null 表示子智能体没给 claim 块 —— 老行为，父级看到的是原样最终回复。
+     */
+    val claimStatus: String? = null,
+    /** 核验明细，同时已经拼进 [result] 末尾，这里留一份供 UI / subagent_get 直接取。 */
+    val claimReport: String? = null,
 )
 
 @Serializable

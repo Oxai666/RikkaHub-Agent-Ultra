@@ -41,6 +41,8 @@ internal fun encodeRun(run: SubAgentRun): kotlinx.serialization.json.JsonObject 
     put("tokens_in", run.tokensIn)
     put("tokens_out", run.tokensOut)
     put("trip_count", run.tripCount)
+    run.claimStatus?.let { put("claim_status", it) }
+    run.claimReport?.let { put("claim_report", it) }
 }
 
 /**
@@ -83,6 +85,11 @@ fun subagentDispatchTool(
 
                 Approval-required: every dispatch needs explicit confirmation. Eligible for
                 Always Allow if the user trusts the assistant to delegate freely.
+
+                Result carries a claim report when the sub-agent appended one: `files` criteria are
+                verified against the workspace, `verification` commands are left UNVERIFIED for you
+                to re-run yourself, and a self-reported `complete` with no backed criterion is
+                downgraded to `partial`. Treat `partial` as unfinished work, not as a success.
             """.trimIndent()
         )
         if (enabledProfiles.isNotEmpty()) {
