@@ -225,7 +225,10 @@ fun SettingSubAgentsPage(vm: SettingVM = koinViewModel()) {
         val prompt = remember(agent.id) { BuiltinSubAgents.systemPrompt(agent) }
         ModalBottomSheet(
             onDismissRequest = { viewingBuiltin = null },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            sheetState = rememberBottomSheetState(
+                initialValue = SheetValue.Hidden,
+                enabledValues = setOf(SheetValue.Hidden, SheetValue.Expanded),
+            ),
         ) {
             Column(
                 modifier = Modifier
