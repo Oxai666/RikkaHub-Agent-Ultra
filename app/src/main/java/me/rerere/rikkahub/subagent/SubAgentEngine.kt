@@ -529,11 +529,15 @@ class SubAgentEngine(
                 .firstOrNull { it.id == parentAsstUuid }
                 ?.workspaceId
                 ?.toString()
+            // 回调是同步 lambda，而 readText 是 suspend 的：这里已经在 Dispatchers.IO 上，
+            // 且只在收尾时对少数几条租约路径调用一次，用 runBlocking 桥一下不影响主线程。
             val claimFileExists: (String) -> Boolean = { path ->
                 claimWorkspaceId != null && runCatching {
-                    org.koin.java.KoinJavaComponent.getKoin()
-                        .get<me.rerere.rikkahub.data.repository.WorkspaceRepository>()
-                        .readText(claimWorkspaceId, path)
+                    kotlinx.coroutines.runBlocking {
+                        org.koin.java.KoinJavaComponent.getKoin()
+                            .get<me.rerere.rikkahub.data.repository.WorkspaceRepository>()
+                            .readText(claimWorkspaceId, path)
+                    }
                 }.isSuccess
             }
             val claimReview = reviewSubAgentClaim(
