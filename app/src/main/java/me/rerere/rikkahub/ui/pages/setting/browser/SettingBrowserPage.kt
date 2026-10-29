@@ -118,7 +118,9 @@ fun SettingBrowserPage(
             ) {
                 item(
                     onClick = {
-                        ctx.startActivity(BrowserActivity.intent(ctx, "about:blank"))
+                        // 不传 url：走 BrowserActivity 的默认起始页（本地 newtab.html）。
+                        // 之前这里显式传 "about:blank"，把默认起始页覆盖成白屏了。
+                        ctx.startActivity(BrowserActivity.intent(ctx))
                     },
                     headlineContent = { Text(stringResource(R.string.setting_browser_open)) },
                     supportingContent = { Text(stringResource(R.string.setting_browser_open_desc)) },

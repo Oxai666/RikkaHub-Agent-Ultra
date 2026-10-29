@@ -132,7 +132,7 @@ class BrowserActivity : ComponentActivity() {
     }
 
     companion object {
-        /** Optional extra: initial URL to navigate to on launch. Defaults to about:blank. */
+        /** Optional extra: initial URL to navigate to on launch. Defaults to the bundled new-tab page. */
         const val EXTRA_INITIAL_URL = "me.rerere.rikkahub.browser.EXTRA_INITIAL_URL"
 
         /**
