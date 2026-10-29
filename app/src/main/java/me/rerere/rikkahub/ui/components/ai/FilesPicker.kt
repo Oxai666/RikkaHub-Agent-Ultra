@@ -32,6 +32,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import me.rerere.rikkahub.browser.BrowserActivity
+import me.rerere.rikkahub.browser.BrowserPreferences
+import me.rerere.rikkahub.browser.BrowserToolDefaults
+import me.rerere.hugeicons.stroke.Search01
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -113,6 +119,17 @@ internal fun FilesPicker(
     val provider = settings.getCurrentChatModel()?.findProvider(providers = settings.providers)
     val navController = LocalNavController.current
     val workspaceRepository: WorkspaceRepository = koinInject()
+    // 浏览器入口：只有「浏览器」工具开着时才出现在 + 菜单里，避免没开就点了进不去。
+    val browserPreferences: BrowserPreferences = koinInject()
+    val appContext = LocalContext.current
+    var browserEntryEnabled by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        browserEntryEnabled = try {
+            browserPreferences.isToolEnabled(BrowserToolDefaults.OPEN)
+        } catch (e: Throwable) {
+            false
+        }
+    }
     val workspaces by workspaceRepository.listFlow().collectAsState(initial = emptyList())
 
     Column(
@@ -126,6 +143,19 @@ internal fun FilesPicker(
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             TakePicButton(onLaunchCamera = onTakePic)
+
+            if (browserEntryEnabled) {
+                BrowserEntryButton(
+                    onClick = {
+                        appContext.startActivity(
+                            BrowserActivity.intent(
+                                context = appContext,
+                                conversationId = conversation.id.toString(),
+                            )
+                        )
+                    },
+                )
+            }
 
             ImagePickButton(onClick = onPickImage)
 
@@ -455,6 +485,17 @@ private fun ImagePickButton(onClick: () -> Unit = {}) {
         Icon(HugeIcons.Image02, null)
     }, text = {
         Text(stringResource(R.string.photo))
+    }) {
+        onClick()
+    }
+}
+
+@Composable
+fun BrowserEntryButton(onClick: () -> Unit = {}) {
+    BigIconTextButton(icon = {
+        Icon(HugeIcons.Search01, null)
+    }, text = {
+        Text("浏览器")
     }) {
         onClick()
     }
