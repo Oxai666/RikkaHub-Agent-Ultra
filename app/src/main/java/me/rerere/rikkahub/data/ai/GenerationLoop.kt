@@ -7,6 +7,8 @@ import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import me.rerere.rikkahub.BuildConfig
+import me.rerere.rikkahub.data.ai.armor.ArmorProvider
+import me.rerere.rikkahub.data.ai.armor.ArmorRegistry
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -1293,6 +1295,7 @@ class GenerationLoop(
             conversationLorebookIds = conversationLorebookIds,
             processingStatus = processingStatus,
             workspaceCwd = workspaceCwd,
+            conversationId = conversationId,
         )
 
         var messages: List<UIMessage> = messages
@@ -1327,7 +1330,12 @@ class GenerationLoop(
                 var receivedMeaningfulOutput = false
                 var receivedAnyChunk = false
                 val streamChunkHandler = StreamChunkHandler(model)
-                providerImpl.streamText(
+                // armor：只读流监看装饰器。不改编任何 chunk、不断流、异常吞掉只记状态，
+                // 判定结果交给 ArmorTransformer 在下一步决定注入纠正 / 续写。
+                val armorProvider: Provider<ProviderSetting> = conversationId?.let { id ->
+                    ArmorProvider(providerImpl, ArmorRegistry.state, id)
+                } ?: providerImpl
+                armorProvider.streamText(
                     providerSetting = provider,
                     messages = internalMessages,
                     params = params

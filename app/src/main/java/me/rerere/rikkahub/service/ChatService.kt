@@ -88,6 +88,7 @@ import me.rerere.rikkahub.data.ai.tools.shouldUseExternalWebSearch
 import me.rerere.rikkahub.data.preferences.isWorkspaceToolName
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
+import me.rerere.rikkahub.data.ai.armor.ArmorTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
@@ -348,6 +349,7 @@ private val inputTransformers by lazy {
         PlaceholderTransformer,
         DocumentAsPromptTransformer,
         OcrTransformer,
+        ArmorTransformer,
     )
 }
 
