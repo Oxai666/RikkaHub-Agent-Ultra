@@ -420,6 +420,13 @@ class SubAgentEngine(
         val effectiveTask = profile?.systemPrompt?.trim()?.takeIf { it.isNotEmpty() }
             ?.let { "$it\n\n${request.task}" }
             ?: request.task
+        // 子会话继承父会话的工作区。不继承的话即使 assistant 绑了工作区，
+        // 子智能体的 shell cwd 与相对路径也会落到根目录，写出来的文件跟父级看不到同一个位置；
+        // assistant 自己没绑工作区时这里同样是 null，workspace 工具照旧不出现（那是配置问题）。
+        val parentWorkspaceCwd = parentChatId
+            ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+            ?.let { runCatching { conversationRepo.getConversationById(it) }.getOrNull() }
+            ?.workspaceCwd
         val conv = Conversation.ofId(
             id = Uuid.random(),
             assistantId = parentAsstUuid,
@@ -427,6 +434,7 @@ class SubAgentEngine(
         ).copy(
             title = "[Sub-agent] ${request.label?.take(40) ?: request.task.take(40)}",
             chatModelId = resolvedChatModelId,
+            workspaceCwd = parentWorkspaceCwd,
         )
         conversationRepo.insertConversation(conv)
         chatService.initializeConversation(conv.id)
@@ -447,6 +455,19 @@ class SubAgentEngine(
                 append("When you have finished, end with one short paragraph in plain text that summarises what you did and what you found. Do NOT stop on a tool call — finish with assistant text. The dispatcher harvests only your final text reply, so this paragraph is the entire response the parent sees.")
                 appendLine()
                 appendLine()
+                // 父 assistant 没绑工作区时，子智能体根本没有文件工具。提前说清楚，
+                // 免得它把 12 次 trip 全花在"试着读文件然后报错"上。
+                val parentHasWorkspace = settings.assistants
+                    .firstOrNull { it.id == parentAsstUuid }
+                    ?.workspaceId != null
+                if (!parentHasWorkspace) {
+                    appendLine()
+                    appendLine()
+                    append("Note: this run has NO filesystem tools (no read/write/shell) — the parent ")
+                    append("assistant is not bound to a workspace. Do not attempt file operations. ")
+                    append("Judge only from what you were given and say so explicitly in your summary; ")
+                    append("do not claim files were written or commands were run.")
+                }
                 request.writePaths?.let { paths ->
                     val lease = SubAgentWriteLease(paths)
                     appendLine()
