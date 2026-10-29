@@ -29,6 +29,7 @@ import me.rerere.rikkahub.browser.BrowserController
 import me.rerere.rikkahub.browser.BrowserControllerHandle
 import me.rerere.rikkahub.browser.BrowserDiffHelper
 import me.rerere.rikkahub.browser.BrowserToolDefaults
+import me.rerere.rikkahub.browser.cdp.CdpAttach
 import me.rerere.rikkahub.browser.cdp.CdpProbe
 import me.rerere.rikkahub.browser.HeadlessBrowserSessionPool
 import me.rerere.rikkahub.browser.ReadabilityRunner.runReadability
@@ -368,6 +369,45 @@ fun browserDebugTargetsTool(): Tool = Tool(
                 },
             )
         } ?: timeoutEnvelope(BrowserToolDefaults.DEBUG_TARGETS)
+        textPart(out)
+    },
+)
+
+/**
+ * 通过 CDP 会话执行一条 JS。
+ *
+ * 与 browser_eval_js 的区别：那条走 `WebView.evaluateJavascript`（宿主注入），
+ * 这条走真正的 CDP WebSocket（handshake → JSON-RPC → Runtime.evaluate）。
+ * 它的价值在于验证会话层：WS 握手、帧编解码、命令/响应配对，全是后面断点与
+ * 调用栈的基础设施。返回里带回完整 response，方便看 exceptionDetails。
+ */
+fun browserDebugEvalTool(): Tool = Tool(
+    name = BrowserToolDefaults.DEBUG_EVAL,
+    description = "Evaluate one JavaScript expression on the active page through the Chrome DevTools Protocol " +
+        "(real WebSocket session, not host-side injection). Returns {raw:{...}} with the full CDP response, " +
+        "so exceptionDetails is visible. Use it to check the CDP session works; for page text/DOM prefer browser_get_text / browser_get_dom.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("expression", buildJsonObject {
+                put("type", "string")
+                put("description", "JS expression, e.g. document.title")
+            })
+        }, required = listOf("expression"))
+    },
+    execute = { input ->
+        val expr = input.jsonObject["expression"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        val out = if (expr == null) {
+            missingArgEnvelope("expression", "expression is required")
+        } else {
+            withTimeoutOrNull(toolTimeoutMs) {
+                runCatching { CdpAttach.evaluate(expr) }.fold(
+                    onSuccess = { it },
+                    onFailure = { e ->
+                        buildJsonObject { put("error", "${e.javaClass.simpleName}: ${e.message}") }
+                    },
+                )
+            } ?: timeoutEnvelope(BrowserToolDefaults.DEBUG_EVAL)
+        }
         textPart(out)
     },
 )
@@ -1597,6 +1637,7 @@ fun createBrowserTool(
     BrowserToolDefaults.OPEN -> browserOpenTool(context, invocationContext)
     BrowserToolDefaults.CURRENT_URL -> browserCurrentUrlTool()
     BrowserToolDefaults.DEBUG_TARGETS -> browserDebugTargetsTool()
+    BrowserToolDefaults.DEBUG_EVAL -> browserDebugEvalTool()
     BrowserToolDefaults.SCREENSHOT -> browserScreenshotTool(context)
     BrowserToolDefaults.GET_TEXT -> browserGetTextTool()
     BrowserToolDefaults.GET_DOM -> browserGetDomTool()

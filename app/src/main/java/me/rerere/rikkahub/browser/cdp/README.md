@@ -33,7 +33,8 @@ LocalSocket().connect(LocalSocketAddress("webview_devtools_remote_$pid", ABSTRAC
 | `CdpGlob.kt` | url glob 匹配 | 无 |
 | `WebViewDebugging.kt` | 调试开关 + 诊断 | 无 |
 | `CdpCommandApi.kt` | **本仓库新增**：命令发送接口（原定义在 CdpDebugController 里） | 无 |
-| `CdpProbe.kt` | **本仓库新增**：连通性探针，串起全链路 | 以上 |
+| `CdpProbe.kt` | **本仓库新增**：连通性探针（HTTP /json 列 target） | 以上 |
+| `CdpAttach.kt` | **本仓库新增**：一次性 WS 会话，执行单条 CDP 命令 | 以上 + CdpSession |
 
 尚未移植（依赖事件总线与 Hook 层，等后续阶段）：
 

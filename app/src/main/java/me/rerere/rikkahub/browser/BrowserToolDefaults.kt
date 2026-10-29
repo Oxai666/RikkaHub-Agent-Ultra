@@ -33,6 +33,8 @@ object BrowserToolDefaults {
     const val SELECT = "browser_select"
     const val PRESS_KEY = "browser_press_key"
     const val EVAL_JS = "browser_eval_js"
+    /** 通过 CDP 会话执行 JS。写类（能读到 cookie），默认关。 */
+    const val DEBUG_EVAL = "browser_debug_eval"
     /**
      * Token-cost optimisation pass — composite "click + read" tool. One round trip
      * instead of click → wait → get_text. Default OFF: it's still a write tool, the
@@ -49,7 +51,7 @@ object BrowserToolDefaults {
     )
 
     val WRITE_TOOLS: Set<String> = setOf(
-        CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ,
+        CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ, DEBUG_EVAL,
     )
 
     val LOOP_CONTROL_TOOLS: Set<String> = setOf(DONE)
@@ -59,6 +61,7 @@ object BrowserToolDefaults {
         OPEN, CURRENT_URL, SCREENSHOT, GET_TEXT, GET_DOM, GET_LINKS, BACK, FORWARD, WAIT_FOR,
         DEBUG_TARGETS,
         CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ,
+        DEBUG_EVAL,
         DONE,
     )
 
