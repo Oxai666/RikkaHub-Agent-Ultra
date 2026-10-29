@@ -4,10 +4,10 @@ name: build-ultra-apk
 #   源码就是本仓库自己的分支，不再 checkout 上游再打补丁 —— armor 的改动是提交进来的，
 #   谁都能看到改了什么、哪一行接的线。
 #   出 debug APK（debug 签名，自用），顺带跑 armor 的单测，判定逻辑改坏了当场红。
+# 只手动触发：改代码期间不占用 Actions 额度，也不在你没准备好时出包。
+# 要出包时到 Actions 页面点 Run workflow，或告我一声我帮你触发。
 on:
   workflow_dispatch:
-  push:
-    branches: [main, feature/armor]
 
 permissions:
   contents: read
