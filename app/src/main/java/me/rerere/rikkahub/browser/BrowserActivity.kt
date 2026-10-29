@@ -2,6 +2,7 @@ package me.rerere.rikkahub.browser
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import android.webkit.CookieManager
