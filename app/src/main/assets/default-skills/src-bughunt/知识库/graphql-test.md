@@ -1,6 +1,6 @@
 > 结构：上半原有是主线；下半补充加深。短表没点名时按现场：自省 / 越权 id / 注入 / 批量。不必整篇通读。
 >
-> 写不写只认 `~/.grok/rules/vuln-report-format.md`。Introspection 仅 schema、无敏感字段 → 继续挖字段/越权/注入。
+> 写不写只认 `rules/vuln-report-format.md`。Introspection 仅 schema、无敏感字段 → 继续挖字段/越权/注入。
 
 ## 一、原有知识库
 

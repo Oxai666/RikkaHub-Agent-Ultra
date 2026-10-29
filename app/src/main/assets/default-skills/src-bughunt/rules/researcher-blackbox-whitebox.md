@@ -40,7 +40,7 @@ If any checkbox fails and the task needs a real browser, **stop and call the MCP
 
 ## Session expectation
 
-Playwright MCP is **always enabled** in `~/.grok/config.toml` as `[mcp_servers.playwright]`. Treat it as a first-class tool path, not an optional plugin the user must re-enable each time.
+Playwright MCP **不一定可用**：本环境是 Android 客户端，没有 `[mcp_servers.playwright]`。要用浏览器时走工作区 shell（curl / 无头工具）或客户端自带的搜索抓取能力，不要假设 Playwright 存在。
 ） | 不可信输入最密集 |
 | 3 | 历史 CVE 相邻代码（读修复 commit → 同模块） | 同类错误会重复 |
 | 4 | 新功能 / 新 API | 测试不充分 |

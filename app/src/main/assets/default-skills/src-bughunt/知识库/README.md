@@ -10,9 +10,9 @@
 - 方便和能力优先；省 token 是顺带，不挡开模块
 - 短表点名的手法用标题搜。有指针的肥篇只留实战中文 + 指针段；禁开/几乎不交的篇已收成一行。手法行不删、算成不改矮。
 - 篇内跳转已改成本目录真实文件（`idor-test.md` 一类）；不要再跟 `../xxx/SKILL.md`
-- 与 `~/.grok/rules` 冲突时 **以 rules 为准**（挖什么 `src-value`；CORS 不挖 `cors-vuln-report-priority`；写不写 `vuln-report-format`）
+- 与 `rules` 冲突时 **以 rules 为准**（挖什么 `src-value`；CORS 不挖 `cors-vuln-report-priority`；写不写 `vuln-report-format`）
 - **`cors-test.md` / `llm-security-test.md`：不挖/禁开越狱。** `401-403-bypass.md` 不磨登录 HTML。
-- 正式 SRC 报告：`~/.grok/rules/vuln-report-format.md`
+- 正式 SRC 报告：`rules/vuln-report-format.md`
 
 ## 文件清单
 
@@ -67,4 +67,4 @@
 | `xss-test.md` | XSS（中文开场 + 冷门事件 + XSS→RCE / 自定义协议） |
 | `xxe-test.md` | 专题知识（hack-skills 导入或融合） |
 
-**合计：48 个知识文件**（不含本 README）。SRC 报告版式不在本库：见 `~/.grok/rules/vuln-report-format.md`。定级只认 format，本库不定级。
+**合计：48 个知识文件**（不含本 README）。SRC 报告版式不在本库：见 `rules/vuln-report-format.md`。定级只认 format，本库不定级。

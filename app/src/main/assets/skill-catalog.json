@@ -123,16 +123,6 @@
       "is_bundled": true
     },
     {
-      "name": "ascript-device",
-      "title": "AScript 真机自动化",
-      "description": "在万象内使用 AScript 真机自动化：驱动 Android/iOS/Windows 设备、读控件树与截图、OCR 找字、 找色比色、执行设备端 Python（eval_python）、上传运行工程与看运行日志。当用户提到 AScript、 AScript App、真机自动化、设备服务 9096 端口、局域网或 USB/ADB 连设备、控件树、选择器、 自",
-      "category": "automation",
-      "license": "MIT",
-      "size_kb": 37,
-      "compatibility": "any",
-      "is_bundled": true
-    },
-    {
       "name": "ctf-kb",
       "title": "CTF 全方向知识库",
       "description": "CTF 竞赛全方向知识库技能。基于 Hello CTF 知识技能树整理，覆盖 13 个方向： Web 安全、密码学、安全杂项、二进制安全、逆向工程、人工智能安全、云安全、 数据安全、区块链安全、工控安全、物联网安全、应急响应、渗透测试。 当用户提到以下任意关键词时必须触发本技能：CTF、夺旗赛、ctf 题目、解题、 比赛题、writeup、re 题、pwn ",

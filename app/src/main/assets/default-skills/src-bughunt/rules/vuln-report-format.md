@@ -23,7 +23,7 @@
 | 整包（步骤里） | 每步只贴一个可复制整包。Host 紧挨请求行下一行。Accept / Accept-Language: zh-CN / Accept-Encoding: gzip, deflate / User-Agent: Mozilla/4.0 (compatible; MSIE 7.0; Windows NT 10.0; WOW64; Trident/7.0; .NET4.0C; .NET4.0E; Tablet PC 2.0) / Connection: close 写齐。有 body 再加 Content-Type、Content-Length、Cache-Control: no-cache。页面有的 Origin、Referer 写上。没登录态打通不写 Cookie；有登录态复现 Cookie 写完整实值。禁止：挖的时候带着会话，交报告时把 Cookie 拿掉再标匿名。包结束直接＃。不要写「预期」，步骤里不要写回包、不要贴回包。 |
 | 修复建议 | 贴合当前漏洞给出精准、可落地、针对性强的整改方案，简短直白。 |
 | 排版 | 漏洞标题、目标网站URL、漏洞等级各占一行，中间不空行、不分＃。漏洞描述：、漏洞危害：冒号后换行，正文不要跟在冒号同一行。危害每种伤害单独一行，不要第一层第二层。大块之间单独一行全角＃，禁止半角#。复现里每一条步骤换行，条与条之间一行＃。复现结束后一行＃再接修复建议。不出现多余空行。 |
-| 落盘文件 | 放到 `Desktop\{任务}_SRC挖洞\报告\`。文件名就是漏洞标题那一行，后缀 `.md`。桌面根禁止散落报告。CRLF。dig 不进正文。无洞不写空报告。 |
+| 落盘文件 | 放到 `/{任务}_SRC挖洞/报告/`。文件名就是漏洞标题那一行，后缀 `.md`。桌面根禁止散落报告。CRLF。dig 不进正文。无洞不写空报告。 |
 
 ---
 
