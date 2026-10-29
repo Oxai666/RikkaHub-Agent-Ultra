@@ -100,19 +100,25 @@ fun BrowserMiniChat(
     // recomposition (the StateFlow emits a new instance per update). Key on stable,
     // identity-cheap signals — message count + last message id — so the lambda only
     // re-runs when there's actually a new assistant message to extract text from.
-    val latestAssistantText = remember(
+    // 之前只显示「最后一条助手文本」，用户进浏览器后看不到上下文，也看不到自己刚说的话。
+    // 改成最近 6 条（用户 + 助手），每条截断，进浏览器默认展开，能看能回。
+    val recentMessages = remember(
         conversation.currentMessages.size,
         conversation.currentMessages.lastOrNull()?.id,
     ) {
         conversation.currentMessages
-            .lastOrNull { it.role == MessageRole.ASSISTANT }
-            ?.parts
-            ?.filterIsInstance<UIMessagePart.Text>()
-            ?.joinToString("\n") { it.text }
-            ?.takeIf { it.isNotBlank() }
+            .mapNotNull { msg ->
+                val text = msg.parts
+                    .filterIsInstance<UIMessagePart.Text>()
+                    .joinToString("\n") { it.text }
+                    .trim()
+                if (text.isEmpty()) null
+                else (msg.role == MessageRole.USER) to text.take(800)
+            }
+            .takeLast(6)
     }
 
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(true) }
 
     Box(
         // imePadding lifts the entire overlay above the soft keyboard when it slides up;
@@ -158,7 +164,7 @@ fun BrowserMiniChat(
             exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 }),
         ) {
             BrowserMiniChatExpandedCard(
-                latestAssistantText = latestAssistantText,
+                recentMessages = recentMessages,
                 isGenerating = isGenerating,
                 onSend = { text ->
                     chatService.sendMessage(
@@ -177,7 +183,7 @@ fun BrowserMiniChat(
 
 @Composable
 private fun BrowserMiniChatExpandedCard(
-    latestAssistantText: String?,
+    recentMessages: List<Pair<Boolean, String>>,
     isGenerating: Boolean,
     onSend: (String) -> Unit,
     onCollapse: () -> Unit,
@@ -221,17 +227,32 @@ private fun BrowserMiniChatExpandedCard(
                 }
             }
 
-            // Latest assistant reply. Cap at 30% of screen-ish via heightIn(max=120dp);
-            // user can scroll inside if it spills. While generating, show a tiny spinner +
-            // "thinking" hint instead of clobbering the previous reply.
-            if (latestAssistantText != null || isGenerating) {
+            // 最近几条消息：用户靠右、助手靠左，整体限高 220dp 可滚动。
+            if (recentMessages.isNotEmpty() || isGenerating) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Box(modifier = Modifier.padding(10.dp)) {
-                        if (isGenerating && latestAssistantText.isNullOrBlank()) {
+                    Column(
+                        modifier = Modifier
+                            .padding(10.dp)
+                            .heightIn(max = 220.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        recentMessages.forEach { (fromUser, text) ->
+                            Text(
+                                text = (if (fromUser) "你：" else "AI：") + text,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (fromUser) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            )
+                        }
+                        if (isGenerating) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(12.dp),
@@ -243,15 +264,6 @@ private fun BrowserMiniChatExpandedCard(
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }
-                        } else if (latestAssistantText != null) {
-                            Text(
-                                text = latestAssistantText,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier
-                                    .heightIn(max = 120.dp)
-                                    .verticalScroll(rememberScrollState()),
-                            )
                         }
                     }
                 }
