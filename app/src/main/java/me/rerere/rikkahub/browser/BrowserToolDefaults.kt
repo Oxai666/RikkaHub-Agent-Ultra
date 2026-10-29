@@ -22,6 +22,8 @@ object BrowserToolDefaults {
     const val BACK = "browser_back"
     const val FORWARD = "browser_forward"
     const val WAIT_FOR = "browser_wait_for"
+    /** CDP 探针：列当前进程的 WebView 调试目标。只读、不碰页面，默认开。 */
+    const val DEBUG_TARGETS = "browser_debug_targets"
 
     // --- Write tools (default OFF) -----------------------------------------------------------
     const val CLICK = "browser_click"
@@ -43,6 +45,7 @@ object BrowserToolDefaults {
 
     val READ_TOOLS: Set<String> = setOf(
         OPEN, CURRENT_URL, SCREENSHOT, GET_TEXT, GET_DOM, GET_LINKS, BACK, FORWARD, WAIT_FOR,
+        DEBUG_TARGETS,
     )
 
     val WRITE_TOOLS: Set<String> = setOf(
@@ -54,6 +57,7 @@ object BrowserToolDefaults {
     /** Stable display order for the Settings page. Read first, then write, then loop-control. */
     val ALL_TOOLS: List<String> = listOf(
         OPEN, CURRENT_URL, SCREENSHOT, GET_TEXT, GET_DOM, GET_LINKS, BACK, FORWARD, WAIT_FOR,
+        DEBUG_TARGETS,
         CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ,
         DONE,
     )

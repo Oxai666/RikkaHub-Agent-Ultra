@@ -11,6 +11,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
@@ -28,6 +29,7 @@ import me.rerere.rikkahub.browser.BrowserController
 import me.rerere.rikkahub.browser.BrowserControllerHandle
 import me.rerere.rikkahub.browser.BrowserDiffHelper
 import me.rerere.rikkahub.browser.BrowserToolDefaults
+import me.rerere.rikkahub.browser.cdp.CdpProbe
 import me.rerere.rikkahub.browser.HeadlessBrowserSessionPool
 import me.rerere.rikkahub.browser.ReadabilityRunner.runReadability
 import me.rerere.rikkahub.browser.awaitReadyState
@@ -320,6 +322,52 @@ fun browserCurrentUrlTool(): Tool = Tool(
                 }
             }
         } ?: timeoutEnvelope(BrowserToolDefaults.CURRENT_URL)
+        textPart(out)
+    },
+)
+
+/**
+ * CDP 连通性探针（移植自太墟 taiXu runtime/browser/cdp）。
+ *
+ * 只做一件事：开调试开关 → 找 abstract socket → GET /json 列 target。
+ * 返回空列表 + errors 时，errors 里会写明卡在哪一步（开开关 / 连 socket / 解析 / 没有活动 WebView）。
+ */
+fun browserDebugTargetsTool(): Tool = Tool(
+    name = BrowserToolDefaults.DEBUG_TARGETS,
+    description = "List Chrome DevTools Protocol targets of this app's own WebViews (page / service_worker / webview). " +
+        "Read-only probe: it flips WebView debugging on, finds the devtools abstract socket, and GETs /json. " +
+        "Returns {socket, provider, targets:[{id,type,title,url,ws}], errors:[...]}. " +
+        "Empty targets with errors means the CDP path is broken at that step — read errors first.",
+    parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
+    execute = {
+        val out = withTimeoutOrNull(toolTimeoutMs) {
+            runCatching { CdpProbe.listTargets() }.fold(
+                onSuccess = { r ->
+                    buildJsonObject {
+                        put("socket", r.socketName)
+                        put("provider", r.diagnostics)
+                        put("count", r.targets.size)
+                        putJsonArray("targets") {
+                            r.targets.forEach { t ->
+                                add(buildJsonObject {
+                                    put("id", t.id)
+                                    put("type", t.type)
+                                    put("title", t.title)
+                                    put("url", t.url)
+                                    put("ws", t.webSocketDebuggerUrl)
+                                })
+                            }
+                        }
+                        if (r.errors.isNotEmpty()) {
+                            putJsonArray("errors") { r.errors.forEach { add(JsonPrimitive(it)) } }
+                        }
+                    }
+                },
+                onFailure = { e ->
+                    buildJsonObject { put("error", "${e.javaClass.simpleName}: ${e.message}") }
+                },
+            )
+        } ?: timeoutEnvelope(BrowserToolDefaults.DEBUG_TARGETS)
         textPart(out)
     },
 )
@@ -1548,6 +1596,7 @@ fun createBrowserTool(
 ): Tool? = when (toolName) {
     BrowserToolDefaults.OPEN -> browserOpenTool(context, invocationContext)
     BrowserToolDefaults.CURRENT_URL -> browserCurrentUrlTool()
+    BrowserToolDefaults.DEBUG_TARGETS -> browserDebugTargetsTool()
     BrowserToolDefaults.SCREENSHOT -> browserScreenshotTool(context)
     BrowserToolDefaults.GET_TEXT -> browserGetTextTool()
     BrowserToolDefaults.GET_DOM -> browserGetDomTool()
