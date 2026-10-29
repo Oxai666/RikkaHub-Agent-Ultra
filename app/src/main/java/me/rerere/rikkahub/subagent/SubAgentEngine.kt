@@ -518,7 +518,10 @@ class SubAgentEngine(
             val workspaceCwdForClaim = runCatching {
                 conversationRepo.getConversationById(conv.id)?.workspaceCwd
             }.getOrNull() ?: conv.workspaceCwd
-            val claimReview = reviewSubAgentClaim(finalText, workspaceCwdForClaim)
+            // claim 的文件凭据必须落到真实磁盘路径。Conversation.workspaceCwd 只是工作区
+            // 内的相对子目录（多数会话就是 null，表示工作区根），真正的根在 WorkspaceEntity.root。
+            val claimRoot = resolveWorkspaceRootForClaim(parentAsstUuid, settings, workspaceCwdForClaim)
+            val claimReview = reviewSubAgentClaim(finalText, claimRoot)
             if (claimReview != null) {
                 Log.i(
                     TAG,
@@ -555,6 +558,30 @@ class SubAgentEngine(
             SubAgentWriteLeases.detach(conv.id)
             registry.clearJob(runId)
         }
+    }
+
+    /**
+     * 把"助手绑定的工作区 + 会话内的相对子目录"翻译成真实磁盘路径，供 claim 文件校验用。
+     * 解析失败就退回 [cwd]（可能为 null，此时 claim 的文件项会标 UNVERIFIED 而不是误判失败）。
+     */
+    private suspend fun resolveWorkspaceRootForClaim(
+        assistantId: Uuid,
+        settings: Settings,
+        cwd: String?,
+    ): String? {
+        val workspaceId = settings.assistants
+            .firstOrNull { it.id == assistantId }
+            ?.workspaceId
+            ?.toString()
+            ?: return cwd
+        val root = runCatching {
+            org.koin.java.KoinJavaComponent.getKoin()
+                .get<me.rerere.rikkahub.data.repository.WorkspaceRepository>()
+                .getById(workspaceId)
+                ?.root
+        }.getOrNull() ?: return cwd
+        val relative = cwd?.trim('/')?.takeIf { it.isNotEmpty() }
+        return if (relative == null) root else java.io.File(root, relative).absolutePath
     }
 
     private suspend fun markTerminal(runId: String, status: SubAgentStatus, error: String?) {
