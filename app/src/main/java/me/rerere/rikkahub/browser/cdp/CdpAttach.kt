@@ -3,6 +3,7 @@ package me.rerere.rikkahub.browser.cdp
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.withContext
@@ -29,7 +30,8 @@ object CdpAttach {
 
     /** 选一个可用的 page target。优先挑不在 about:blank 的页面。 */
     suspend fun prepare(): Prepared = withContext(Dispatchers.IO) {
-        val probe = CdpProbe.listTargets()
+        // 外层 sendOne 已有 3 次重试，这里只探一次，避免 3×3 叠加成 9 次。
+        val probe = CdpProbe.listTargets(attempts = 1)
         val pages = probe.targets.filter { it.webSocketDebuggerUrl.isNotBlank() }
         val target = pages.firstOrNull { it.type == "page" && it.url.startsWith("http") }
             ?: pages.firstOrNull { it.type == "page" }
@@ -51,6 +53,26 @@ object CdpAttach {
         params: JsonObject = JsonObject(emptyMap()),
         timeoutMs: Long = 10_000,
     ): JsonObject = withContext(Dispatchers.IO) {
+        // 页面跳转后旧 target id 会失效，devtools 端点也可能还没就绪。
+        // 整条链路（发现 target → 连接 → 握手 → 发命令）最多试 3 次。
+        var lastError: Throwable? = null
+        repeat(3) { attempt ->
+            try {
+                return@withContext sendOnce(method, params, timeoutMs)
+            } catch (e: Throwable) {
+                lastError = e
+                Log.w("RikkaCdp", "cdp attempt ${attempt + 1} failed: ${e.message}")
+                if (attempt < 2) delay(300L * (attempt + 1))
+            }
+        }
+        throw lastError ?: IllegalStateException("cdp send failed")
+    }
+
+    private suspend fun sendOnce(
+        method: String,
+        params: JsonObject,
+        timeoutMs: Long,
+    ): JsonObject {
         val prepared = prepare()
         val conn = LocalSocketCdpTransport(prepared.socketName).open()
         val ws = try {

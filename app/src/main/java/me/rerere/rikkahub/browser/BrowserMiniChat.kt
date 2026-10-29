@@ -114,13 +114,31 @@ fun BrowserMiniChat(
     ) {
         conversation.currentMessages
             .mapNotNull { msg ->
-                val text = msg.parts
-                    .filterIsInstance<UIMessagePart.Text>()
-                    .joinToString("\n") { it.text }
-                    .trim()
-                if (text.isEmpty()) null else (msg.role == MessageRole.USER) to text.take(800)
+                // 之前只收 Text part，于是「只调工具还没出正文」的助手消息整条消失 ——
+                // 用户看到的就是「只有我说话，AI 不吭声」。思考、工具调用也一并渲染。
+                val lines = buildList {
+                    msg.parts.forEach { part ->
+                        when (part) {
+                            is UIMessagePart.Text ->
+                                if (part.text.isNotBlank()) add(part.text.trim())
+
+                            is UIMessagePart.Reasoning ->
+                                if (part.reasoning.isNotBlank()) add("💭 " + part.reasoning.trim())
+
+                            is UIMessagePart.Tool ->
+                                add(
+                                    "🔧 ${part.toolName}" +
+                                        if (part.output.isNotEmpty()) " ✓" else " …"
+                                )
+
+                            else -> Unit
+                        }
+                    }
+                }
+                val text = lines.joinToString("\n")
+                if (text.isBlank()) null else (msg.role == MessageRole.USER) to text.take(1200)
             }
-            .takeLast(6)
+            .takeLast(8)
     }
 
     var expanded by remember { mutableStateOf(false) }
@@ -164,7 +182,7 @@ fun BrowserMiniChat(
                         )
                     },
                     onCollapse = { expanded = false },
-                    modifier = Modifier.width(320.dp),
+                    modifier = Modifier.width(340.dp),
                 )
             } else {
                 BrowserMiniChatPill(
@@ -287,7 +305,7 @@ private fun BrowserMiniChatExpandedCard(
                     Column(
                         modifier = Modifier
                             .padding(10.dp)
-                            .heightIn(max = 220.dp)
+                            .heightIn(max = 320.dp)
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
