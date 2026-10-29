@@ -63,6 +63,9 @@ object ArmorTransformer : InputMessageTransformer {
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
+        // 按助手开关：默认关闭。一直开着会让普通对话也被注入纠正文本，
+        // 真机上模型会把它当成"元指令"来质疑，属于噪音。
+        if (!ctx.assistant.armorEnabled) return messages
         val conversationId = ctx.conversationId ?: return messages
         if (messages.isEmpty()) return messages
 

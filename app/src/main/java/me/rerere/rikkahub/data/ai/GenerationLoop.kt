@@ -1332,9 +1332,12 @@ class GenerationLoop(
                 val streamChunkHandler = StreamChunkHandler(model)
                 // armor：只读流监看装饰器。不改编任何 chunk、不断流、异常吞掉只记状态，
                 // 判定结果交给 ArmorTransformer 在下一步决定注入纠正 / 续写。
-                val armorProvider: Provider<ProviderSetting> = conversationId?.let { id ->
-                    ArmorProvider(providerImpl, ArmorRegistry.state, id)
-                } ?: providerImpl
+                val armorProvider: Provider<ProviderSetting> =
+                    if (assistant.armorEnabled && conversationId != null) {
+                        ArmorProvider(providerImpl, ArmorRegistry.state, conversationId)
+                    } else {
+                        providerImpl
+                    }
                 armorProvider.streamText(
                     providerSetting = provider,
                     messages = internalMessages,
