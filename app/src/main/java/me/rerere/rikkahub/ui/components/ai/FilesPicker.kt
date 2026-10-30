@@ -39,6 +39,7 @@ import me.rerere.rikkahub.browser.BrowserActivity
 import me.rerere.rikkahub.browser.BrowserPreferences
 import me.rerere.rikkahub.browser.BrowserToolDefaults
 import me.rerere.hugeicons.stroke.Search01
+import me.rerere.hugeicons.stroke.Shield01
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -161,6 +162,9 @@ internal fun FilesPicker(
                     },
                 )
             }
+
+            // 工具审批入口：直达设置页（含「全部放行」开关），省得每次翻三层菜单。
+            ToolApprovalEntryButton(onClick = { navController.navigate(Screen.SettingToolApprovals) })
 
             ImagePickButton(onClick = onPickImage)
 
@@ -490,6 +494,17 @@ private fun ImagePickButton(onClick: () -> Unit = {}) {
         Icon(HugeIcons.Image02, null)
     }, text = {
         Text(stringResource(R.string.photo))
+    }) {
+        onClick()
+    }
+}
+
+@Composable
+fun ToolApprovalEntryButton(onClick: () -> Unit = {}) {
+    BigIconTextButton(icon = {
+        Icon(HugeIcons.Shield01, null)
+    }, text = {
+        Text("工具审批")
     }) {
         onClick()
     }
