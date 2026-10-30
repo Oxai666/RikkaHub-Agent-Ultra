@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import androidx.webkit.WebViewAssetLoader
+import me.rerere.rikkahub.R
 import me.rerere.rikkahub.browser.hook.HookInstaller
 import org.koin.compose.koinInject
 import androidx.compose.material3.LinearProgressIndicator
