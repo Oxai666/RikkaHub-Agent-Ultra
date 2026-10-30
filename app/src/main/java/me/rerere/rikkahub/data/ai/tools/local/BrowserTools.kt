@@ -51,6 +51,7 @@ import me.rerere.rikkahub.browser.awaitReadyState
 import me.rerere.rikkahub.browser.evaluateJavascriptAsync
 import me.rerere.rikkahub.browser.awaitActionSettled
 import me.rerere.rikkahub.browser.awaitNavigationStarted
+import me.rerere.rikkahub.browser.awaitTitleSettled
 import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import java.io.File
@@ -258,9 +259,12 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                             // loadUrl 是异步的：先记下旧 URL，等它真的变了再取 readyState，
                             // 否则旧页面仍 complete，会立刻返回上一页的 url/title
                             val beforeUrl = webView.url.orEmpty()
+                            val beforeTitle = webView.title.orEmpty()
                             withContext(Dispatchers.Main) { webView.loadUrl(url) }
                             webView.awaitNavigationStarted(beforeUrl)
                             webView.awaitReadyState(8_000L)
+                            // title 比 readyState 晚一步稳定，不等的话会返回上一页的标题
+                            webView.awaitTitleSettled(beforeTitle)
                             buildJsonObject {
                                 put("success", true)
                                 put("current_url", webView.url ?: url)
@@ -300,12 +304,14 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                             // before bind() returned. Skip a redundant second loadUrl — it
                             // would abort the in-flight load and restart from the top.
                             val beforeUrl = webView.url.orEmpty()
+                            val beforeTitle = webView.title.orEmpty()
                             if (wasAlreadyBound) {
                                 withContext(Dispatchers.Main) { webView.loadUrl(url) }
                             }
                             // 同上：等导航真的开始，别在旧页面上采样
                             webView.awaitNavigationStarted(beforeUrl)
                             webView.awaitReadyState(8_000L)
+                            webView.awaitTitleSettled(beforeTitle)
                             buildJsonObject {
                                 put("success", true)
                                 put("current_url", webView.url ?: url)
@@ -648,7 +654,8 @@ fun browserSnapshotTool(): Tool = Tool(
                     }
                     return JSON.stringify({
                         url: location.href,
-                        title: document.title,
+                        // document.title 可能是空串（无 <title> 或尚未解析完），回落到 URL
+                        title: document.title || location.href,
                         total: nodes.length,
                         count: out.length,
                         elements: out

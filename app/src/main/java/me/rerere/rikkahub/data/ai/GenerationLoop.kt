@@ -365,6 +365,22 @@ private val FRESHNESS_TTL_MS_BY_TOOL: Map<String, Long> = mapOf(
     "read_window_tree" to 5_000L,
     "list_active_notifications" to 5_000L,
     "list_jobs" to 60_000L,
+    // 浏览器观察类：页面变化后用同样参数重读是正常操作，不是死循环。
+    // 统一给 2 秒冷却：2 秒内的相同重读仍然拦（那是空转），超过就放行。
+    "browser_current_url" to 2_000L,
+    "browser_console_list" to 2_000L,
+    "browser_network_list" to 2_000L,
+    "browser_hook_hits" to 2_000L,
+    "browser_hook_list" to 2_000L,
+    "browser_snapshot" to 2_000L,
+    "browser_get_text" to 2_000L,
+    "browser_get_dom" to 2_000L,
+    "browser_get_links" to 2_000L,
+    "browser_debug_state" to 2_000L,
+    "browser_debug_status" to 2_000L,
+    // browser_open 有副作用（会导航），但「重新加载同一 URL」是合法操作：
+    // 调试时连续 reload 三次很常见，不该被当成死循环拦下。冷却 5 秒。
+    "browser_open" to 5_000L,
 )
 
 /**
@@ -380,8 +396,14 @@ private val FRESHNESS_TTL_MS_BY_TOOL: Map<String, Long> = mapOf(
  * reader). Keep it to genuine read-only observers: wrongly adding an ACTION tool here would
  * stop it from resetting the counter and reintroduce the false-positive loop_detected.
  */
+/**
+ * 有副作用、但同样需要 TTL 冷却的工具：只享受「冷却后放行」，不参与 act-observe 重置
+ * （否则它们会被当成观察类，从而绕过「动作之后重新计数」的语义）。
+ */
+private val ACTION_TOOLS_WITH_TTL: Set<String> = setOf("browser_open")
+
 private val READ_ONLY_OBSERVATION_TOOLS: Set<String> =
-    FRESHNESS_TTL_MS_BY_TOOL.keys + "find_node"
+    (FRESHNESS_TTL_MS_BY_TOOL.keys - ACTION_TOOLS_WITH_TTL) + "find_node"
 
 /** One prior executed tool call in the current turn, in chronological order. */
 internal data class PriorToolCall(

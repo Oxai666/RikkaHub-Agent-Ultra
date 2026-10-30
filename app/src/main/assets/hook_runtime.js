@@ -814,6 +814,7 @@
       } catch (e) { /* 恢复失败保持现状 */ }
     }
     state.fnHooks = {};
+    state.fnAttached = {};
   }
 
   /**
@@ -842,19 +843,28 @@
       return orig.apply(this, arguments);
     };
     state.fnHooks[rule.target] = { owner: owner, name: name, orig: orig, wrapped: wrapped };
-    try { owner[name] = wrapped; } catch (e) { /* 可能是只读，下面再用 defineProperty */ }
-    if (owner[name] !== wrapped) {
-      try {
-        Object.defineProperty(owner, name, {
-          configurable: true, enumerable: true, writable: true, value: wrapped
-        });
-      } catch (e2) {
-        delete state.fnHooks[rule.target];
-        return false;
-      }
+    try {
+      // 必须走 defineProperty，不能直接 `owner[name] = wrapped`：
+      // 如果属性此刻是我们的 setter 陷阱，赋值会再次触发 setter，
+      // setter 又调回 wrapFn —— 无限套娃，实测表现为每次调用报 2 条 hit、
+      // 以及 fn_attached 刷出几百条把 console 缓冲打满。
+      Object.defineProperty(owner, name, {
+        configurable: true, enumerable: true, writable: true, value: wrapped
+      });
+    } catch (e) {
+      delete state.fnHooks[rule.target];
+      return false;
     }
-    report('fn_attached', { rule: rule.id, target: rule.target });
+    reportFnAttachedOnce(rule);
     return true;
+  }
+
+  /** 同一个规则只报一次 attach —— 重入、轮询补包都不该重复刷。 */
+  function reportFnAttachedOnce(rule) {
+    state.fnAttached = state.fnAttached || {};
+    if (state.fnAttached[rule.id]) { return; }
+    state.fnAttached[rule.id] = true;
+    report('fn_attached', { rule: rule.id, target: rule.target });
   }
 
   /**
@@ -878,9 +888,15 @@
         get: function () { return holder.value; },
         set: function (v) {
           holder.value = v;
-          if (typeof v === 'function') {
-            try { wrapFn(rule, owner, name, v); } catch (e) { reportError('trap:' + rule.id, e); }
-          }
+          if (typeof v !== 'function') { return; }
+          // 先把自己拆掉、恢复成普通数据属性，再交给 wrapFn 包。
+          // 不拆的话，wrapFn 之后任何赋值都会再进这个 setter，层数越套越多。
+          try {
+            Object.defineProperty(owner, name, {
+              configurable: true, enumerable: true, writable: true, value: v
+            });
+          } catch (e) { return; }
+          try { wrapFn(rule, owner, name, v); } catch (e) { reportError('trap:' + rule.id, e); }
         }
       });
     } catch (e) { return false; }

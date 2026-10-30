@@ -804,6 +804,25 @@ suspend fun WebView.awaitActionSettled(
     return false
 }
 
+/**
+ * 等页面标题换成「新的」。
+ *
+ * readyState 变成 complete 只说明文档加载完了，`WebView.getTitle()` 有时仍是上一页的
+ * （实测：打开 httpbin 返回的 title 是上一个页面的）。调用方随后再查
+ * browser_current_url 又对了 —— 说明就是采样早了几百毫秒。
+ *
+ * 若新旧标题相同（同页 reload），最多白等 [timeoutMs]；上限设置得比 readyState 短。
+ */
+suspend fun WebView.awaitTitleSettled(beforeTitle: String, timeoutMs: Long = 1_200L) {
+    if (beforeTitle.isBlank()) return
+    val deadline = System.currentTimeMillis() + timeoutMs
+    while (System.currentTimeMillis() < deadline) {
+        val cur = title.orEmpty()
+        if (cur.isNotBlank() && cur != beforeTitle) return
+        kotlinx.coroutines.delay(80)
+    }
+}
+
 suspend fun WebView.awaitReadyState(timeoutMs: Long = 8_000L): Boolean {
     val deadline = System.currentTimeMillis() + timeoutMs
     while (System.currentTimeMillis() < deadline) {
