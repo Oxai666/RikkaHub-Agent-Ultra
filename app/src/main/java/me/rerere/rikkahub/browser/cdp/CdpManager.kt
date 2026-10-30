@@ -169,48 +169,29 @@ class CdpManager(
     }
 
     /**
-     * socket 发现：候选逐个**用 GET /json 验证**（不是只 connect —— 抽象 socket 谁都能连上，
-     * 连到死 socket 会得到「connect 成功但没人应答」的假阳性），全部失败延迟 300ms 重试共 3 次。
+     * socket 发现：候选逐个试连。
+     *
+     * 这里**照抄太墟**：connect 成功即认为可用，不额外做 HTTP 探测。
+     * 之前我自作聪明改成「必须 GET /json 拿到 target 才算数」，结果把
+     * 「socket 在监听但此刻没有 page」这种合法状态判成了失败，
+     * 反而把有效候选丢掉。HTTP 层交给 CdpTargetMatcher 去谈。
+     *
+     * 与太墟的唯一差别：候选来自本包**所有**进程的 pid（packagePids），
+     * 因为 devtools socket 由持有 WebView 的进程创建，未必等于 myPid()。
      */
     private suspend fun discoverTransport(): LocalSocketCdpTransport {
         var lastError: Exception? = null
-        var discovery = DevToolsSocketResolver.discover(DevToolsSocketResolver.packagePids())
+        var discovery = DevToolsSocketResolver.discover(packagePids())
         repeat(3) { attempt ->
-            if (attempt > 0) discovery = DevToolsSocketResolver.discover(DevToolsSocketResolver.packagePids())
+            if (attempt > 0) discovery = DevToolsSocketResolver.discover(packagePids())
             for (name in discovery.candidates) {
-                val probeError: Exception = try {
-                    // 先打 /json/version：只回版本号，不遍历 target 列表，
-                    // 比 /json 轻得多。某些 WebView 版本在列 target 时会卡住，
-                    // 版本端点不会 —— 先确认「这是 devtools」就够了。
-                    val body = try {
-                        val c = LocalSocketCdpTransport(name).open()
-                        try {
-                            HttpOverSocket.get(c, "/json/version")
-                        } finally {
-                            c.close()
-                        }
-                    } catch (e: Exception) {
-                        // 版本端点不通再试 /json（老版本可能没实现 /json/version）
-                        val c = LocalSocketCdpTransport(name).open()
-                        try {
-                            HttpOverSocket.get(c, "/json")
-                        } finally {
-                            c.close()
-                        }
-                    }
-                    // 认定标准：能当 JSON 解析就算 devtools。
-                    // /json 返回 [] 是**正常**的（socket 已在监听，只是还没有 page target）；
-                    // 早期把它判成「不是 devtools socket」，导致有效候选被丢掉，
-                    // 表现成「grep 明明看得到 socket，attach 却说连不上」。
-                    val head = body.trimStart()
-                    if (head.startsWith("[") || head.startsWith("{")) {
-                        return LocalSocketCdpTransport(name)
-                    }
-                    IOException("$name: /json 不像 devtools 响应（前 120 字: ${body.take(120)}）")
+                val transport = LocalSocketCdpTransport(name)
+                try {
+                    transport.open().close()
+                    return transport
                 } catch (e: Exception) {
-                    e
+                    lastError = e
                 }
-                lastError = probeError
             }
             if (attempt < 2) delay(300)
         }
