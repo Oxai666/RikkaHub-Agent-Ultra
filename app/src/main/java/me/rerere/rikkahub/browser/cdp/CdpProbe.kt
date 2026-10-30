@@ -99,7 +99,13 @@ object CdpProbe {
                 }
             } catch (e: Exception) {
                 if (attempt >= 3) {
-                    errors += "$socketName: GET /json ${e.javaClass.simpleName}: ${e.message}"
+                    // "Try again" 是 EAGAIN —— 在设了 SO_RCVTIMEO 的阻塞 socket 上，
+                    // 它代表**读超时**（对面在监听、连得上，就是不回 HTTP），
+                    // 不是连接失败。两件事的排查方向完全不同，这里直接说清楚。
+                    val hint = if (e.message?.contains("Try again") == true) {
+                        "（读超时：socket 连上了但对面不响应 HTTP）"
+                    } else ""
+                    errors += "$socketName: GET /json ${e.javaClass.simpleName}: ${e.message}$hint"
                 }
             } finally {
                 runCatching { conn.close() }

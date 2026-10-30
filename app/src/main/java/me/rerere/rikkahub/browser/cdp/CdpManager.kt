@@ -179,11 +179,24 @@ class CdpManager(
             if (attempt > 0) discovery = DevToolsSocketResolver.discover(DevToolsSocketResolver.packagePids())
             for (name in discovery.candidates) {
                 val probeError: Exception = try {
-                    val conn = LocalSocketCdpTransport(name).open()
+                    // 先打 /json/version：只回版本号，不遍历 target 列表，
+                    // 比 /json 轻得多。某些 WebView 版本在列 target 时会卡住，
+                    // 版本端点不会 —— 先确认「这是 devtools」就够了。
                     val body = try {
-                        HttpOverSocket.get(conn, "/json")
-                    } finally {
-                        conn.close()
+                        val c = LocalSocketCdpTransport(name).open()
+                        try {
+                            HttpOverSocket.get(c, "/json/version")
+                        } finally {
+                            c.close()
+                        }
+                    } catch (e: Exception) {
+                        // 版本端点不通再试 /json（老版本可能没实现 /json/version）
+                        val c = LocalSocketCdpTransport(name).open()
+                        try {
+                            HttpOverSocket.get(c, "/json")
+                        } finally {
+                            c.close()
+                        }
                     }
                     // 认定标准：能当 JSON 解析就算 devtools。
                     // /json 返回 [] 是**正常**的（socket 已在监听，只是还没有 page target）；
