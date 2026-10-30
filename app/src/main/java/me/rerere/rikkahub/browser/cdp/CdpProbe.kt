@@ -54,7 +54,13 @@ object CdpProbe {
             errors += "setWebContentsDebuggingEnabled: ${e.javaClass.simpleName}: ${e.message}"
         }
 
-        val discovery = DevToolsSocketResolver.discover(DevToolsSocketResolver.packagePids())
+        val pids = DevToolsSocketResolver.packagePids()
+        // 把实际拿到的 pid 列表记下来：只有一个候选时，要么 App 真是单进程，
+        // 要么 Koin 取不到 Context 退回了 myPid —— 这两者排查方向完全不同。
+        if (attempt >= 2) {
+            errors += "packagePids=$pids"
+        }
+        val discovery = DevToolsSocketResolver.discover(pids)
         discovery.scanError?.let { errors += "scan /proc/net/unix: $it" }
 
         for (socketName in discovery.candidates) {
