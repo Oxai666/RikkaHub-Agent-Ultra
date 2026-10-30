@@ -46,6 +46,7 @@ import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessage
 import androidx.compose.runtime.collectAsState
@@ -97,6 +98,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.snapshotFlow
 
 
 /**
@@ -271,10 +273,32 @@ private fun BrowserMiniChatCard(
     val keyboard = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
 
-    // 每次消息内容变化都滚到底 —— 用 text 长度而不是条数，流式输出才会跟手。
+    // 是否还「跟随」底部。默认跟随，用户一旦手动往上翻就退出跟随，
+    // 自己滑回底部附近再自动恢复。
+    //
+    // 之前是无条件 animateScrollToItem：流式输出时这个 effect 每帧都触发，
+    // 用户往上翻就被立刻顶回去；而且连续动画互相打断、排队，观感是
+    // 「一直往上滑 / 来回抽动」。跟随开关交给用户，不要替他做决定。
+    var followBottom by remember { mutableStateOf(true) }
+
+    LaunchedEffect(listState) {
+        snapshotFlow {
+            val info = listState.layoutInfo
+            if (info.totalItemsCount == 0) {
+                true
+            } else {
+                val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+                // 距底部 2 条以内算「还在底部」，留一点容差避免抖动
+                lastVisible >= info.totalItemsCount - 2
+            }
+        }.collect { followBottom = it }
+    }
+
     LaunchedEffect(nodes.size, nodes.lastOrNull()?.messages?.lastOrNull()?.parts, isGenerating) {
-        if (nodes.isNotEmpty()) {
-            listState.animateScrollToItem(nodes.lastIndex)
+        if (nodes.isNotEmpty() && followBottom) {
+            // scrollToItem（瞬时）而不是 animateScrollToItem：流式输出时每帧都会走到这里，
+            // 动画版本会一帧起一个新动画、互相打断，看着像在抽。
+            listState.scrollToItem(nodes.lastIndex)
         }
     }
 
