@@ -31,6 +31,23 @@
 
   // ===== 基础工具 =====
 
+  /**
+   * 把可能是相对路径的 URL 解析成绝对 URL。
+   *
+   * 规则里的 glob 写的都是绝对 URL（https://host/*），而页面里 fetch('/api/x')、
+   * xhr.open('GET','/api/x') 传的是相对路径。不解析就直接拿字符串比 glob，
+   * 相对路径永远不会命中 —— 真机上表现为「页面自己的请求一条都抓不到，
+   * 只有手动写死绝对地址的请求才能抓到」。
+   */
+  function absolutize(u) {
+    if (!u) { return ''; }
+    try {
+      return new URL(String(u), document.baseURI || location.href).href;
+    } catch (e) {
+      return String(u);
+    }
+  }
+
   function report(kind, data) {
     try {
       state.seq++;
@@ -297,7 +314,8 @@
       var self = this;
       var url = '';
       try {
-        url = typeof input === 'string' ? input : ((input && input.url) || String(input));
+        var rawUrl = typeof input === 'string' ? input : ((input && input.url) || String(input));
+        url = absolutize(rawUrl);
       } catch (e) { return origFetch.apply(self, args); }
       var method = 'GET';
       try {
@@ -349,7 +367,7 @@
 
       return origFetch.call(self, target, newInit).then(
         function (resp) {
-          var ruleId = (d.redirect || d.modify) ? d.rule.id : '';
+          var ruleId = d.rule.id;
           var act = (d.redirect || d.modify) ? action : '';
           if (d.captureBody) {
             captureFetchBody(resp).then(function (txt) {
@@ -430,7 +448,7 @@
       xhr.open = function (m, u) {
         try {
           meta.method = String(m || 'GET').toUpperCase();
-          meta.url = String(u || '');
+          meta.url = absolutize(String(u || ''));
           xhr.__rikkaUrl = meta.url;
         } catch (e) { /* 保持原行为 */ }
         return origOpen.apply(xhr, arguments);
