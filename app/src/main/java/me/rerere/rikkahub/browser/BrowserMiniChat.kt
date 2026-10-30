@@ -80,6 +80,8 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.Navigator
 import com.dokar.sonner.rememberToasterState
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.context.LocalTTSState
+import me.rerere.rikkahub.ui.hooks.rememberCustomTtsState
 import me.rerere.rikkahub.ui.context.LocalSettings
 import org.koin.compose.koinInject
 
@@ -286,10 +288,13 @@ private fun BrowserMiniChatCard(
             val miniNav = remember { Navigator(mutableListOf<NavKey>()) }
             // 工具卡片里的复制/重跑按钮会读 LocalToaster，同样没有默认值。
             val miniToaster = rememberToasterState()
+            // 消息操作栏里的朗读按钮会读 LocalTTSState，同样没有默认值。
+            val miniTts = rememberCustomTtsState()
             CompositionLocalProvider(
                 LocalSettings provides settings,
                 LocalNavController provides miniNav,
                 LocalToaster provides miniToaster,
+                LocalTTSState provides miniTts,
             ) {
                 LazyColumn(
                     state = listState,
