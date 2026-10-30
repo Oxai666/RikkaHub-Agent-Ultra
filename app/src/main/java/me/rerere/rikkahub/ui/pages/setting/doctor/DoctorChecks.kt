@@ -64,7 +64,8 @@ private object Capability {
         LocalToolOption.Workflows,           // notification_received trigger
     )
     val Accessibility: Set<LocalToolOption> = setOf(
-        LocalToolOption.ScreenAutomation,    // take_screenshot, swipe, click_at, scroll, gesture
+        LocalToolOption.ScreenAutomation,    // swipe, click_at, scroll, gesture
+        LocalToolOption.ScreenVision,        // take_screenshot, read_window_tree, find_node
     )
     val Termux: Set<LocalToolOption> = setOf(
         LocalToolOption.Termux,
@@ -119,6 +120,7 @@ private fun LocalToolOption.shortName(ctx: Context): String = when (this) {
     LocalToolOption.WifiInfo -> ctx.getString(R.string.tool_name_wifi)
     LocalToolOption.NotificationListener -> ctx.getString(R.string.tool_name_notif_listener)
     LocalToolOption.ScreenAutomation -> ctx.getString(R.string.tool_name_screen_automation)
+    LocalToolOption.ScreenVision -> ctx.getString(R.string.tool_name_screen_vision)
     LocalToolOption.Termux -> ctx.getString(R.string.tool_name_termux)
     LocalToolOption.SpeechToText -> ctx.getString(R.string.tool_name_stt)
     LocalToolOption.Ssh -> ctx.getString(R.string.tool_name_ssh)

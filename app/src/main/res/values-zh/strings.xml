@@ -1226,7 +1226,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_perm_special_dialog_title">需要权限</string>
   <string name="assistant_page_local_tools_reliability_desc">让助手检查 GitHub 上的新版本，并按需生成已脱敏的错误报告 ZIP。错误报告包含最近的数千行 logcat 日志（敏感信息已脱敏）以及应用版本 + 设备信息 — 并明确排除你的对话、token 和已保存的主机。</string>
   <string name="assistant_page_local_tools_reliability_title">可靠性</string>
-  <string name="assistant_page_local_tools_screen_automation_desc">让大模型通过 Android 无障碍服务点击、滑动、滚动、读取屏幕内容和截图。</string>
+  <string name="assistant_page_local_tools_screen_automation_desc">让大模型通过 Android 无障碍服务点击、滑动、滚动、按键。不包含读取屏幕内容。</string>
+  <string name="assistant_page_local_tools_screen_vision_title">屏幕读取</string>
+  <string name="assistant_page_local_tools_screen_vision_desc">让模型看到屏幕内容：整屏截图（含浏览器里浮现的聊天小窗、通知栏、键盘）与无障碍窗口树。与「屏幕自动化」分开，避免「让它点一下」变成「随便截图」。</string>
   <string name="assistant_page_local_tools_screen_automation_title">屏幕自动化</string>
   <string name="assistant_page_local_tools_section_automation">自动化</string>
   <string name="assistant_page_local_tools_section_browser">浏览器</string>
@@ -2185,6 +2187,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="tool_name_location">定位</string>
   <string name="tool_name_wifi">WiFi 信息</string>
   <string name="tool_name_notif_listener">通知监听</string>
+  <string name="tool_name_screen_vision">屏幕读取</string>
   <string name="tool_name_screen_automation">屏幕自动化</string>
   <string name="tool_name_termux">Termux</string>
   <string name="tool_name_stt">语音转文字</string>

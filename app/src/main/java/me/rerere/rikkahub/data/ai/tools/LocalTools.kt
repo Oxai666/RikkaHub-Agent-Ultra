@@ -181,6 +181,18 @@ sealed class LocalToolOption {
     @Serializable @SerialName("shizuku")         data object Shizuku        : LocalToolOption()
     @Serializable @SerialName("telegram_bot")    data object TelegramBot    : LocalToolOption()
     @Serializable @SerialName("screen_automation") data object ScreenAutomation : LocalToolOption()
+    /**
+     * 「看屏幕」单独一组：take_screenshot / read_window_tree / find_node。
+     *
+     * 拆出来的原因：这三个返回的是**屏幕上的全部内容** —— 截图是整屏（含浏览器里叠着的
+     * 聊天小窗、通知栏、键盘），窗口树是界面上所有可见文字。而 tap / swipe / scroll
+     * 这类只是「动手」，不把界面内容交出去。
+     *
+     * 绑在同一个开关上，等于「想让它点一下」就必须连「随便截图」一起授权。
+     * 现在分开：ScreenAutomation 管动作，ScreenVision 管看见。
+     * 新选项默认不勾选，原有助手配置不受影响。
+     */
+    @Serializable @SerialName("screen_vision") data object ScreenVision : LocalToolOption()
     @Serializable @SerialName("app_launcher")      data object AppLauncher       : LocalToolOption()
     @Serializable @SerialName("termux")            data object Termux            : LocalToolOption()
     @Serializable @SerialName("notification_listener") data object NotificationListener : LocalToolOption()
@@ -863,14 +875,18 @@ class LocalTools(
             tools.add(tapTool(invocationContext, interactiveToolStreamer))
             tools.add(longPressTool(invocationContext, interactiveToolStreamer))
             tools.add(swipeTool(invocationContext, interactiveToolStreamer))
-            tools.add(readWindowTreeTool(invocationContext, interactiveToolStreamer))
-            tools.add(findNodeTool(invocationContext, interactiveToolStreamer))
             tools.add(clickNodeTool(invocationContext, interactiveToolStreamer))
             tools.add(me.rerere.rikkahub.data.ai.tools.local.setTextTool(invocationContext, interactiveToolStreamer))
             tools.add(scrollTool(invocationContext, interactiveToolStreamer))
             tools.add(globalActionTool(invocationContext, interactiveToolStreamer))
-            tools.add(takeScreenshotTool(context))  // take_screenshot IS the screenshot; skip auto-stream
             tools.add(me.rerere.rikkahub.data.ai.tools.local.wakeScreenTool(context))
+        }
+        if (options.contains(LocalToolOption.ScreenVision)) {
+            // 这三个会把「屏幕上的内容」交给模型：截图是整屏（含浏览器里叠着的聊天小窗、
+            // 通知栏、键盘），窗口树是界面上所有可见文字。必须单独授权。
+            tools.add(readWindowTreeTool(invocationContext, interactiveToolStreamer))
+            tools.add(findNodeTool(invocationContext, interactiveToolStreamer))
+            tools.add(takeScreenshotTool(context))  // take_screenshot IS the screenshot; skip auto-stream
         }
         if (options.contains(LocalToolOption.AppLauncher)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.launchAppTool(context, invocationContext, interactiveToolStreamer))

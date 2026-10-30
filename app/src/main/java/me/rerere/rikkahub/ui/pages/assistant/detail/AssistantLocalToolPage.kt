@@ -1176,6 +1176,21 @@ private fun AssistantLocalToolContent(
             )
             item(
                 headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_screen_vision_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_screen_vision_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.ScreenVision),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.ScreenVision, it) },
+                        requiresAccessibilityService = true,
+                    )
+                }
+            )
+            item(
+                headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_app_launcher_title))
                 },
                 supportingContent = {
