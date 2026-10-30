@@ -56,8 +56,10 @@ val appModule = module {
     single { me.rerere.rikkahub.browser.BrowserEventBus() }
     single { me.rerere.rikkahub.browser.hook.HookRuleStore(maxBodyBytes = 256 * 1024) }
     single { me.rerere.rikkahub.browser.hook.NetworkBodyStore() }
+    // 证据库：把抓到的请求/响应/命中落盘，重启后还能翻（NetworkBodyStore 只是运行期缓存）
+    single { me.rerere.rikkahub.browser.hook.BrowserEvidenceStore(androidContext()) }
     single {
-        me.rerere.rikkahub.browser.hook.HookEventPipeline(get(), get(), get()).also { it.start() }
+        me.rerere.rikkahub.browser.hook.HookEventPipeline(get(), get(), get(), get()).also { it.start() }
     }
     single { me.rerere.rikkahub.browser.hook.HookInstaller(androidContext(), get(), get()) }
     single { me.rerere.rikkahub.browser.cdp.CdpManager(get(), get(), get()) }

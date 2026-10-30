@@ -13,6 +13,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
@@ -494,6 +495,9 @@ private suspend fun pushHookRules(): Boolean {
 
 private const val MAX_NETWORK_BODY_CHARS = 4000
 
+private inline fun <reified T : Any> koinGet(): T =
+    org.koin.java.KoinJavaComponent.getKoin().get()
+
 private fun networkBodyStore(): NetworkBodyStore =
     org.koin.java.KoinJavaComponent.getKoin().get()
 
@@ -688,6 +692,129 @@ fun browserSnapshotTool(): Tool = Tool(
                 buildJsonObject { put("error", "${e.javaClass.simpleName}: ${e.message}") }
             }
         } ?: timeoutEnvelope(BrowserToolDefaults.SNAPSHOT)
+        textPart(out)
+    },
+)
+
+/**
+ * 证据库读取。和 browser_network_list 的区别：
+ *  - network_list 读的是**本次会话的内存缓存**，App 一重启就空；
+ *  - 证据库是**磁盘归档**，重启后仍然能翻，且带完整 header 和命中记录。
+ */
+fun browserEvidenceListTool(): Tool = Tool(
+    name = BrowserToolDefaults.EVIDENCE_LIST,
+    description = "Read the on-disk evidence archive: every captured request/response, hook hit and " +
+        "console warning persisted under filesDir/browser-evidence/. Unlike browser_network_list " +
+        "(in-memory, dies with the process) this survives app restarts, so it is the right tool when " +
+        "you need to review what a page did earlier. Returns {count, files:[{tabId,bytes,entries}], " +
+        "entries:[{kind,at,url,method,status,durationMs,ruleId,actionTaken,note}]}. " +
+        "Pass with_body=true to include request/response bodies (each capped at 32K chars).",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("tab_id", buildJsonObject {
+                put("type", "string")
+                put("description", "which tab's evidence to read, default 'foreground'")
+            })
+            put("limit", buildJsonObject {
+                put("type", "integer")
+                put("description", "max newest entries, default 50, cap 500")
+            })
+            put("since", buildJsonObject {
+                put("type", "integer")
+                put("description", "only entries with at > since (epoch millis)")
+            })
+            put("with_body", buildJsonObject {
+                put("type", "boolean")
+                put("description", "include request/response bodies")
+            })
+        })
+    },
+    execute = { input ->
+        val tabId = input.jsonObject["tab_id"]?.jsonPrimitive?.contentOrNull?.trim()
+            ?.takeIf { it.isNotBlank() } ?: HOOK_TAB_ID
+        val limit = (input.jsonObject["limit"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 50)
+            .coerceIn(1, 500)
+        val since = input.jsonObject["since"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+        val withBody = input.jsonObject["with_body"]?.jsonPrimitive?.contentOrNull
+            ?.toBooleanStrictOrNull() == true
+        val store = runCatching { koinGet<me.rerere.rikkahub.browser.hook.BrowserEvidenceStore>() }.getOrNull()
+        val out = if (store == null) {
+            buildJsonObject { put("error", "evidence store unavailable") }
+        } else {
+            val files = store.stats()
+            val entries = store.read(tabId, limit, since)
+            buildJsonObject {
+                put("tabId", tabId)
+                put("count", entries.size)
+                putJsonArray("files") {
+                    files.forEach { f ->
+                        add(buildJsonObject {
+                            put("tabId", f.tabId)
+                            put("bytes", f.bytes)
+                            put("entries", f.entries)
+                        })
+                    }
+                }
+                putJsonArray("entries") {
+                    entries.forEach { e ->
+                        add(buildJsonObject {
+                            put("kind", e.kind)
+                            put("at", e.at)
+                            if (e.url.isNotBlank()) put("url", e.url)
+                            if (e.method.isNotBlank()) put("method", e.method)
+                            if (e.status != 0) put("status", e.status)
+                            if (e.durationMs > 0) put("durationMs", e.durationMs)
+                            if (e.ruleId.isNotBlank()) put("ruleId", e.ruleId)
+                            if (e.actionTaken.isNotBlank()) put("actionTaken", e.actionTaken)
+                            if (e.note.isNotBlank()) put("note", e.note)
+                            if (withBody) {
+                                if (e.requestHeaders.isNotEmpty()) {
+                                    putJsonObject("requestHeaders") {
+                                        e.requestHeaders.forEach { (k, v) -> put(k, v) }
+                                    }
+                                }
+                                if (e.responseHeaders.isNotEmpty()) {
+                                    putJsonObject("responseHeaders") {
+                                        e.responseHeaders.forEach { (k, v) -> put(k, v) }
+                                    }
+                                }
+                                if (e.requestBody.isNotBlank()) put("requestBody", e.requestBody)
+                                if (e.responseBody.isNotBlank()) put("responseBody", e.responseBody)
+                            }
+                        })
+                    }
+                }
+            }
+        }
+        textPart(out)
+    },
+)
+
+/** 清空证据库（某个 tab 或全部）。写操作，默认关闭。 */
+fun browserEvidenceClearTool(): Tool = Tool(
+    name = BrowserToolDefaults.EVIDENCE_CLEAR,
+    description = "Delete the on-disk evidence archive. Pass tab_id to clear one tab, omit to wipe all. " +
+        "Returns {cleared}. Irreversible — evidence is plain JSONL files under filesDir.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("tab_id", buildJsonObject {
+                put("type", "string")
+                put("description", "tab to clear; omit or leave empty to clear everything")
+            })
+        })
+    },
+    execute = { input ->
+        val tabId = input.jsonObject["tab_id"]?.jsonPrimitive?.contentOrNull?.trim()
+        val store = runCatching { koinGet<me.rerere.rikkahub.browser.hook.BrowserEvidenceStore>() }.getOrNull()
+        val out = if (store == null) {
+            buildJsonObject { put("error", "evidence store unavailable") }
+        } else {
+            store.clear(tabId)
+            buildJsonObject {
+                put("cleared", true)
+                put("scope", tabId ?: "all")
+            }
+        }
         textPart(out)
     },
 )
@@ -2529,6 +2656,8 @@ fun createBrowserTool(
     BrowserToolDefaults.NETWORK_LIST -> browserNetworkListTool()
     BrowserToolDefaults.CONSOLE_LIST -> browserConsoleListTool()
     BrowserToolDefaults.SNAPSHOT -> browserSnapshotTool()
+    BrowserToolDefaults.EVIDENCE_LIST -> browserEvidenceListTool()
+    BrowserToolDefaults.EVIDENCE_CLEAR -> browserEvidenceClearTool()
     BrowserToolDefaults.DEBUG_ATTACH -> browserDebugAttachTool()
     BrowserToolDefaults.DEBUG_STATUS -> browserDebugStatusTool()
     BrowserToolDefaults.DEBUG_SET_BREAKPOINT -> browserDebugSetBreakpointTool()

@@ -26,6 +26,7 @@ class HookEventPipeline(
     private val store: HookRuleStore,
     private val bodyStore: NetworkBodyStore,
     private val eventBus: BrowserEventBus,
+    private val evidence: BrowserEvidenceStore,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
     private val dropped = AtomicInteger(0)
@@ -93,6 +94,17 @@ class HookEventPipeline(
             is HookBridgeEvent.Hit -> {
                 store.recordHit(event.hookId)
                 eventBus.publish(BrowserEvent.HookHit(event.tabId, event.toRecord()))
+                evidence.record(
+                    event.tabId,
+                    EvidenceEntry(
+                        id = event.hookId,
+                        at = event.ts,
+                        kind = "hit",
+                        url = event.target,
+                        ruleId = event.hookId,
+                        note = "[${event.phase}] ${event.summary}".take(2000),
+                    ),
+                )
             }
             is HookBridgeEvent.Ws -> eventBus.publish(
                 BrowserEvent.HookHit(event.tabId, event.toRecord())
@@ -104,9 +116,22 @@ class HookEventPipeline(
                     event.ts,
                 )
             )
-            is HookBridgeEvent.Console -> eventBus.publish(
-                BrowserEvent.ConsoleLogged(event.tabId, event.level, event.text, event.ts)
-            )
+            is HookBridgeEvent.Console -> {
+                eventBus.publish(BrowserEvent.ConsoleLogged(event.tabId, event.level, event.text, event.ts))
+                // 只在 WARN/ERROR 落盘：console 是最吵的一路，全记会把证据文件刷满，
+                // 而复盘时真正想看的恰恰是报错。
+                if (event.level == "WARNING" || event.level == "ERROR") {
+                    evidence.record(
+                        event.tabId,
+                        EvidenceEntry(
+                            id = "console-${event.ts}",
+                            at = event.ts,
+                            kind = "console",
+                            note = "[${event.level}] ${event.text}".take(4000),
+                        ),
+                    )
+                }
+            }
         }
     }
 
@@ -134,6 +159,25 @@ class HookEventPipeline(
             actionTaken = event.actionTaken.orEmpty(),
         )
         eventBus.publish(BrowserEvent.NetworkCaptured(event.tabId, request))
+        // 证据库：完整请求/响应落盘（body 超长由 store 截断并标注原始长度）
+        evidence.record(
+            event.tabId,
+            EvidenceEntry(
+                id = event.id,
+                at = event.ts,
+                kind = "network",
+                url = event.url,
+                method = request.method,
+                status = event.status,
+                durationMs = event.durationMs,
+                requestHeaders = request.requestHeaders,
+                responseHeaders = event.headers,
+                requestBody = pending?.body.orEmpty(),
+                responseBody = event.body.orEmpty(),
+                ruleId = request.ruleId,
+                actionTaken = request.actionTaken,
+            ),
+        )
         bodyStore.put(
             NetworkBodyStore.NetworkBody(
                 id = event.id,

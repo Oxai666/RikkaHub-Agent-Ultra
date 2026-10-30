@@ -30,6 +30,9 @@ object BrowserToolDefaults {
     const val NETWORK_LIST = "browser_network_list"
     /** 可交互元素快照：给 AI 一份「点这里」的清单，省去猜 selector。只读、默认开。 */
     const val SNAPSHOT = "browser_snapshot"
+    /** 证据库：抓到的请求/命中/报错落盘，重启后可查。读默认开，清空默认关。 */
+    const val EVIDENCE_LIST = "browser_evidence_list"
+    const val EVIDENCE_CLEAR = "browser_evidence_clear"
     /** 页面 console 输出（log/warn/error/info/debug）。只读、零副作用，默认开。 */
     const val CONSOLE_LIST = "browser_console_list"
     /** CDP 断点调试：读类默认开，写类默认关。 */
@@ -68,6 +71,7 @@ object BrowserToolDefaults {
     val READ_TOOLS: Set<String> = setOf(
         OPEN, CURRENT_URL, SCREENSHOT, GET_TEXT, GET_DOM, GET_LINKS, BACK, FORWARD, WAIT_FOR,
         SNAPSHOT,
+        EVIDENCE_LIST,
         DEBUG_TARGETS,
         HOOK_LIST,
         HOOK_HITS,
@@ -79,6 +83,7 @@ object BrowserToolDefaults {
     )
 
     val WRITE_TOOLS: Set<String> = setOf(
+        EVIDENCE_CLEAR,
         CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ, DEBUG_EVAL,
         HOOK_CREATE, HOOK_REMOVE,
         DEBUG_ATTACH, DEBUG_SET_BREAKPOINT, DEBUG_REMOVE_BREAKPOINT,
@@ -91,6 +96,7 @@ object BrowserToolDefaults {
     val ALL_TOOLS: List<String> = listOf(
         OPEN, CURRENT_URL, SCREENSHOT, GET_TEXT, GET_DOM, GET_LINKS, BACK, FORWARD, WAIT_FOR,
         SNAPSHOT,
+        EVIDENCE_LIST,
         DEBUG_TARGETS,
         HOOK_LIST,
         HOOK_HITS,
@@ -99,6 +105,7 @@ object BrowserToolDefaults {
         DEBUG_STATUS,
         DEBUG_LIST_BREAKPOINTS,
         DEBUG_STATE,
+        EVIDENCE_CLEAR,
         CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ,
         DEBUG_EVAL,
         HOOK_CREATE, HOOK_REMOVE,
