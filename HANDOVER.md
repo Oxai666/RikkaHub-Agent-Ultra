@@ -183,7 +183,15 @@ Chrome     chrome_devtools_remote          → 超时
 ```
 
 已排除：SELinux（setenforce 0 后仍超时）、权限（root 直连同样超时）、
-App 代码（三个不同 App 表现一致）、socket 名字（pid 与 ps 对得上、在 /proc/net/unix 里）。
+App 代码（三个不同 App 表现一致）、socket 名字（pid 与 ps 对得上、在 /proc/net/unix 里）、
+检测方式（同进程自建 abstract socket 秒通）。
+
+设备侧补充事实（2026-10-30 实测）：
+  getprop ro.debuggable = 0 / ro.build.type = user   ← user 版系统
+  万象（top.wanxiang.app，自己那套太墟代码）在这个靶站上 attach 同样三次 Try again
+  万象沙箱内连 socket 报 ECONNREFUSED（沙箱网络命名空间看不到宿主 abstract socket）
+  注意：socket 建出来了，说明 setWebContentsDebuggingEnabled 是生效的，
+        「user build」不能当作「开关没开」的理由。
 
 症状是「socket 在 listen（Flags=0x00010000），连得上，但不 accept、不回 HTTP」。
 换设备或换 ROM 才能验证 CDP；在本机不要再花时间排查这一层。
