@@ -145,30 +145,72 @@ object DevToolsSocketResolver {
     }
 }
 
+/** EAGAIN（"Try again"）：不是永久失败，是「现在没数据，稍后再试」。 */
+private fun isAgain(e: Throwable): Boolean {
+    val m = e.message ?: return false
+    return m.contains("Try again", ignoreCase = true) || m.contains("EAGAIN", ignoreCase = true)
+}
+
+/**
+ * 重试 EAGAIN。
+ *
+ * LocalSocket 上读一个还没到数据的 socket 会抛 EAGAIN，语义就是「再试一次」——
+ * 直接当成致命错误会让「socket 明明在监听」的场景全部失败。
+ */
+private fun <T> retryAgain(times: Int = 12, block: () -> T): T {
+    var last: Throwable? = null
+    repeat(times) {
+        try {
+            return block()
+        } catch (e: Throwable) {
+            if (!isAgain(e)) throw e
+            last = e
+            try {
+                Thread.sleep(40)
+            } catch (ie: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+        }
+    }
+    throw last ?: IOException("retryAgain exhausted")
+}
+
 /** GET over socket：devtools 发现端点（/json、/json/version）。返回响应体字符串。 */
 object HttpOverSocket {
     /** 发送 GET 并读完整响应（支持 Content-Length 与读至关闭两种）。 */
     fun get(conn: CdpConnection, path: String, host: String = "127.0.0.1"): String {
-        val req = "GET $path HTTP/1.1\r\nHost: $host\r\nConnection: close\r\nUser-Agent: TaiXu-Cdp/1.0\r\n\r\n"
-        conn.output.write(req.toByteArray(Charsets.US_ASCII))
-        conn.output.flush()
+        val req = "GET $path HTTP/1.1\r\nHost: $host\r\nConnection: close\r\nUser-Agent: Rikka-Cdp/1.0\r\n\r\n"
 
-        val reader = BufferedReader(InputStreamReader(conn.input, Charsets.UTF_8))
-        val statusLine = reader.readLine() ?: throw IOException("empty response for GET $path")
+        // conn.input / conn.output 每次访问都返回新的流对象（底层同一个 fd）。
+        // 重试时必须复用同一对流，否则第二次取到的新 InputStreamReader 会把
+        // 第一次已经缓冲进去的数据丢掉。
+        val output = conn.output
+        val input = conn.input
+
+        retryAgain {
+            output.write(req.toByteArray(Charsets.US_ASCII))
+            output.flush()
+        }
+
+        val reader = BufferedReader(InputStreamReader(input, Charsets.UTF_8))
+        val statusLine = retryAgain { reader.readLine() }
+            ?: throw IOException("empty response for GET $path")
         if (!statusLine.contains("200")) throw IOException("GET $path -> $statusLine")
+
         val headers = StringBuilder()
         while (true) {
-            val line = reader.readLine() ?: break
+            val line = retryAgain { reader.readLine() } ?: break
             if (line.isEmpty()) break
             headers.append(line).append("\r\n")
         }
+
         val contentLength = Regex("(?i)^Content-Length:\\s*(\\d+)\\s*$", RegexOption.MULTILINE)
             .find(headers.toString())?.groupValues?.get(1)?.toIntOrNull()
         return if (contentLength != null) {
             val body = CharArray(contentLength)
             var read = 0
             while (read < contentLength) {
-                val n = reader.read(body, read, contentLength - read)
+                val n = retryAgain { reader.read(body, read, contentLength - read) }
                 if (n < 0) break
                 read += n
             }
@@ -177,7 +219,7 @@ object HttpOverSocket {
             // 无 Content-Length：读至关闭（Connection: close 语义）
             val sb = StringBuilder()
             while (true) {
-                val line = reader.readLine() ?: break
+                val line = retryAgain { reader.readLine() } ?: break
                 sb.append(line).append('\n')
             }
             sb.toString()
