@@ -185,10 +185,15 @@ class CdpManager(
                     } finally {
                         conn.close()
                     }
-                    if (body.contains("webSocketDebuggerUrl")) {
+                    // 认定标准：能当 JSON 解析就算 devtools。
+                    // /json 返回 [] 是**正常**的（socket 已在监听，只是还没有 page target）；
+                    // 早期把它判成「不是 devtools socket」，导致有效候选被丢掉，
+                    // 表现成「grep 明明看得到 socket，attach 却说连不上」。
+                    val head = body.trimStart()
+                    if (head.startsWith("[") || head.startsWith("{")) {
                         return LocalSocketCdpTransport(name)
                     }
-                    IOException("$name: /json 无 webSocketDebuggerUrl（不是 devtools socket）")
+                    IOException("$name: /json 不像 devtools 响应（前 120 字: ${body.take(120)}）")
                 } catch (e: Exception) {
                     e
                 }

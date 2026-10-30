@@ -92,7 +92,10 @@ object CdpProbe {
                     )
                 }
                 if (attempt >= 3) {
-                    errors += "$socketName: /json returned no target (WebView alive but no page?)"
+                    // 空数组是 devtools 的正常响应（socket 在监听、只是没有 page target），
+                    // 不是「不是 devtools」。带上原始 body，下次不用再猜对面回了什么。
+                    errors += "$socketName: /json 无 target（devtools 在监听，但当前没有 page）" +
+                        " 原始=${body.take(120)}"
                 }
             } catch (e: Exception) {
                 if (attempt >= 3) {
