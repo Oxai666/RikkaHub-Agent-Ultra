@@ -149,6 +149,11 @@ e: file:///home/runner/work/.../CdpManager.kt:78:35 Unresolved reference 'urlOf'
 
 ## 7. 真机验证
 
+**测试靶站在 `testtarget/server.py`**（零依赖，`python3 server.py` 起在 8099）。
+不要用 example.com 或别人家的站当靶子——example.com 只有内联脚本，断点永远下不上；
+别人的站服务端渲染、抓不到 XHR。具体测法看 `TESTING.md`。
+
+
 ```bash
 # 装完确认包名（不是 me.rerere.rikkahub.debug）
 adb shell pm list packages | grep rikkahub

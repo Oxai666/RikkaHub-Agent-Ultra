@@ -1,109 +1,131 @@
 # 测试清单
 
-> 每次打包后照这个跑。A 段必过，B 段是回归，C 段是当前重点。
+> 用**自己的靶站**测，不用 example.com，也不用别人家的站。
+> 原因：example.com 只有一个内联脚本（CDP 按 URL 匹配，断点永远下不上）；别人的站服务端渲染、抓不到 XHR；外网依赖让结果不可重复。
+
+---
+
+## 0. 起靶站（Termux）
+
+```bash
+cd ~/../usr/var/lib/proot-distro/installed-rootfs/ubuntu/root/workspace/rikkahub-agent/testtarget
+# 或者你在 PRoot 里时的路径：
+cd /workspace/rikkahub-agent/testtarget
+
+python3 server.py            # 监听 0.0.0.0:8099
+python3 server.py 9000       # 换端口
+```
+
+看到 `测试靶站已启动： http://127.0.0.1:8099/` 就行，**别关这个会话**。
+
+浏览器（App 里）打开：`http://127.0.0.1:8099/`
+
+App 和 Termux 是同一台设备，loopback 直通。页面应该显示绿按钮和一行灰色说明。
+
+### 靶站有什么
+
+| 路径 | 用途 |
+|---|---|
+| `GET /` | 页面，外链 `/app.js` |
+| `GET /app.js` | **第 2 行（0-based）= `fetch('/api/ping')`**，断点下这里必中 |
+| `GET /api/ping` | JSON，页面加载时用**相对路径**请求 → 验「相对 URL 是否被绝对化」 |
+| `GET /robots.txt` | 纯文本 → 验 mock / capture_body |
+| `POST /api/post` | 回显 body → 验请求体捕获（页面上的绿按钮） |
+| `GET /slow?ms=800` | 延迟响应 → 验暂停时的超时行为 |
+
+靶站会把每条请求打到 stdout。**服务器收到几个 vs hook 抓到几个**，这个差值就是排查依据。
 
 ---
 
 ## 准备
 
-1. 装 APK（包名 `excp.rikkahub.debug`，别装错到 `me.rerere.rikkahub.debug`）
-2. 进 **设置 → 工具**，把写类工具勾上（点击 / 输入 / eval_js / debug_attach / set_breakpoint 等默认是关的）
-3. 打开一个助手，`+` 菜单里能看到「浏览器」和「工具审批」两个入口 = 装对了
+1. 装 APK，包名 `excp.rikkahub.debug`
+2. 进 **设置 → 工具**，勾上写类工具（`debug_attach` / `set_breakpoint` / `eval_js` / 点击输入默认都关着）
+3. 起靶站，App 里打开 `http://127.0.0.1:8099/`
 
 ---
 
-## A. 冒烟（2 分钟，必过）
+## A. 冒烟（2 分钟）
 
-| 步骤 | 调用 | 预期 |
-|---|---|---|
-| 1 | `browser_open` url=https://example.com | `{"success":true,"title":"Example Domain"}` |
-| 2 | `browser_get_text` | 文本里有 `Example Domain` |
-| 3 | `browser_screenshot` | 图出来，不是白屏 |
+```
+browser_open      http://127.0.0.1:8099/
+browser_get_text  max_chars=300
+```
 
-任一步挂了，先别测后面的——说明 App 本体就坏了（大概率是装错包或 WebView 初始化失败）。
+预期：文本里有「RikkaHub 测试靶站」和「POST /api/post」。
+页面底部灰框会显示 `/api/ping` 的返回 JSON —— **这说明页面自己的 JS 跑起来了**，是后面测 hook 的前提。
 
 ---
 
-## B. Hook 引擎（5 分钟，回归）
+## B. Hook 引擎（5 分钟）
 
-### B1 规则下发
-
-```
-browser_hook_create  pattern="https://example.com/*"  action="log"  capture_body=true
-```
-
-返回 `{id:"rikka-...", applied:true}`。
+### B1 相对 URL 命中（核心回归）
 
 ```
-browser_open  https://example.com          ← 必须重新加载，规则在 document-start 注入
-browser_eval_js  "window.__rikkaHooks.rules.length"
-→ 1
-
-browser_eval_js  "JSON.stringify(window.__rikkaHooks.rules.map(function(r){return [r.id,r.captureBody]}))"
-→ [["rikka-...",true]]      ← 注意是规则级 captureBody，不是 actions[0].captureBody
+browser_hook_create  pattern="http://127.0.0.1:8099/*"  action="log"  capture_body=true
+browser_open         http://127.0.0.1:8099/
+browser_eval_js      "window.__rikkaHooks.rules.length"          → 1
+browser_network_list limit=10  with_body=true
 ```
 
-> 如果 `rules.length` 是 0：`encodeDefaults` 又退回去了（见 HANDOVER 坑 1）。
+**预期**：列表里有 `url: "http://127.0.0.1:8099/api/ping"`，且 `responseBody` 带 `{"ok": true, ...}`。
 
-### B2 相对 URL 命中（这是修过的 bug）
+页面发的是 `fetch('/api/ping')`（相对），能抓到就说明绝对化修好了（`476c3e05`）。
+靶站 stdout 会同步打一条 `GET /api/ping 200` —— 两边数量对得上才算真通。
 
-```
-browser_eval_js  "fetch('/robots.txt').then(function(r){return r.status})"
-browser_network_list  limit=5  with_body=true
-```
+### B2 capture_body
 
-**预期捕捉到 `url: "https://example.com/robots.txt"`**（绝对化后的）。
+B1 里那条记录的 `requestBody` / `responseBody` 是否都有值。页面加载时那条是 GET，请求体为空是正常的。
 
-如果 `network_list` 空但 `hook_hits` 有请求——说明相对 URL 又没解析（见坑 2）。
-
-### B3 body
-
-B2 的条目里应该有 `requestBody`（若 GET 则为空）和 `responseBody`（robots.txt 内容）。
-
-### B4 mock
+再点一下页面上的绿按钮（或 `browser_click selector="#btn"`），然后：
 
 ```
-browser_hook_create  pattern="https://example.com/robots.txt"  action="mock"  status=200  value="mocked-by-rikka"
-browser_open  https://example.com
-browser_eval_js  "fetch('/robots.txt').then(function(r){return r.text()}).then(function(t){window.__m=t}); 'go'"
-browser_eval_js  "window.__m"
-→ "mocked-by-rikka"
+browser_network_list limit=5 with_body=true
 ```
+
+**预期**：出现 `POST /api/post`，`requestBody` = `{"from":"target-page","at":...}`，`responseBody` 是回显。
+
+### B3 mock
+
+```
+browser_hook_create  pattern="http://127.0.0.1:8099/robots.txt"  action="mock"  status=200  value="mocked-by-rikka"
+browser_open         http://127.0.0.1:8099/
+browser_eval_js      "fetch('/robots.txt').then(function(r){return r.text()}).then(function(t){window.__m=t});'go'"
+browser_eval_js      "window.__m"                                → "mocked-by-rikka"
+```
+
+靶站 stdout **不该**出现 `GET /robots.txt`（请求被本地截住了）。
 
 ---
 
-## C. CDP 调试（当前重点，10 分钟）
+## C. CDP 调试（重点，10 分钟）
 
 ### C1 attach
 
 ```
-browser_open  https://example.com
+browser_open         http://127.0.0.1:8099/
 browser_debug_attach
 ```
 
-**成功标志**：
+**成功**：
 
 ```json
-{"attached": true, "url": "https://example.com/"}
+{"attached": true, "url": "http://127.0.0.1:8099/"}
 ```
 
-失败会返回 `{"error":"IOException: Try again"}`。**失败立刻跑下一步**，别重试。
+失败返回 `{"error":"IOException: Try again"}` → **别重试**，跑 C2。
 
-### C2 失败才需要：看诊断
+### C2 失败才需要：诊断
 
-```
-browser_debug_targets
-```
+`browser_debug_targets`，对照：
 
-对照下表判断：
+| `socket` | `candidates` | 结论 |
+|---|---|---|
+| `""` | 有值，`errors` 里每个都 `GET /json IOException` | socket 名对但没人应答 → WebView 没建 devtools socket |
+| `""` | **空** | `packagePids()` 没拿到进程列表，只剩 myPid 兜底也失败 |
+| 有值 | 有值 | 正常，继续 C3 |
 
-| `socket` | `candidates` | `errors` | 结论 |
-|---|---|---|---|
-| `""` | 有值 | 每个候选都 `GET /json IOException` | socket 名对但对面不应答 → WebView 没建 devtools socket（检查 `RikkaHubApp.onCreate` 里那段是否真的执行到） |
-| `""` | **空** | `scan /proc/net/unix: EACCES` | `packagePids()` 没拿到进程列表（Koin Context 取不到 / ActivityManager 权限），只剩 myPid 兜底还失败 |
-| 有值 | 有值 | — | attach 成功，走 C3 |
-
-`/proc/net/unix: EACCES` 是 Android 10+ 的正常限制，**它本身不是失败原因**，只能靠猜 pid + `/json` 验证兜底。
+`/proc/net/unix: EACCES` 是 Android 10+ 的正常限制，不是失败原因，别在这上面花时间。
 
 ### C3 状态
 
@@ -111,117 +133,106 @@ browser_debug_targets
 browser_debug_status
 ```
 
-```json
-{"devToolsSocketActive": true, "attachedTabs": 1, "tabs": [{"tabId":"foreground","url":"https://example.com/","paused":false,"breakpoints":0,"workers":0}]}
-```
+要看到 `"devToolsSocketActive": true` 且 `attachedTabs: 1`。
 
-`devToolsSocketActive:true` 就说明 CDP 会话活着。
-
-### C4 挑一个脚本（关键技巧）
-
-CDP 断点按 **脚本 URL** 下，所以得先知道页面有哪些脚本：
+### C4 下断点（靶站固定行，不用猜）
 
 ```
-browser_eval_js  "JSON.stringify([].slice.call(document.scripts).map(function(s){return s.src||'(inline '+s.textContent.length+'B)'}))"
+browser_debug_set_breakpoint  url="app.js"  line=2
 ```
 
-`example.com` 只有一个内联脚本（`<script>var a=1</script>`），**内联脚本没法按 URL 下断点**。要测断点请换一个带外链 JS 的站，比如：
-
-```
-browser_open  https://m.huaban.com/discovery
-```
-
-然后再取一次 `document.scripts`，挑一个 `.js` 结尾的（形如 `https://m.huaban.com/js/mobile/main.js?...`）。
-
-### C5 下断点
-
-```
-browser_debug_set_breakpoint  url="main.js"  line=0
-```
-
-- `url` 支持**后缀匹配**，写文件名就够，不用全路径
-- `line` 是 **0-based**（CDP 原生），第 1 行写 0
-- 可选 `condition`，比如 `condition="window.__stopHere"`，只有表达式为真才断
+- `url` 后缀匹配，写 `app.js` 就够
+- `line` 是 **0-based**，靶站 `app.js` 第 3 行（人工数第 3 行）= `fetch('/api/ping')` = **line=2**
 
 返回：
 
 ```json
-{"id":"1:0:0:https://.../main.js","url":"main.js","line":0,"column":0}
+{"id":"...","url":"app.js","line":2,"column":0}
 ```
 
-### C6 触发
+### C5 触发
 
 ```
-browser_open  https://m.huaban.com/discovery     ← 同 URL 重载即可
+browser_open  http://127.0.0.1:8099/
 ```
 
-如果脚本加载时第 0 行就执行，页面会**当场冻住**——这是正常的，不是崩溃。
+`boot()` 在 app.js 末尾调用，所以页面加载时就会执行到 line 2 → **立刻暂停**。
 
-### C7 读暂停态
+此时靶站 stdout **不应出现** `GET /api/ping`（请求还没发出去）—— 这是个很好的旁证。
+
+### C6 读暂停态（关键验收）
 
 ```
 browser_debug_state
 ```
 
 ```json
-{"paused": true, "reason": "other", "hitBreakpoints": "...",
- "callFrames": [{"callFrameId":"...","functionName":"","url":"https://.../main.js","line":0,"column":0,"scopes":[{"type":"local","objectId":"..."}]}]}
+{"paused": true,
+ "callFrames": [{"callFrameId":"...","functionName":"boot","url":"http://127.0.0.1:8099/app.js","line":2,"column":2,
+                 "scopes":[{"type":"local","objectId":"..."}]}]}
 ```
 
-**`callFrames` 非空 = 断点真的命中了，整条 CDP 链路通。**
+**`callFrames` 非空 + `functionName` 是 `boot` + `line:2` = 整条 CDP 链路通了。**
 
-`paused` 为 `false` 说明断点没命中（行号没执行到 / URL 没匹配上），换个脚本或换行号。
+`paused:false` 说明断点没命中 → 检查是不是 reload 了但脚本被缓存（靶站已发 `Cache-Control: no-store`，理论上不会）。
 
-### C8 单步 / 放开
+### C7 单步
 
 ```
-browser_debug_step  mode="over"      → {"stepped":true}
-browser_debug_state                  → line 变成下一行
+browser_debug_step   mode="over"     → {"stepped":true}
+browser_debug_state                  → line 应该往 3 / 4 走
+```
+
+### C8 放开
+
+```
 browser_debug_resume                 → {"resumed":true}
 ```
 
-**⚠️ 测完必须 resume**，否则页面一直冻着，后续所有工具都超时。
+放开后靶站 stdout 立刻出现 `GET /api/ping 200` —— 说明暂停期间请求确实被拦住了。
+
+**⚠️ 一定要 resume**，否则页面冻死，后面所有工具都超时。
 
 ### C9 收尾
 
 ```
-browser_debug_list_breakpoints       → 列出下的断点
-browser_debug_remove_breakpoint id=<上一步的 id>
-browser_debug_detach                 → {"detached":1}
+browser_debug_list_breakpoints             → 列表里有刚才那条
+browser_debug_remove_breakpoint id=<id>
+browser_debug_detach                       → {"detached":1}
 ```
-
-detach 会自动 resume，断点会快照保存，下次 attach 自动重放。
 
 ---
 
-## D. 常见失败对照
+## D. 失败对照
 
 | 现象 | 最可能原因 | 去看 |
 |---|---|---|
-| attach 一直 `Try again` | WebView devtools socket 没建 / 候选全错 | `browser_debug_targets` 的 `candidates` 和 `errors` |
-| attach 成功但 `state` 永远 `paused:false` | 断点 url 没匹配上，或该行没执行 | 换 `document.scripts` 里真实存在的 .js，line 换 3–5 |
-| 页面卡住不动，所有工具超时 | 停在断点上忘了 resume | `browser_debug_resume`，或 `browser_debug_detach` |
-| `network_list` 空但页面有请求 | 相对 URL 没命中 / 规则 pattern 写错 | `browser_hook_hits` 有没有条目 |
-| `hook_hits` 也没有 | 规则没下发 | `browser_eval_js "window.__rikkaHooks.rules.length"` |
-| 所有工具都 `{"error":"no active page"}` | 浏览器 tab 被关掉了 | 重新 `browser_open` |
+| attach 一直 `Try again` | devtools socket 没建 / 候选全错 | `browser_debug_targets` 的 `candidates` 与 `errors` |
+| attach 成功但 `paused` 永远 false | 断点 url 没匹配 / 该行没执行 | 确认 `url="app.js"`、`line=2`，且**重载过页面** |
+| 页面卡死，所有工具超时 | 停在断点忘了 resume | `browser_debug_resume` 或 `browser_debug_detach` |
+| `network_list` 空，靶站 stdout 有请求 | 相对 URL 没命中 / pattern 写错 | `browser_hook_hits` 有无条目；`window.__rikkaHooks.rules.length` |
+| 靶站 stdout 一个请求都没有 | 页面没加载出来 / 端口不对 | 先在 App 里手动打开 `http://127.0.0.1:8099/` 看得到页面吗 |
+| 页面灰框一直是「（这里显示 fetch 结果）」 | 页面 JS 没跑（hook 把 fetch 搞坏了？） | 关掉所有 hook 规则再 reload |
 
 ---
 
-## E. 一次跑完（贴给 AI 的傻瓜版）
-
-把下面整段丢进对话，让 AI 自己跑：
+## E. 傻瓜版（整段丢给 AI）
 
 ```
-依次执行，每步把原始返回贴出来，失败就停下并跑 browser_debug_targets：
-1. browser_open https://example.com
-2. browser_get_text max_chars=100
-3. browser_debug_attach
-4. browser_debug_status
-5. browser_open https://m.huaban.com/discovery
-6. browser_eval_js 取 document.scripts 列表
-7. browser_debug_set_breakpoint 挑其中一个 .js，line=0
-8. browser_open 同 URL 重载
-9. browser_debug_state
-10. browser_debug_resume
-11. browser_debug_detach
+先确认靶站已启动在 http://127.0.0.1:8099/ ，然后依次执行，每步贴原始返回，失败就停：
+
+1. browser_open http://127.0.0.1:8099/
+2. browser_get_text max_chars=300
+3. browser_hook_create pattern="http://127.0.0.1:8099/*" action="log" capture_body=true
+4. browser_open http://127.0.0.1:8099/
+5. browser_eval_js "window.__rikkaHooks.rules.length"
+6. browser_network_list limit=10 with_body=true
+7. browser_debug_attach
+8. browser_debug_status
+9. browser_debug_set_breakpoint url="app.js" line=2
+10. browser_open http://127.0.0.1:8099/
+11. browser_debug_state
+12. browser_debug_step mode="over"
+13. browser_debug_resume
+14. browser_debug_detach
 ```
