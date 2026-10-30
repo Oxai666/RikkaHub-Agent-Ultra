@@ -1675,6 +1675,11 @@
   <string name="setting_shizuku_section_help">Setup help</string>
   <string name="setting_shizuku_help_title">Setting up Shizuku</string>
   <string name="setting_shizuku_help_body">Install Shizuku from its GitHub releases page, then start its service: from the Shizuku app on a rooted device, or by pairing wireless debugging on Android 11+ (Developer options → Wireless debugging → Pair device with pairing code, then run the start command Shizuku shows you). Once the service is running, tap Permission above to grant RikkaHub access.</string>
+  <string name="browser_co_browsing_on">Co-browsing on — tap to pause</string>
+  <string name="browser_co_browsing_off">Co-browsing paused — tap to resume</string>
+  <string name="browser_tab_new">New tab</string>
+  <string name="browser_tab_untitled">New tab</string>
+  <string name="browser_tab_close">Close tab</string>
   <string name="browser_address_bar_close">Close browser</string>
   <string name="browser_address_bar_back">Browser back</string>
   <string name="browser_address_bar_forward">Browser forward</string>

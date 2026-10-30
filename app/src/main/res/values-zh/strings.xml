@@ -1296,6 +1296,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_workflows_hint_title">工作流需要额外设置</string>
   <string name="assistant_page_local_tools_workflows_title">工作流</string>
   <string name="browser_address_bar_back">浏览器后退</string>
+  <string name="browser_co_browsing_on">共浏览中 · 点击暂停</string>
+  <string name="browser_co_browsing_off">已暂停 · 点击恢复</string>
+  <string name="browser_tab_new">新建标签页</string>
+  <string name="browser_tab_untitled">新标签页</string>
+  <string name="browser_tab_close">关闭标签页</string>
   <string name="browser_address_bar_close">关闭浏览器</string>
   <string name="browser_address_bar_forward">浏览器前进</string>
   <string name="browser_address_bar_more">更多选项</string>

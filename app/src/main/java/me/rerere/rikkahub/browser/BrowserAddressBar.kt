@@ -38,6 +38,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.AiBrain01
+import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Cancel01
@@ -70,6 +72,8 @@ fun BrowserAddressBar(
     onRefresh: () -> Unit,
     onStopAi: () -> Unit,
     onNavigate: (String) -> Unit,
+    coBrowsing: Boolean = true,
+    onToggleCoBrowsing: () -> Unit = {},
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     var fieldValue by remember(url) {
@@ -146,6 +150,20 @@ fun BrowserAddressBar(
             }
         },
         actions = {
+            // 共浏览开关：亮 = AI 可以操作这个页面；暗 = 已暂停，工具一律被拒。
+            // 放在最左边（离地址栏最近）是有意的：它是「AI 正在和我一起看」的状态灯，
+            // 用户扫一眼就能知道现在 AI 动不动得了这个页面。
+            IconButton(onClick = onToggleCoBrowsing) {
+                Icon(
+                    imageVector = if (coBrowsing) HugeIcons.AiBrain01 else HugeIcons.Alert01,
+                    contentDescription = stringResource(
+                        if (coBrowsing) R.string.browser_co_browsing_on
+                        else R.string.browser_co_browsing_off
+                    ),
+                    tint = if (coBrowsing) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.error,
+                )
+            }
             IconButton(onClick = onBack, enabled = canGoBack) {
                 Icon(
                     imageVector = HugeIcons.ArrowLeft01,

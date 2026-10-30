@@ -533,6 +533,27 @@ object BrowserController {
         Mode.Idle -> null
     }
 
+    /**
+     * 共浏览开关的运行时镜像，由 [BrowserPreferences] 的 collector 推送。
+     * 默认 true：没这个开关时行为不变。
+     */
+    @Volatile
+    var coBrowsingEnabled: Boolean = true
+
+    /** 当前是不是「用户正看着」的前台模式（headless 会话不受共浏览开关约束）。 */
+    internal fun isForegroundMode(): Boolean = mode is Mode.Foreground
+
+    /** 用户按了「已暂停」时，工具统一返回这个。 */
+    fun coBrowsingPausedEnvelope(): JsonObject = buildJsonObject {
+        put("error", "co_browsing_paused")
+        put(
+            "recovery",
+            "用户已在浏览器顶栏暂停共浏览，AI 现在不能操作这个页面。" +
+                "不要再重试任何 browser_* 工具；用 browser_done 汇报当前进度，" +
+                "并请用户点一下顶栏的「已暂停」恢复后再继续。",
+        )
+    }
+
     fun notOpenEnvelope(): JsonObject = buildJsonObject {
         put("error", "browser_not_open")
         put("recovery", "Call browser_open with a URL to launch the browser before invoking this tool.")
@@ -704,6 +725,11 @@ object BrowserControllerHandle {
         block: suspend WithControllerScope.() -> JsonObject,
     ): JsonObject {
         val wv = BrowserController.activeWebView() ?: return BrowserController.notOpenEnvelope()
+        // 共浏览闸门：只拦前台（用户能看见、能被 AI 动页面）的情况。
+        // headless 会话没有人在看，不该被这个开关卡住。
+        if (!BrowserController.coBrowsingEnabled && BrowserController.isForegroundMode()) {
+            return BrowserController.coBrowsingPausedEnvelope()
+        }
         if (!BrowserController.isWithinTaskWindow()) {
             return BrowserController.taskTimeoutEnvelope()
         }

@@ -46,6 +46,15 @@ class BrowserPreferences(private val context: Context) {
     // --- 搜索引擎（地址栏输入关键词时用哪个） --------------------------------------------
     private val searchEngineKey = stringPreferencesKey("search_engine_id")
 
+    /**
+     * 共浏览开关：AI 能不能操作你现在看的这个页面。
+     *
+     * 和太墟那个同名开关不同 —— 他们那个只改顶栏图标和颜色，工具照样能跑；
+     * 这里是真的闸门：关掉后前台模式下所有 browser_* 工具都返回 co_browsing_paused。
+     * 默认开（装了就是为了用）。
+     */
+    private val coBrowsingKey = booleanPreferencesKey("co_browsing_enabled")
+
     init {
         // Push the persisted (or default) timeout values into [BrowserController] — the
         // synchronous runtime source of truth read by every browser tool's withTimeoutOrNull
@@ -57,6 +66,12 @@ class BrowserPreferences(private val context: Context) {
             perToolTimeoutFlow()
                 .distinctUntilChanged()
                 .onEach { BrowserController.perToolTimeoutMs = it }
+                .collect {}
+        }
+        scope.launch {
+            coBrowsingFlow()
+                .distinctUntilChanged()
+                .onEach { BrowserController.coBrowsingEnabled = it }
                 .collect {}
         }
         scope.launch {
@@ -89,6 +104,14 @@ class BrowserPreferences(private val context: Context) {
 
     /** Persist the single-task timeout. Input is clamped before write. */
     /** 当前搜索引擎 id；未设置时落在 [BrowserSearchEngines.default]（必应 cn.bing.com）。 */
+    fun coBrowsingFlow(): Flow<Boolean> = store.data.map { prefs ->
+        prefs[coBrowsingKey] ?: true
+    }
+
+    suspend fun setCoBrowsing(enabled: Boolean) {
+        store.edit { it[coBrowsingKey] = enabled }
+    }
+
     fun searchEngineFlow(): Flow<String> = store.data.map { prefs ->
         BrowserSearchEngines.byId(prefs[searchEngineKey]).id
     }

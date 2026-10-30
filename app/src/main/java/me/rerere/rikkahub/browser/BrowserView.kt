@@ -11,7 +11,24 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.InputChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextOverflow
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Cancel01
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,9 +41,15 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
@@ -75,6 +98,28 @@ fun BrowserView(
     initialUrl: String,
     conversationId: Uuid?,
 ) {
+    val browserPreferences = koinInject<BrowserPreferences>()
+    val uiScope = rememberCoroutineScope()
+    val coBrowsing by browserPreferences.coBrowsingFlow().collectAsState(initial = true)
+
+    val tabs by BrowserTabs.tabs.collectAsState()
+    val activeTabId by BrowserTabs.activeId.collectAsState()
+    val activeTab = tabs.firstOrNull { it.id == activeTabId }
+
+    // 首次进入把 Activity 传进来的 initialUrl 落到第一个标签上
+    LaunchedEffect(initialUrl) { BrowserTabs.ensureInitial(initialUrl) }
+
+    // 切标签 = 让唯一的 WebView 导航到目标 URL。
+    // 比较 URL 再决定要不要 load：activeTab.url 会随导航同步更新，
+    // 不比较的话这里会和自己打起来（load → 回调更新 url → 又触发 load）。
+    LaunchedEffect(activeTab?.id, activeTab?.url) {
+        val target = activeTab?.url ?: return@LaunchedEffect
+        val wv = BrowserController.activeWebView() ?: return@LaunchedEffect
+        if (wv.url.orEmpty() != target) {
+            runCatching { wv.loadUrl(target) }
+        }
+    }
+
     Scaffold(
         topBar = {
             BrowserAddressBar(
@@ -87,6 +132,10 @@ fun BrowserView(
                 onRefresh = onRefreshTap,
                 onStopAi = onStopAi,
                 onNavigate = onNavigate,
+                coBrowsing = coBrowsing,
+                onToggleCoBrowsing = {
+                    uiScope.launch { browserPreferences.setCoBrowsing(!coBrowsing) }
+                },
             )
         },
         bottomBar = {
@@ -106,14 +155,28 @@ fun BrowserView(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                BrowserTabStrip(
+                    tabs = tabs,
+                    activeId = activeTabId,
+                    onSelect = { BrowserTabs.select(it) },
+                    onClose = { BrowserTabs.close(it) },
+                    onNew = { BrowserTabs.open() },
+                )
                 WebViewHost(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
                     initialUrl = initialUrl,
                     onWebViewReady = onWebViewReady,
-                    onUrlChange = onUrlChange,
-                    onTitleChange = onTitleChange,
+                    // 导航后同步到标签状态，地址栏和 chip 标题才跟得上
+                    onUrlChange = { url ->
+                        BrowserTabs.onNavigated(url)
+                        onUrlChange(url)
+                    },
+                    onTitleChange = { title ->
+                        BrowserTabs.onNavigated(BrowserTabs.activeTab()?.url.orEmpty(), title)
+                        onTitleChange(title)
+                    },
                     onLoadProgress = onLoadProgress,
                     onCanGoBackChange = onCanGoBackChange,
                     onCanGoForwardChange = onCanGoForwardChange,
@@ -146,6 +209,9 @@ private fun WebViewHost(
     val ctx = LocalContext.current
     // 页内 hook 安装器（Koin 单例）：document-start 注入 + 规则推送都靠它。
     val hookInstaller = koinInject<HookInstaller>()
+    val browserPreferences = koinInject<BrowserPreferences>()
+    val uiScope = rememberCoroutineScope()
+    val coBrowsing by browserPreferences.coBrowsingFlow().collectAsState(initial = true)
     val browserEventBus = koinInject<BrowserEventBus>()
     // Construct the WebView ONCE — `remember` survives recomp + (with key=Unit) survives
     // configuration changes (the Activity declares `configChanges` so the system never
@@ -301,4 +367,72 @@ private fun WebViewHost(
         modifier = modifier,
         factory = { webView },
     )
+}
+
+/**
+ * 标签栏。
+ *
+ * 只在**逻辑**层面分 tab —— 底层仍是一个 WebView，切 tab 就是换 URL。
+ * 所以关掉标签不会真的销毁页面状态，切回来是重新加载。
+ * 顶部单行、横向可滚，chip 上显示标题，点 × 关闭。
+ */
+@Composable
+private fun BrowserTabStrip(
+    tabs: List<BrowserTab>,
+    activeId: String,
+    onSelect: (String) -> Unit,
+    onClose: (String) -> Unit,
+    onNew: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    ) {
+        tabs.forEach { tab ->
+            val label = tab.title.ifBlank {
+                if (tab.url == BrowserTab.START_URL) stringResource(R.string.browser_tab_untitled)
+                else tab.url.removePrefix("https://").removePrefix("http://").take(28)
+            }
+            InputChip(
+                selected = tab.id == activeId,
+                onClick = { onSelect(tab.id) },
+                label = {
+                    Text(
+                        text = label,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.widthIn(max = 110.dp),
+                    )
+                },
+                trailingIcon = {
+                    // 只剩一个标签时不给关，否则会出现「零标签」的空状态
+                    if (tabs.size > 1) {
+                        IconButton(onClick = { onClose(tab.id) }, modifier = Modifier.size(18.dp)) {
+                            Icon(
+                                imageVector = HugeIcons.Cancel01,
+                                contentDescription = stringResource(R.string.browser_tab_close),
+                                modifier = Modifier.size(12.dp),
+                            )
+                        }
+                    }
+                },
+            )
+            Spacer(Modifier.width(6.dp))
+        }
+        IconButton(
+            onClick = onNew,
+            enabled = tabs.size < BrowserTabs.MAX_TABS,
+            modifier = Modifier.size(30.dp),
+        ) {
+            Icon(
+                imageVector = HugeIcons.Add01,
+                contentDescription = stringResource(R.string.browser_tab_new),
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
 }
