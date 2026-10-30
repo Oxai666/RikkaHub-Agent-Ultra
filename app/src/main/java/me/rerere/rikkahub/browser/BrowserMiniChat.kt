@@ -75,6 +75,11 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.components.message.ChatMessage
+import androidx.navigation3.runtime.NavKey
+import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.context.Navigator
+import com.dokar.sonner.rememberToasterState
+import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.LocalSettings
 import org.koin.compose.koinInject
 
@@ -274,7 +279,18 @@ private fun BrowserMiniChatCard(
 
             // 直接用主界面的 ChatMessage 渲染：工具卡片、思考折叠、Markdown、分支标记
             // 全部与会话页一致，小窗只是缩小了宽度。
-            CompositionLocalProvider(LocalSettings provides settings) {
+            // ChatMessage 内部会读 LocalNavController（点击消息里的链接/图片时跳转）。
+            // 浏览器 Activity 没有 NavHost，缺这个 CompositionLocal 会直接
+            // IllegalStateException: No Navigator provided 崩掉。这里给一个孤立 Navigator：
+            // 浏览态下这些跳转本来就用不上，点不动好过崩。
+            val miniNav = remember { Navigator(mutableListOf<NavKey>()) }
+            // 工具卡片里的复制/重跑按钮会读 LocalToaster，同样没有默认值。
+            val miniToaster = rememberToasterState()
+            CompositionLocalProvider(
+                LocalSettings provides settings,
+                LocalNavController provides miniNav,
+                LocalToaster provides miniToaster,
+            ) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.weight(1f).fillMaxWidth(),
