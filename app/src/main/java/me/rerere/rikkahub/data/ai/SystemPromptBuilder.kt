@@ -35,18 +35,42 @@ class SystemPromptBuilder {
             if (assistantPrompt.isNotBlank()) append(assistantPrompt)
             if (toolPrompts.isNotEmpty()) {
                 if (isNotEmpty()) appendLine()
-                // 这两行以前是无条件加的，结果一个工具都没勾的纯聊天助手，
-                // 提示词里照样写着 read_window_tree / browser_hook_create —— 模型真的会去调。
-                // 现在按实际注册的工具名决定，没挂就别提。
-                val hasExpensiveTools = toolNames.any {
-                    it == "read_window_tree" || it == "browser_get_text" ||
-                        it == "browser_screenshot" || it == "take_screenshot"
+                // 这几条以前是硬编码整句塞进去的，结果：
+                //  - 一个工具都没勾的纯聊天助手，提示词里写着 read_window_tree、browser_hook_create；
+                //  - 只勾了 take_screenshot 的助手，也被告知「优先用 browser_get_text」。
+                // 模型看到不存在的函数名会真的去调，然后拿到 tool_not_found。
+                //
+                // 现在按**实际注册的工具名**逐条拼：句子里出现的每个名字都保证存在，
+                // 条件不满足就整条不出现。
+                val cheapReaders = listOf("read_window_tree", "browser_get_text").filter { it in toolNames }
+                val expensiveReaders = listOf("take_screenshot", "browser_screenshot").filter { it in toolNames }
+                if (cheapReaders.isNotEmpty() && expensiveReaders.isNotEmpty()) {
+                    appendLine(
+                        "Tool cost guidance: prefer ${cheapReaders.joinToString("/")} before " +
+                            "${expensiveReaders.joinToString("/")} when text is enough, and avoid repeating " +
+                            "high-cost tools unless the state likely changed."
+                    )
                 }
-                if (hasExpensiveTools) {
-                    appendLine("Tool cost guidance: prefer low-cost text tools before expensive visual or broad tools. Use read_window_tree/browser_get_text before screenshots when text is enough, and avoid repeating high-cost tools unless the state likely changed.")
+
+                // 钩子链路提示：先挂钩子，再读结果。只有 hook_create 存在才有意义，
+                // 而里面提到的读取工具也只列真实存在的那些。
+                if ("browser_hook_create" in toolNames) {
+                    val readers = listOf("browser_network_list", "browser_hook_hits")
+                        .filter { it in toolNames }
+                    if (readers.isNotEmpty()) {
+                        appendLine(
+                            "Browser debugging order: browser_hook_create → ${readers.joinToString(" / ")} " +
+                                "is the primary path and works on every device."
+                        )
+                    }
                 }
-                if (toolNames.any { it.startsWith("browser_") }) {
-                    appendLine("Browser debugging order: browser_hook_create → browser_network_list / browser_hook_hits is the primary path and works on every device. browser_debug_attach (CDP) is optional; if it fails once on this device, stop retrying it and use hooks.")
+
+                // CDP 的降级提示单独一条：只有真的挂了 browser_debug_attach 才需要它。
+                if ("browser_debug_attach" in toolNames) {
+                    appendLine(
+                        "browser_debug_attach (CDP) is optional; if it fails once on this device, " +
+                            "stop retrying it and use hooks instead."
+                    )
                 }
                 toolPrompts.forEachIndexed { index, toolPrompt ->
                     if (index > 0) appendLine()
