@@ -148,6 +148,10 @@ private fun UsageDetails(stats: NerdStats, contextLength: Int?) {
             if (total.cachedTokens > 0) UsageDetailRow(stringResource(R.string.chat_message_usage_total_cached), total.cachedTokens.exact())
             UsageDetailRow(stringResource(R.string.chat_message_usage_total_output), total.completionTokens.exact())
         }
+        val cost = total.cost
+        if (cost != null && cost > 0.0) {
+            UsageDetailRow(stringResource(R.string.chat_message_usage_cost), formatCost(cost))
+        }
         if (stats.tps != null) UsageDetailRow(stringResource(R.string.chat_message_usage_speed), "${stats.tps.toFixed(1)} tok/s")
         if (stats.durationMillis != null) UsageDetailRow(stringResource(R.string.chat_message_usage_duration), "${(stats.durationMillis / 1000f).toFixed(1)}s")
     }
@@ -320,3 +324,19 @@ private fun UIMessage.nerdStats(usage: TokenUsage): NerdStats {
 }
 
 private fun Int.exact(): String = NumberFormat.getIntegerInstance().format(this)
+
+/**
+ * 把 USD 成本渲染成紧凑字符串。
+ *
+ * 正数但四舍五入到 6 位后变成 0 的情况（< 1e-6），必须显示 "\u003c$0.000001"
+ * 而不是 "$0" —— 后者会被读成"免费"。FormatCostTest 守着这条。
+ */
+internal fun formatCost(cost: Double): String {
+    val rounded = java.math.BigDecimal(cost)
+        .setScale(6, java.math.RoundingMode.HALF_UP)
+    if (cost > 0.0 && rounded.signum() == 0) {
+        return "<$0.000001"
+    }
+    val s = rounded.stripTrailingZeros().toPlainString()
+    return "$" + s
+}

@@ -2564,6 +2564,7 @@
   <string name="chat_message_usage_total_input">Total input</string>
   <string name="chat_message_usage_total_cached">Total cached</string>
   <string name="chat_message_usage_total_output">Total output</string>
+  <string name="chat_message_usage_cost">Cost</string>
   <string name="chat_message_usage_speed">Speed</string>
   <string name="chat_message_usage_duration">Duration</string>
 </resources>

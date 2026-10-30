@@ -2275,6 +2275,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_message_usage_total_input">总输入</string>
   <string name="chat_message_usage_total_cached">缓存总量</string>
   <string name="chat_message_usage_total_output">总输出</string>
+  <string name="chat_message_usage_cost">花费</string>
   <string name="chat_message_usage_speed">速度</string>
   <string name="chat_message_usage_duration">时长</string>
 </resources>
