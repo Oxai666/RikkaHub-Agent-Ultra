@@ -687,7 +687,13 @@
           if (!state.consoleCount) { state.consoleCount = 0; }
           if (state.consoleCount < 500) {
             state.consoleCount++;
-            report('console', { level: level, text: argsSummary(arguments) });
+            // 不用 argsSummary：它给命中记录套了层括号（"(a, b)"），
+            // 但 console 原文没有，多一层会让日志读起来像被包了个 tuple。
+            var cparts = [];
+            for (var ci = 0; ci < arguments.length && ci < 8; ci++) {
+              cparts.push(safeStringify(arguments[ci], 2));
+            }
+            report('console', { level: level, text: cparts.join(' ') });
           }
           if (state.rules.length) {
             var rules = typeRules('CONSOLE');
@@ -794,19 +800,29 @@
       if (!Object.prototype.hasOwnProperty.call(state.fnHooks, path)) { continue; }
       var h = state.fnHooks[path];
       try {
-        if (h.wrapped && h.owner[h.name] === h.wrapped) { h.owner[h.name] = h.orig; }
-        else if (h.savedDesc) { Object.defineProperty(h.owner, h.name, h.savedDesc); }
-        else if (h.hadOwnProp === false) { delete h.owner[h.name]; }
+        if (h.trap) {
+          // 卸陷阱：有原描述符就照原样还原，没有就删掉我们新增的属性
+          if (h.savedDesc) { Object.defineProperty(h.owner, h.name, h.savedDesc); }
+          else { delete h.owner[h.name]; }
+        } else if (h.wrapped && h.owner[h.name] === h.wrapped) {
+          h.owner[h.name] = h.orig;
+        } else if (h.savedDesc) {
+          Object.defineProperty(h.owner, h.name, h.savedDesc);
+        } else if (h.hadOwnProp === false) {
+          delete h.owner[h.name];
+        }
       } catch (e) { /* 恢复失败保持现状 */ }
     }
     state.fnHooks = {};
   }
 
-  function hookFunction(rule) {
-    var spot = resolvePath(rule.target);
-    if (!spot) { return false; }
-    var orig = spot.owner[spot.name];
-    if (typeof orig !== 'function') { return false; }
+  /**
+   * 把 owner[name] 换成包装器，成功返回 true，并在这一刻上报 fn_attached。
+   *
+   * 上报时机是 B1 的关键订正：只有真正包住了才报。建规则时就报 applied:true，
+   * 会让上层无法区分「钩子坏了」和「调用发生在包装之前」—— 这两种处置完全不同。
+   */
+  function wrapFn(rule, owner, name, orig) {
     var wrapped = function () {
       var replaceAct = hasAction(rule, 'replace');
       var blocked = !!hasAction(rule, 'block');
@@ -825,21 +841,71 @@
       reportHit(rule, 'call', argsSummary(arguments));
       return orig.apply(this, arguments);
     };
-    try {
-      spot.owner[spot.name] = wrapped;
-      state.fnHooks[rule.target] = { owner: spot.owner, name: spot.name, orig: orig, wrapped: wrapped };
-      return true;
-    } catch (e) { return false; } /* 只读属性跳过 */
+    state.fnHooks[rule.target] = { owner: owner, name: name, orig: orig, wrapped: wrapped };
+    try { owner[name] = wrapped; } catch (e) { /* 可能是只读，下面再用 defineProperty */ }
+    if (owner[name] !== wrapped) {
+      try {
+        Object.defineProperty(owner, name, {
+          configurable: true, enumerable: true, writable: true, value: wrapped
+        });
+      } catch (e2) {
+        delete state.fnHooks[rule.target];
+        return false;
+      }
+    }
+    report('fn_attached', { rule: rule.id, target: rule.target });
+    return true;
   }
 
-  // ===== FUNCTION hook 延迟装配 =====
+  /**
+   * setter 陷阱：目标函数还不存在时先占位，页面对它赋值的瞬间同步包上。
+   *
+   * 这是 B1 的核心修法。之前靠轮询 + DOMContentLoaded 之后再批量套包装，
+   * 等于整个加载期都在裸奔 —— head 内联脚本、DOMContentLoaded 回调里的调用全丢。
+   */
+  function installSetterTrap(rule) {
+    var spot = resolvePath(rule.target);
+    if (!spot) { return false; }
+    var owner = spot.owner;
+    var name = spot.name;
+    var desc = null;
+    try { desc = Object.getOwnPropertyDescriptor(owner, name); } catch (e) {}
+    var holder = { value: (desc && Object.prototype.hasOwnProperty.call(desc, 'value')) ? desc.value : undefined };
+    try {
+      Object.defineProperty(owner, name, {
+        configurable: true,
+        enumerable: desc ? !!desc.enumerable : true,
+        get: function () { return holder.value; },
+        set: function (v) {
+          holder.value = v;
+          if (typeof v === 'function') {
+            try { wrapFn(rule, owner, name, v); } catch (e) { reportError('trap:' + rule.id, e); }
+          }
+        }
+      });
+    } catch (e) { return false; }
+    state.fnHooks[rule.target] = { owner: owner, name: name, trap: true, savedDesc: desc };
+    return true;
+  }
+
+  function hookFunction(rule) {
+    var spot = resolvePath(rule.target);
+    if (!spot) { return false; }
+    var cur = spot.owner[spot.name];
+    var known = state.fnHooks[rule.target];
+    if (known && known.wrapped && cur === known.wrapped) { return true; } // applyRules 重入
+    if (typeof cur === 'function') { return wrapFn(rule, spot.owner, spot.name, cur); }
+    return installSetterTrap(rule);
+  }
+
+  // ===== FUNCTION hook 兜底轮询 =====
   //
-  // 本脚本在 document-start 注入，此时页面的函数（尤其是外链 <script src> 里的）
-  // 通常还不存在。早期版本直接 hookFunction()，目标不存在就静默 return，
-  // 结果是规则上报 applied:true 却永远零命中 —— 这是最容易误判成"hook 引擎坏了"的坑。
-  // 现在把装不上的规则挂起，短暂轮询，等目标出现再装。
-  var FN_RETRY_INTERVAL_MS = 100;
-  var FN_RETRY_MAX_MS = 10000;
+  // setter 陷阱拦得住 `window.x = fn` 这种赋值，但拦不住 `function x() {}` 这种全局
+  // 函数声明 —— 声明走 DefineOwnProperty，会把我们的 accessor 整个替换掉，setter
+  // 根本不会被调用。所以还需要高频轮询把这种情况补上。16ms ≈ 一帧，比
+  // DOMContentLoaded 早得多；跑 3 秒覆盖典型加载期。
+  var FN_RETRY_INTERVAL_MS = 16;
+  var FN_RETRY_MAX_MS = 3000;
 
   function scheduleFnRetry(rule) {
     var deadline = Date.now() + FN_RETRY_MAX_MS;
@@ -850,14 +916,18 @@
         var cur = spot.owner[spot.name];
         var hooked = state.fnHooks[rule.target];
         if (hooked && hooked.wrapped && cur === hooked.wrapped) {
-          done = true;                                  // 已经装上了
+          done = true;                                      // 已经包上了
         } else if (typeof cur === 'function') {
-          done = hookFunction(rule);                    // 目标刚出现，立刻装
+          done = wrapFn(rule, spot.owner, spot.name, cur);   // 声明顶掉了陷阱，补包
         }
       }
       if (done || Date.now() > deadline) {
         clearInterval(timer);
-        report(done ? 'fn_attached' : 'fn_timeout', { rule: rule.id, target: rule.target });
+        var h = state.fnHooks[rule.target];
+        // 陷阱还在（页面一直没赋值）不算失败：它仍然有效，将来赋值照样能包上
+        if (!done && !(h && h.trap)) {
+          report('fn_timeout', { rule: rule.id, target: rule.target });
+        }
       }
     }, FN_RETRY_INTERVAL_MS);
     state.fnTimers = state.fnTimers || [];
@@ -935,7 +1005,10 @@
     for (i = 0; i < state.rules.length; i++) {
       r = state.rules[i];
       if (r.type === 'FUNCTION' || r.type === 'METHOD') {
-        if (!hookFunction(r)) { scheduleFnRetry(r); }
+        hookFunction(r);
+        // 两种情况都要轮询：①目标此刻不存在 ②目标存在但可能是声明型，
+        // 后续脚本会把它整个覆盖（覆盖后包装器就没了）。
+        scheduleFnRetry(r);
       } else if (r.type === 'PROPERTY') { hookProperty(r); }
     }
     runScripts(p.scripts || []);
@@ -966,4 +1039,7 @@
     reportError('init', e);
   }
   report('ready', { href: location.href });
+  // 自检：console_list 里连这条都没有，就说明「页面没打日志」和「上报链路断了」
+  // 分不清时，看这一条即可 —— 有它 = 链路通，页面确实没打印；没它 = runtime 没起来。
+  report('console', { level: 'info', text: '[rikka] hook runtime installed: ' + location.href });
 })();

@@ -19,7 +19,13 @@ object HookEventParser {
     private const val MAX_EVENT_BYTES = 512 * 1024
     private const val MAX_STRING_FIELD = 64 * 1024
     private const val MAX_HEADERS = 64
-    private val KINDS = setOf("ready", "net_req", "net_res", "hit", "ws", "hook_error", "console")
+    private val KINDS = setOf(
+        "ready", "net_req", "net_res", "hit", "ws", "hook_error", "console",
+        // function hook 的延迟装配结果：目标出现后挂上了 / 10 秒内没出现。
+        // 不注册这两个 kind 的话，runtime 上报上来会被直接丢弃，
+        // 使用者只能看到「applied:true + 零命中」，完全不知道钩子到底装没装上。
+        "fn_attached", "fn_timeout",
+    )
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -146,6 +152,14 @@ object HookEventParser {
                 boundTabId, ts,
                 data.clampStr("level", "LOG").uppercase(),
                 data.clampStr("text"),
+            )
+            "fn_attached" -> HookBridgeEvent.Console(
+                boundTabId, ts, "INFO",
+                "[hook] 函数目标已出现并挂上: ${data.clampStr("target")}",
+            )
+            "fn_timeout" -> HookBridgeEvent.Console(
+                boundTabId, ts, "WARNING",
+                "[hook] 函数目标 10s 内未出现，规则未生效: ${data.clampStr("target")}",
             )
             else -> null
         }

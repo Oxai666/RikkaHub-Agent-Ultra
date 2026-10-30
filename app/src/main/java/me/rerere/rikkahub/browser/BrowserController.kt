@@ -754,6 +754,56 @@ suspend fun WebView.evaluateJavascriptAsync(code: String, timeoutMs: Long = 8_00
  * page rather than a half-rendered intermediate state. Polls every 200 ms, exits early
  * on first complete reading.
  */
+/**
+ * loadUrl 之后等「导航真的开始」，再让调用方去等 readyState。
+ *
+ * loadUrl 是异步的：它返回时旧页面的 `document.readyState` 仍然是 `complete`，
+ * 紧接着调 [awaitReadyState] 会**瞬间通过**，于是 url / title 取到的全是上一页的。
+ * 真机上的表现就是「打开 A，返回 B 的标题」—— 有时还返回 URL 本身当标题。
+ *
+ * 返回 true 表示观察到了 URL 变化（真的开始导航了）。
+ */
+suspend fun WebView.awaitNavigationStarted(
+    beforeUrl: String,
+    timeoutMs: Long = 5_000L,
+): Boolean {
+    val deadline = System.currentTimeMillis() + timeoutMs
+    while (System.currentTimeMillis() < deadline) {
+        val cur = url.orEmpty()
+        if (cur.isNotBlank() && cur != beforeUrl) return true
+        kotlinx.coroutines.delay(50)
+    }
+    return false
+}
+
+/**
+ * 状态变更类工具（click / submit / type 触发提交）之后的等待策略：
+ * 先给最多 [navTimeoutMs] 观察 URL 是否变化，若变了说明是导航型操作，
+ * 再等新页面 readyState 完成；若没变就按普通页面更新处理。
+ *
+ * 之前的写法只调 [awaitReadyState]，在「点击已发出、导航尚未提交」的窗口里
+ * 会立刻返回，导致回执写着 unchanged + 旧 URL，而页面几秒后其实已经跳走。
+ * 调用方会误判失败并重试 —— 表单提交两次。
+ *
+ * 返回 true 表示发生了导航。
+ */
+suspend fun WebView.awaitActionSettled(
+    beforeUrl: String,
+    navTimeoutMs: Long = 2_500L,
+    settleTimeoutMs: Long = 8_000L,
+): Boolean {
+    val deadline = System.currentTimeMillis() + navTimeoutMs
+    while (System.currentTimeMillis() < deadline) {
+        if (url.orEmpty() != beforeUrl) {
+            awaitReadyState(settleTimeoutMs)
+            return true
+        }
+        kotlinx.coroutines.delay(100)
+    }
+    awaitReadyState(settleTimeoutMs)
+    return false
+}
+
 suspend fun WebView.awaitReadyState(timeoutMs: Long = 8_000L): Boolean {
     val deadline = System.currentTimeMillis() + timeoutMs
     while (System.currentTimeMillis() < deadline) {

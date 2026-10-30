@@ -49,6 +49,8 @@ import me.rerere.rikkahub.browser.HeadlessBrowserSessionPool
 import me.rerere.rikkahub.browser.ReadabilityRunner.runReadability
 import me.rerere.rikkahub.browser.awaitReadyState
 import me.rerere.rikkahub.browser.evaluateJavascriptAsync
+import me.rerere.rikkahub.browser.awaitActionSettled
+import me.rerere.rikkahub.browser.awaitNavigationStarted
 import me.rerere.rikkahub.data.ai.tools.HeadlessConversations
 import me.rerere.rikkahub.data.ai.tools.ToolInvocationContext
 import java.io.File
@@ -253,7 +255,11 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                     BrowserController.startTaskWindow()
                     val result = trackJsonAction(BrowserAiActionKind.OPEN, url) {
                         BrowserControllerHandle.withController {
+                            // loadUrl 是异步的：先记下旧 URL，等它真的变了再取 readyState，
+                            // 否则旧页面仍 complete，会立刻返回上一页的 url/title
+                            val beforeUrl = webView.url.orEmpty()
                             withContext(Dispatchers.Main) { webView.loadUrl(url) }
+                            webView.awaitNavigationStarted(beforeUrl)
                             webView.awaitReadyState(8_000L)
                             buildJsonObject {
                                 put("success", true)
@@ -293,9 +299,12 @@ fun browserOpenTool(context: Context, invocationContext: ToolInvocationContext? 
                             // passed as EXTRA_INITIAL_URL and the WebView began loading it
                             // before bind() returned. Skip a redundant second loadUrl — it
                             // would abort the in-flight load and restart from the top.
+                            val beforeUrl = webView.url.orEmpty()
                             if (wasAlreadyBound) {
                                 withContext(Dispatchers.Main) { webView.loadUrl(url) }
                             }
+                            // 同上：等导航真的开始，别在旧页面上采样
+                            webView.awaitNavigationStarted(beforeUrl)
                             webView.awaitReadyState(8_000L)
                             buildJsonObject {
                                 put("success", true)
@@ -573,9 +582,31 @@ fun browserSnapshotTool(): Tool = Tool(
                     var q = 'a[href],button,input,textarea,select,summary,[role=button],[role=link],'
                           + '[role=tab],[role=checkbox],[role=menuitem],[onclick],[contenteditable=true]';
                     function cssSel(el) {
-                        if (el.id) { try { return '#' + CSS.escape(el.id); } catch(e) { return '#' + el.id; } }
+                        if (el.id) {
+                            try {
+                                var ids = '#' + CSS.escape(el.id);
+                                if (document.querySelectorAll(ids).length === 1) return ids;
+                            } catch(e) {}
+                        }
                         var nm = el.getAttribute('name');
-                        if (nm) return el.tagName.toLowerCase() + '[name="' + nm.replace(/"/g,'\\"') + '"]';
+                        if (nm) {
+                            var nmSel = el.tagName.toLowerCase() + '[name="' + nm.replace(/"/g,'\\"') + '"]';
+                            try {
+                                if (document.querySelectorAll(nmSel).length === 1) return nmSel;
+                            } catch(e) {}
+                            // 不唯一（例如 4 个 checkbox 共用 name=topping、3 个 radio 共用 name=size）
+                            // 就继续往下走完整路径。否则 querySelector 静默取第一个匹配：
+                            // 点「cheese」实际勾中「bacon」，click 还返回 success:true，最难查的一类错。
+                            var vv = el.getAttribute('value');
+                            if (vv !== null) {
+                                var nmVal = nmSel + '[value=' + String.fromCharCode(34)
+                                          + String(vv).replace(/"/g,'\\')
+                                          + String.fromCharCode(34) + ']';
+                                try {
+                                    if (document.querySelectorAll(nmVal).length === 1) return nmVal;
+                                } catch(e) {}
+                            }
+                        }
                         var parts = [], cur = el, guard = 0;
                         while (cur && cur.nodeType === 1 && guard++ < 8) {
                             if (cur.id) { try { parts.unshift('#' + CSS.escape(cur.id)); } catch(e) { parts.unshift('#' + cur.id); } break; }
@@ -599,12 +630,18 @@ fun browserSnapshotTool(): Tool = Tool(
                         var txt = (el.innerText || el.value || el.getAttribute('aria-label')
                                   || el.getAttribute('placeholder') || el.getAttribute('title') || '');
                         txt = String(txt).replace(/\s+/g, ' ').trim().slice(0, 80);
+                        var sel = cssSel(el);
+                        // 显式告诉调用方选择器是否唯一。为 false 时它只命中第一个同类元素，
+                        // 直接拿去 click 大概率点错 —— 宁可让它知道，也不要静默。
+                        var uniq = false;
+                        try { uniq = document.querySelectorAll(sel).length === 1; } catch(e) {}
                         out.push({
                             ref: '@e' + (out.length + 1),
                             tag: el.tagName.toLowerCase(),
                             type: el.getAttribute('type') || '',
                             text: txt,
-                            selector: cssSel(el),
+                            selector: sel,
+                            selectorUnique: uniq,
                             x: Math.round(r.x), y: Math.round(r.y),
                             w: Math.round(r.width), h: Math.round(r.height)
                         });
@@ -863,25 +900,39 @@ fun browserHookRemoveTool(): Tool = Tool(
 
 fun browserHookHitsTool(): Tool = Tool(
     name = BrowserToolDefaults.HOOK_HITS,
-    description = "Recent hook hits (which rule matched which request/call, when). {count, hits:[{hookId,type,target,phase,summary,at}]}. " +
-        "Empty means no rule matched yet — check browser_hook_list that targets line up with real requests.",
+    description = "Recent hook hits (which rule matched which request/call, when). " +
+        "{count, latest, hits:[{hookId,type,target,phase,summary,at}]}. " +
+        "Empty means no rule matched yet — check browser_hook_list that targets line up with real requests. " +
+        "To poll for new hits, pass since=<latest from the previous call>: the reply then contains only " +
+        "entries newer than that, which also keeps the arguments changing so the repeat-call guard " +
+        "does not misfire on legitimate polling.",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {
             put("limit", buildJsonObject {
                 put("type", "integer")
                 put("description", "max entries, default 30")
             })
+            put("since", buildJsonObject {
+                put("type", "integer")
+                put("description", "only hits with at > since (epoch millis); pass previous reply's `latest`")
+            })
         })
     },
     execute = { input ->
         val limit = input.jsonObject["limit"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()?.coerceIn(1, 200) ?: 30
+        val since = input.jsonObject["since"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
         val bus = runCatching { hookEventBus() }.getOrNull()
         val out = if (bus == null) {
             buildJsonObject { put("error", "event bus unavailable") }
         } else {
-            val hits = bus.hookHits.value.takeLast(limit)
+            val all = bus.hookHits.value
+            val selected = if (since != null) all.filter { it.at > since } else all
+            val hits = selected.takeLast(limit)
             buildJsonObject {
                 put("count", hits.size)
+                // 下次轮询把 latest 原样传回来即可增量取
+                put("latest", all.lastOrNull()?.at ?: 0L)
+                if (since != null) put("since", since)
                 putJsonArray("hits") {
                     hits.forEach { hit ->
                         add(buildJsonObject {
@@ -1500,13 +1551,20 @@ fun browserClickTool(): Tool = Tool(
                                     return JSON.stringify({clicked:true});
                                 } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
                             })()"""
+                            val beforeUrl = webView.url.orEmpty()
                             val raw = webView.evaluateJavascriptAsync(js)
                             val res = parseJsResult(raw)
                             if (res.containsKey("error")) return@withDiff res
-                            webView.awaitReadyState(8_000L)
+                            // 点击后不一定立刻导航：只等 readyState 会撞上「旧页面仍 complete」，
+                            // 回执写成 unchanged + 旧 URL，而页面几秒后其实已经跳走。
+                            // 先观察 URL 是否变化，变了再等新页面加载完。
+                            val navigated = webView.awaitActionSettled(beforeUrl)
                             buildJsonObject {
                                 put("success", true)
                                 put("post_click_url", webView.url.orEmpty())
+                                // 明确告诉调用方这是导航型操作 —— 此时 diff 无意义，
+                                // 判断是否生效要看 post_click_url / current_url
+                                put("navigated", navigated)
                             }
                         }
                     }
