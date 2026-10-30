@@ -15,7 +15,12 @@ class HookRuleStore(
     private val maxBodyBytes: Int,
 ) {
     private val json = Json {
-        encodeDefaults = false
+        // 必须为 true。payload 里 v / actions / method / enabled 全都靠默认值填充：
+        //  - v=1 被省掉 → 页面侧 __rikkaApplyRules 的 `if (p.v !== 1) return` 直接拦下，
+        //    规则静默丢弃，hits 永远 0（真机实测就是这样，得手动补 v 才生效）；
+        //  - actions 被省掉 → 页面拿不到 block/mock/redirect，全部退化成 log。
+        // 一条规则多编码几十字节，换正确性值得。
+        encodeDefaults = true
         ignoreUnknownKeys = true
         classDiscriminator = "type"
     }
