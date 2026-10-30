@@ -36,6 +36,7 @@ import me.rerere.rikkahub.browser.hook.HookInstaller
 import me.rerere.rikkahub.browser.hook.HookRule
 import me.rerere.rikkahub.browser.hook.HookRuleStore
 import me.rerere.rikkahub.browser.hook.HookType
+import me.rerere.rikkahub.browser.hook.validate
 import me.rerere.rikkahub.browser.BrowserToolDefaults
 import me.rerere.rikkahub.browser.cdp.CdpAttach
 import me.rerere.rikkahub.browser.cdp.CdpProbe
@@ -499,6 +500,10 @@ fun browserHookCreateTool(): Tool = Tool(
                 put("type", "integer")
                 put("description", "mock HTTP status, default 200")
             })
+            put("capture_body", buildJsonObject {
+                put("type", "boolean")
+                put("description", "also capture request/response bodies (default false; bodies are capped by maxBodyBytes)")
+            })
         }, required = listOf("pattern", "action"))
     },
     execute = { input ->
@@ -507,6 +512,8 @@ fun browserHookCreateTool(): Tool = Tool(
         val typeName = input.jsonObject["type"]?.jsonPrimitive?.contentOrNull?.trim()?.lowercase()
         val value = input.jsonObject["value"]?.jsonPrimitive?.contentOrNull
         val status = input.jsonObject["status"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 200
+        val captureBody = input.jsonObject["capture_body"]?.jsonPrimitive?.contentOrNull
+            ?.toBooleanStrictOrNull() == true
 
         val hookType = when (typeName) {
             null, "", "fetch" -> HookType.FETCH
@@ -542,16 +549,28 @@ fun browserHookCreateTool(): Tool = Tool(
                 target = pattern,
                 scopeTabId = HOOK_TAB_ID,
                 actions = listOf(action),
+                captureBody = captureBody,
             )
-            store.install(rule)
-            val applied = pushHookRules()
-            buildJsonObject {
-                put("id", rule.id)
-                put("type", hookType.name.lowercase())
-                put("target", pattern)
-                put("action", actionLabel(action))
-                put("applied", applied)
-                if (!applied) put("note", "规则已保存，浏览器下次加载页面时生效")
+            // 之前不校验直接装：redirect/mock 用在 function 类型上、glob 写错等
+            // 都会静默变成"装了但永不命中"。现在把校验结果直接退回给模型。
+            val invalid = rule.validate()
+            if (invalid != null) {
+                buildJsonObject {
+                    put("error", invalid)
+                    put("hint", "fetch/xhr 支持 log/block/redirect/mock；" +
+                        "function/method 支持 log/replace；property 支持 log")
+                }
+            } else {
+                store.install(rule)
+                val applied = pushHookRules()
+                buildJsonObject {
+                    put("id", rule.id)
+                    put("type", hookType.name.lowercase())
+                    put("target", pattern)
+                    put("action", actionLabel(action))
+                    put("applied", applied)
+                    if (!applied) put("note", "规则已保存，浏览器下次加载页面时生效")
+                }
             }
         }
         textPart(out)
