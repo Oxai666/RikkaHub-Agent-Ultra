@@ -627,6 +627,12 @@ fun browserSnapshotTool(): Tool = Tool(
                         }
                         return parts.join(' > ');
                     }
+                    // 清掉上一轮留下的标记，避免 DOM 上越堆越多
+                    try {
+                        var stale = document.querySelectorAll('[data-rikka-ref]');
+                        for (var si = 0; si < stale.length; si++) stale[si].removeAttribute('data-rikka-ref');
+                    } catch(e) {}
+
                     var nodes = root.querySelectorAll(q);
                     var out = [];
                     for (var i = 0; i < nodes.length && out.length < MAX; i++) {
@@ -636,13 +642,23 @@ fun browserSnapshotTool(): Tool = Tool(
                         var txt = (el.innerText || el.value || el.getAttribute('aria-label')
                                   || el.getAttribute('placeholder') || el.getAttribute('title') || '');
                         txt = String(txt).replace(/\s+/g, ' ').trim().slice(0, 80);
-                        var sel = cssSel(el);
+                        var ref = '@e' + (out.length + 1);
+                        var sel;
+                        try {
+                            // 扫描时就地打标记，selector 换成属性选择器。
+                            // 比 nth-child 路径稳：元素被搬走、兄弟节点增删、列表重排都还能命中。
+                            // 这也是太墟的做法（data-taixu-ref），我们换成自己的前缀避免撞车。
+                            el.setAttribute('data-rikka-ref', ref);
+                            sel = '[data-rikka-ref="' + ref + '"]';
+                        } catch(e) {
+                            sel = cssSel(el);
+                        }
                         // 显式告诉调用方选择器是否唯一。为 false 时它只命中第一个同类元素，
                         // 直接拿去 click 大概率点错 —— 宁可让它知道，也不要静默。
                         var uniq = false;
                         try { uniq = document.querySelectorAll(sel).length === 1; } catch(e) {}
                         out.push({
-                            ref: '@e' + (out.length + 1),
+                            ref: ref,
                             tag: el.tagName.toLowerCase(),
                             type: el.getAttribute('type') || '',
                             text: txt,

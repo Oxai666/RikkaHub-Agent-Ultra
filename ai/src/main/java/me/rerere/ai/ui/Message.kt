@@ -24,11 +24,24 @@ data class UIMessage(
     val finishedAt: LocalDateTime? = null,
     val modelId: Uuid? = null,
     val usage: TokenUsage? = null,
+    // 模型实际生成耗时（各步累计，不含首 token 延迟、工具执行与审批等待）。
+    // 旧消息没有这个值，UI 回落到 createdAt → finishedAt 的总时长。
+    val generationTimeMs: Long? = null,
+    // 最后一次请求自己的 usage。usage 是多步累计值，看上下文占用/缓存命中要用这个。
+    val lastUsage: TokenUsage? = null,
+    // 这条消息累计请求了多少次模型（多轮工具调用共用同一条消息）
+    val stepCount: Int? = null,
     val translation: String? = null,
     // 请求期间生成的内部消息；该标记仅在内存中使用
     @Transient
     val isSynthetic: Boolean = false,
 ) {
+    /** 最后一次请求的 usage —— 看上下文占用和缓存命中用它，别看多步累计值。 */
+    fun lastRequestUsage(): TokenUsage? = lastUsage ?: usage
+
+    /** 当前上下文占用（最后一次请求的 prompt + completion）。 */
+    fun contextTokens(): Int? = lastRequestUsage()?.let { it.promptTokens + it.completionTokens }
+
     fun summaryAsText(maxLength: Int = Int.MAX_VALUE): String {
         val text = "[${role.name}]: " + parts.joinToString(separator = "\n") { part ->
             when (part) {
