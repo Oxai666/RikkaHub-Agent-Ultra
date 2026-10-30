@@ -186,7 +186,7 @@ class CdpManager(
                 as android.app.ActivityManager
             val pkg = ctx.packageName
             am.runningAppProcesses.orEmpty()
-                .filter { it.pkgName == pkg || it.pkgName.startsWith("$pkg:") }
+                .filter { it.processName == pkg || it.processName.startsWith("$pkg:") }
                 .map { it.pid }
                 .ifEmpty { fallback }
         }.getOrDefault(fallback)
@@ -202,8 +202,7 @@ class CdpManager(
         repeat(3) { attempt ->
             if (attempt > 0) discovery = DevToolsSocketResolver.discover(packagePids())
             for (name in discovery.candidates) {
-                val probeError: Exception
-                try {
+                val probeError: Exception = try {
                     val conn = LocalSocketCdpTransport(name).open()
                     val body = try {
                         HttpOverSocket.get(conn, "/json")
@@ -213,9 +212,9 @@ class CdpManager(
                     if (body.contains("webSocketDebuggerUrl")) {
                         return LocalSocketCdpTransport(name)
                     }
-                    probeError = IOException("$name: /json 无 webSocketDebuggerUrl（不是 devtools socket）")
+                    IOException("$name: /json 无 webSocketDebuggerUrl（不是 devtools socket）")
                 } catch (e: Exception) {
-                    probeError = e
+                    e
                 }
                 lastError = probeError
             }
