@@ -27,6 +27,7 @@ object BrowserToolDefaults {
     /** Hook 规则管理：读类默认开，写类默认关。 */
     const val HOOK_LIST = "browser_hook_list"
     const val HOOK_HITS = "browser_hook_hits"
+    const val NETWORK_LIST = "browser_network_list"
     const val HOOK_CREATE = "browser_hook_create"
     const val HOOK_REMOVE = "browser_hook_remove"
 
@@ -55,6 +56,7 @@ object BrowserToolDefaults {
         DEBUG_TARGETS,
         HOOK_LIST,
         HOOK_HITS,
+        NETWORK_LIST,
     )
 
     val WRITE_TOOLS: Set<String> = setOf(
@@ -70,6 +72,7 @@ object BrowserToolDefaults {
         DEBUG_TARGETS,
         HOOK_LIST,
         HOOK_HITS,
+        NETWORK_LIST,
         CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ,
         DEBUG_EVAL,
         HOOK_CREATE, HOOK_REMOVE,

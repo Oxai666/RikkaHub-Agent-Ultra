@@ -36,6 +36,7 @@ import me.rerere.rikkahub.browser.hook.HookInstaller
 import me.rerere.rikkahub.browser.hook.HookRule
 import me.rerere.rikkahub.browser.hook.HookRuleStore
 import me.rerere.rikkahub.browser.hook.HookType
+import me.rerere.rikkahub.browser.hook.NetworkBodyStore
 import me.rerere.rikkahub.browser.hook.validate
 import me.rerere.rikkahub.browser.BrowserToolDefaults
 import me.rerere.rikkahub.browser.cdp.CdpAttach
@@ -471,6 +472,79 @@ private suspend fun pushHookRules(): Boolean {
         }.isSuccess
     } ?: false
 }
+
+private const val MAX_NETWORK_BODY_CHARS = 4000
+
+private fun networkBodyStore(): NetworkBodyStore =
+    org.koin.java.KoinJavaComponent.getKoin().get()
+
+/**
+ * 网络请求列表。数据来自 hook 引擎（source="js"）：
+ * 只有**命中规则**的请求才会走上报路径，所以这里的条目天然是「你关心过的那批」。
+ * body 存在 NetworkBodyStore 里，只有规则开了 capture_body 才会有内容。
+ */
+fun browserNetworkListTool(): Tool = Tool(
+    name = BrowserToolDefaults.NETWORK_LIST,
+    description = "List network requests captured by the hook engine. Each entry has method/url/status/" +
+        "duration/sizes/hasRequestBody/hasResponseBody/ruleId/actionTaken. " +
+        "Pass with_body=true to attach stored bodies (only present when the rule had capture_body). " +
+        "Note: only requests matched by a hook rule get captured.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("limit", buildJsonObject {
+                put("type", "integer")
+                put("description", "max entries, default 20")
+            })
+            put("with_body", buildJsonObject {
+                put("type", "boolean")
+                put("description", "attach request/response bodies when stored")
+            })
+        })
+    },
+    execute = { input ->
+        val limit = input.jsonObject["limit"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()?.coerceIn(1, 200) ?: 20
+        val withBody = input.jsonObject["with_body"]?.jsonPrimitive?.contentOrNull
+            ?.toBooleanStrictOrNull() == true
+        val bus = runCatching { hookEventBus() }.getOrNull()
+        val bodyStore = runCatching { networkBodyStore() }.getOrNull()
+        val requests = bus?.network?.value.orEmpty().takeLast(limit)
+        val out = buildJsonObject {
+            put("count", requests.size)
+            if (requests.isEmpty()) {
+                put("hint", "没有捕获到请求：先确认有 hook 规则命中（browser_hook_hits），再触发页面请求")
+            }
+            putJsonArray("requests") {
+                requests.forEach { req ->
+                    add(buildJsonObject {
+                        put("id", req.id)
+                        put("method", req.method)
+                        put("url", req.url)
+                        put("status", req.statusCode)
+                        put("durationMs", req.durationMs)
+                        put("requestSize", req.requestSize)
+                        put("responseSize", req.responseSize)
+                        put("hasRequestBody", req.hasRequestBody)
+                        put("hasResponseBody", req.hasResponseBody)
+                        put("ruleId", req.ruleId)
+                        put("actionTaken", req.actionTaken)
+                        if (withBody) {
+                            val stored = bodyStore?.get(req.id)
+                            if (stored != null) {
+                                if (stored.requestBody.isNotBlank()) {
+                                    put("requestBody", stored.requestBody.take(MAX_NETWORK_BODY_CHARS))
+                                }
+                                if (stored.responseBody.isNotBlank()) {
+                                    put("responseBody", stored.responseBody.take(MAX_NETWORK_BODY_CHARS))
+                                }
+                            }
+                        }
+                    })
+                }
+            }
+        }
+        textPart(out)
+    },
+)
 
 fun browserHookCreateTool(): Tool = Tool(
     name = BrowserToolDefaults.HOOK_CREATE,
@@ -1905,6 +1979,7 @@ fun createBrowserTool(
     BrowserToolDefaults.HOOK_LIST -> browserHookListTool()
     BrowserToolDefaults.HOOK_REMOVE -> browserHookRemoveTool()
     BrowserToolDefaults.HOOK_HITS -> browserHookHitsTool()
+    BrowserToolDefaults.NETWORK_LIST -> browserNetworkListTool()
     BrowserToolDefaults.SCREENSHOT -> browserScreenshotTool(context)
     BrowserToolDefaults.GET_TEXT -> browserGetTextTool()
     BrowserToolDefaults.GET_DOM -> browserGetDomTool()
