@@ -1294,6 +1294,7 @@ class GenerationLoop(
                 recentChatsPrompt = recentChatsPrompt,
                 toolPrompts = toolPrompts,
                 systemAddendum = systemAddendum,
+                toolNames = tools.map { it.name }.toSet(),
             )
             val systemParts = buildList {
                 if (stableSystem.isNotBlank()) add(UIMessagePart.Text(stableSystem))

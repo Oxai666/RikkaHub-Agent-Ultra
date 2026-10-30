@@ -1237,6 +1237,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_section_files">文件管理器</string>
   <string name="assistant_page_local_tools_section_hardware">硬件控制</string>
   <string name="assistant_page_local_tools_section_media">媒体</string>
+  <string name="assistant_page_local_tools_web_fetch_title">网页抓取</string>
+  <string name="assistant_page_local_tools_web_fetch_desc">允许模型用 web_fetch / web_extract 直接抓网页。还需要在「设置 → 搜索 → 网页抓取」里打开全局开关。想要一个零工具的纯聊天助手，就把这里关掉。</string>
   <string name="assistant_page_local_tools_section_network">网络</string>
   <string name="assistant_page_local_tools_section_output">输出</string>
   <string name="assistant_page_local_tools_section_personal_data">个人数据</string>

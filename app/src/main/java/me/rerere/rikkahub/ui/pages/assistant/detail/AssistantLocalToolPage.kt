@@ -806,6 +806,20 @@ private fun AssistantLocalToolContent(
         CardGroup {
             item(
                 headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_web_fetch_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_web_fetch_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.WebFetch),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.WebFetch, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_ssh_title))
                 },
                 supportingContent = {

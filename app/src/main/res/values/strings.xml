@@ -1201,6 +1201,8 @@
   <string name="assistant_page_local_tools_section_automation">Automation</string>
   <string name="assistant_page_local_tools_cron_jobs_title">Scheduled jobs</string>
   <string name="assistant_page_local_tools_cron_jobs_desc">Let the assistant schedule prompts to run in the background later — once or on an interval. Jobs survive app close and reboot.</string>
+  <string name="assistant_page_local_tools_web_fetch_title">Web fetch</string>
+  <string name="assistant_page_local_tools_web_fetch_desc">Let the model fetch pages directly with web_fetch / web_extract. Also needs the global switch under Settings → Search → web fetch. Turn this off for a pure chat assistant with zero tools.</string>
   <string name="assistant_page_local_tools_section_network">Network</string>
   <string name="assistant_page_local_tools_ssh_title">SSH</string>
   <string name="assistant_page_local_tools_ssh_desc">Let the assistant run shell commands and transfer files on remote machines via SSH/SFTP. Saved hosts, password or private-key auth, accept-new host-key checking.</string>

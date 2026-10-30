@@ -28,13 +28,26 @@ class SystemPromptBuilder {
         recentChatsPrompt: String = "",
         toolPrompts: List<String> = emptyList(),
         systemAddendum: String? = null,
+        /** 本次真正注册的工具名。用来判断提示词里提到的东西存不存在。 */
+        toolNames: Set<String> = emptySet(),
     ): Pair<String, String> {
         val stable = buildString {
             if (assistantPrompt.isNotBlank()) append(assistantPrompt)
             if (toolPrompts.isNotEmpty()) {
                 if (isNotEmpty()) appendLine()
-                appendLine("Tool cost guidance: prefer low-cost text tools before expensive visual or broad tools. Use read_window_tree/browser_get_text before screenshots when text is enough, and avoid repeating high-cost tools unless the state likely changed.")
-                appendLine("Browser debugging order: browser_hook_create → browser_network_list / browser_hook_hits is the primary path and works on every device. browser_debug_attach (CDP) is optional; if it fails once on this device, stop retrying it and use hooks.")
+                // 这两行以前是无条件加的，结果一个工具都没勾的纯聊天助手，
+                // 提示词里照样写着 read_window_tree / browser_hook_create —— 模型真的会去调。
+                // 现在按实际注册的工具名决定，没挂就别提。
+                val hasExpensiveTools = toolNames.any {
+                    it == "read_window_tree" || it == "browser_get_text" ||
+                        it == "browser_screenshot" || it == "take_screenshot"
+                }
+                if (hasExpensiveTools) {
+                    appendLine("Tool cost guidance: prefer low-cost text tools before expensive visual or broad tools. Use read_window_tree/browser_get_text before screenshots when text is enough, and avoid repeating high-cost tools unless the state likely changed.")
+                }
+                if (toolNames.any { it.startsWith("browser_") }) {
+                    appendLine("Browser debugging order: browser_hook_create → browser_network_list / browser_hook_hits is the primary path and works on every device. browser_debug_attach (CDP) is optional; if it fails once on this device, stop retrying it and use hooks.")
+                }
                 toolPrompts.forEachIndexed { index, toolPrompt ->
                     if (index > 0) appendLine()
                     append(toolPrompt)

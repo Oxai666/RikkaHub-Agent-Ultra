@@ -193,6 +193,17 @@ sealed class LocalToolOption {
      * 新选项默认不勾选，原有助手配置不受影响。
      */
     @Serializable @SerialName("screen_vision") data object ScreenVision : LocalToolOption()
+    /**
+     * web_fetch / web_extract。
+     *
+     * 这两个以前**只有全局开关**（设置 → 搜索 → 网页抓取），没有助手级控制，
+     * 于是出现「助手一个工具都没勾，模型照样能抓网页」的情况 —— 用户想开一个纯聊天
+     * 助手根本做不到。现在纳入助手级开关，但保留全局开关作为总闸（两个都开才生效）。
+     *
+     * 注意：新选项默认不在 localTools 里，也就是默认关闭。升级后如果发现搜索没了，
+     * 到助手 → 工具 → 网络 → 网页抓取 勾一下即可。
+     */
+    @Serializable @SerialName("web_fetch") data object WebFetch : LocalToolOption()
     @Serializable @SerialName("app_launcher")      data object AppLauncher       : LocalToolOption()
     @Serializable @SerialName("termux")            data object Termux            : LocalToolOption()
     @Serializable @SerialName("notification_listener") data object NotificationListener : LocalToolOption()
@@ -1034,9 +1045,12 @@ class LocalTools(
                 }
             }
         }
-        // web_fetch/web_extract are always-on unless disabled in Search settings, no
-        // per-assistant toggle.
-        if (settingsStore.settingsFlow.value.enableWebFetchTools) {
+        // web_fetch/web_extract：全局开关（设置 → 搜索）+ 助手级开关，两个都开才注册。
+        // 之前只有全局那一个，导致「助手什么工具都没勾」也照样能抓网页，
+        // 想开纯聊天助手是做不到的。
+        if (settingsStore.settingsFlow.value.enableWebFetchTools &&
+            options.contains(LocalToolOption.WebFetch)
+        ) {
             tools.add(webFetchTool(okHttpClient))
             tools.add(webExtractTool(okHttpClient))
         }
