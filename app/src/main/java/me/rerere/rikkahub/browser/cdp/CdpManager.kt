@@ -181,9 +181,9 @@ class CdpManager(
      */
     private suspend fun discoverTransport(): LocalSocketCdpTransport {
         var lastError: Exception? = null
-        var discovery = DevToolsSocketResolver.discover(packagePids())
+        var discovery = DevToolsSocketResolver.discover(DevToolsSocketResolver.packagePids())
         repeat(3) { attempt ->
-            if (attempt > 0) discovery = DevToolsSocketResolver.discover(packagePids())
+            if (attempt > 0) discovery = DevToolsSocketResolver.discover(DevToolsSocketResolver.packagePids())
             for (name in discovery.candidates) {
                 val transport = LocalSocketCdpTransport(name)
                 try {
