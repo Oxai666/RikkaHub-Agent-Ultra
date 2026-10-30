@@ -10,6 +10,8 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.LinearLayout
 import java.io.File
+import me.rerere.rikkahub.browser.hook.HookInstaller
+import org.koin.core.context.GlobalContext
 
 /**
  * Pass 3: hosts a WebView offscreen, in the application process, for headless AI-driven
@@ -47,7 +49,24 @@ import java.io.File
  *    caller hasn't run a tool in a while, the LLM has likely moved on. This is the backstop
  *    for a caller FGS that died before browser_done/release fired.
  */
+/**
+ * headless 会话的 hook tabId。
+ *
+ * 与前台 [HOOK_TAB_ID]（"foreground"）区分开：两者的 WebView 可能同时在世，
+ * 共用 tabId 会让 docStartHandles / 事件路由串台。
+ */
+internal const val HEADLESS_TAB_ID = "headless"
+
 class HeadlessBrowserSession(private val context: Context) {
+
+    /**
+     * 页内 hook 运行时。headless 之前完全没接 —— 后台会话抓不到任何请求、
+     * 拿不到 console、所有 hook 规则形同虚设。这里从 koin 取全局单例；
+     * 取不到（早期启动、单测）就退化为无 hook，不影响浏览本身。
+     */
+    private val hookInstaller: HookInstaller? by lazy {
+        runCatching { GlobalContext.get().get<HookInstaller>() }.getOrNull()
+    }
 
     private var webView: WebView? = null
     private var host: LinearLayout? = null
@@ -102,6 +121,9 @@ class HeadlessBrowserSession(private val context: Context) {
             // paint into a software bitmap. Without this override the streamed PNG is all
             // white. Foreground mode keeps HARDWARE because it still renders to a real screen.
             setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+            // 页内 hook：document-start 脚本 + RikkaBridge。
+            // 缺这一段时 headless 的 browser_network_list / hook_hits / console_list 全是空的。
+            hookInstaller?.onWebViewCreated(HEADLESS_TAB_ID, this)
             // Visibility shim — re-injected on every page start. WebViewClient.onPageStarted
             // fires before page JS runs, which is the only window where overriding the
             // descriptor changes future reads.
@@ -120,6 +142,13 @@ class HeadlessBrowserSession(private val context: Context) {
                 override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                     super.onPageStarted(view, url, favicon)
                     view.evaluateJavascript(VISIBILITY_SHIM_JS, null)
+                    // DOCUMENT_START_SCRIPT 不支持的 WebView 版本上靠这里兜底补种
+                    hookInstaller?.injectFallback(view)
+                }
+
+                override fun onPageFinished(view: WebView, url: String?) {
+                    super.onPageFinished(view, url)
+                    hookInstaller?.verifyInstalled(view)
                 }
             }
             // Per-WebView third-party cookie enable — must be called after the WebView

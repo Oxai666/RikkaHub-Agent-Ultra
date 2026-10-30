@@ -104,6 +104,9 @@ class HookEventPipeline(
                     event.ts,
                 )
             )
+            is HookBridgeEvent.Console -> eventBus.publish(
+                BrowserEvent.ConsoleLogged(event.tabId, event.level, event.text, event.ts)
+            )
         }
     }
 

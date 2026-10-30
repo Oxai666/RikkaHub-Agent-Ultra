@@ -1685,6 +1685,8 @@
   <string name="browser_mini_chat_title">Ask the AI</string>
   <string name="browser_mini_chat_placeholder">Tell the AI what to do…</string>
   <string name="browser_mini_chat_generating">Thinking…</string>
+  <string name="browser_mini_chat_copied">Copied</string>
+  <string name="browser_mini_chat_forked">Branch created</string>
   <string name="browser_mini_chat_send">Send</string>
   <string name="skill_webview_card_embedded">Embedded viewer</string>
   <string name="skill_webview_card_direct">Direct viewer</string>

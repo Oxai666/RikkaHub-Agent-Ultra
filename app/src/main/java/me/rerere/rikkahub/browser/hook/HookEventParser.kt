@@ -19,7 +19,7 @@ object HookEventParser {
     private const val MAX_EVENT_BYTES = 512 * 1024
     private const val MAX_STRING_FIELD = 64 * 1024
     private const val MAX_HEADERS = 64
-    private val KINDS = setOf("ready", "net_req", "net_res", "hit", "ws", "hook_error")
+    private val KINDS = setOf("ready", "net_req", "net_res", "hit", "ws", "hook_error", "console")
 
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 
@@ -75,6 +75,17 @@ object HookEventParser {
         ) : HookBridgeEvent()
 
         data class HookError(override val tabId: String, override val ts: Long, val stage: String, val message: String) : HookBridgeEvent()
+
+        /**
+         * 页面 console 输出（log/warn/error/info/debug），**不依赖任何 CONSOLE 规则**。
+         * 这是 browser_console_list 的数据源：调试时先看日志再决定要不要下 hook。
+         */
+        data class Console(
+            override val tabId: String,
+            override val ts: Long,
+            val level: String,
+            val text: String,
+        ) : HookBridgeEvent()
     }
 
     /** 解析失败返回 null（调用方静默丢弃并计数，不抛异常打爆日志）。 */
@@ -131,6 +142,11 @@ object HookEventParser {
                 detailJson = data.strOrNull("detail") ?: "",
             )
             "hook_error" -> HookBridgeEvent.HookError(boundTabId, ts, data.clampStr("stage"), data.clampStr("message"))
+            "console" -> HookBridgeEvent.Console(
+                boundTabId, ts,
+                data.clampStr("level", "LOG").uppercase(),
+                data.clampStr("text"),
+            )
             else -> null
         }
     }

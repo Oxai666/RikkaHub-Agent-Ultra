@@ -28,6 +28,10 @@ object BrowserToolDefaults {
     const val HOOK_LIST = "browser_hook_list"
     const val HOOK_HITS = "browser_hook_hits"
     const val NETWORK_LIST = "browser_network_list"
+    /** 可交互元素快照：给 AI 一份「点这里」的清单，省去猜 selector。只读、默认开。 */
+    const val SNAPSHOT = "browser_snapshot"
+    /** 页面 console 输出（log/warn/error/info/debug）。只读、零副作用，默认开。 */
+    const val CONSOLE_LIST = "browser_console_list"
     /** CDP 断点调试：读类默认开，写类默认关。 */
     const val DEBUG_STATUS = "browser_debug_status"
     const val DEBUG_LIST_BREAKPOINTS = "browser_debug_list_breakpoints"
@@ -63,10 +67,12 @@ object BrowserToolDefaults {
 
     val READ_TOOLS: Set<String> = setOf(
         OPEN, CURRENT_URL, SCREENSHOT, GET_TEXT, GET_DOM, GET_LINKS, BACK, FORWARD, WAIT_FOR,
+        SNAPSHOT,
         DEBUG_TARGETS,
         HOOK_LIST,
         HOOK_HITS,
         NETWORK_LIST,
+        CONSOLE_LIST,
         DEBUG_STATUS,
         DEBUG_LIST_BREAKPOINTS,
         DEBUG_STATE,
@@ -84,10 +90,12 @@ object BrowserToolDefaults {
     /** Stable display order for the Settings page. Read first, then write, then loop-control. */
     val ALL_TOOLS: List<String> = listOf(
         OPEN, CURRENT_URL, SCREENSHOT, GET_TEXT, GET_DOM, GET_LINKS, BACK, FORWARD, WAIT_FOR,
+        SNAPSHOT,
         DEBUG_TARGETS,
         HOOK_LIST,
         HOOK_HITS,
         NETWORK_LIST,
+        CONSOLE_LIST,
         DEBUG_STATUS,
         DEBUG_LIST_BREAKPOINTS,
         DEBUG_STATE,

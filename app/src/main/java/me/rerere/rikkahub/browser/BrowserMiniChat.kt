@@ -39,7 +39,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
+import me.rerere.ai.ui.UIMessage
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -117,6 +125,8 @@ fun BrowserMiniChat(
         .collectAsStateWithLifecycle()
 
     val isGenerating = processingStatus != null
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     // 直接用会话里的 MessageNode，渲染交给 ChatMessage —— 小窗要「和会话一模一样」，
     // 手搓气泡永远追不上主界面的工具卡片/思考折叠/Markdown。
@@ -164,6 +174,23 @@ fun BrowserMiniChat(
                         )
                     },
                     onCollapse = { expanded = false },
+                    onRegenerate = { msg ->
+                        // 非 suspend：内部自己开 job
+                        chatService.regenerateAtMessage(conversationId, msg)
+                    },
+                    onFork = { msg ->
+                        scope.launch {
+                            runCatching { chatService.forkConversationAtMessage(conversationId, msg.id) }
+                                .onSuccess {
+                                    Toast.makeText(context, R.string.browser_mini_chat_forked, Toast.LENGTH_SHORT).show()
+                                }
+                        }
+                    },
+                    onDelete = { msg ->
+                        scope.launch {
+                            runCatching { chatService.deleteMessage(conversationId, msg.id) }
+                        }
+                    },
                 )
             } else {
                 BrowserMiniChatPill(
@@ -235,8 +262,12 @@ private fun BrowserMiniChatCard(
     isGenerating: Boolean,
     onSend: (String) -> Unit,
     onCollapse: () -> Unit,
+    onRegenerate: (UIMessage) -> Unit,
+    onFork: (UIMessage) -> Unit,
+    onDelete: (UIMessage) -> Unit,
 ) {
     var input by remember { mutableStateOf("") }
+    val cardContext = LocalContext.current
     val keyboard = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
 
@@ -307,11 +338,30 @@ private fun BrowserMiniChatCard(
                             loading = isGenerating && index == nodes.lastIndex,
                             generationActive = isGenerating,
                             lastMessage = index == nodes.lastIndex,
-                            onFork = {},
-                            onRegenerate = {},
-                            onEdit = {},
-                            onShare = {},
-                            onDelete = {},
+                            onFork = { onFork(node.currentMessage) },
+                            onRegenerate = { onRegenerate(node.currentMessage) },
+                            onEdit = {
+                                // 小窗里没有编辑面板，就把原文回填到输入框，
+                                // 用户改完直接发 —— 比留个死按钮强。
+                                val text = node.currentMessage.parts
+                                    .filterIsInstance<UIMessagePart.Text>()
+                                    .joinToString("") { it.text }
+                                if (text.isNotBlank()) {
+                                    input = text
+                                    keyboard?.show()
+                                }
+                            },
+                            onShare = {
+                                val text = node.currentMessage.parts
+                                    .filterIsInstance<UIMessagePart.Text>()
+                                    .joinToString("") { it.text }
+                                if (text.isNotBlank()) {
+                                    val cm = cardContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    cm.setPrimaryClip(ClipData.newPlainText("message", text))
+                                    Toast.makeText(cardContext, R.string.browser_mini_chat_copied, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onDelete = { onDelete(node.currentMessage) },
                             onUpdate = {},
                         )
                     }

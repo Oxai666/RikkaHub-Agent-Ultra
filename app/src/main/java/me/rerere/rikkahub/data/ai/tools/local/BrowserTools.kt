@@ -487,6 +487,151 @@ private fun networkBodyStore(): NetworkBodyStore =
  * 只有**命中规则**的请求才会走上报路径，所以这里的条目天然是「你关心过的那批」。
  * body 存在 NetworkBodyStore 里，只有规则开了 capture_body 才会有内容。
  */
+fun browserConsoleListTool(): Tool = Tool(
+    name = BrowserToolDefaults.CONSOLE_LIST,
+    description = "Read page console output captured so far: {count, lines:[{level, message, at}]}. " +
+        "log/warn/error/info/debug are recorded unconditionally — no hook rule required, works on every " +
+        "device (unlike CDP). Use it as the first diagnostic: page-side errors usually explain why a " +
+        "request never fired or a click did nothing. Filter with level='error' or a substring in `grep` " +
+        "when the page is chatty. Buffer holds the most recent entries per session.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("limit", buildJsonObject {
+                put("type", "integer")
+                put("description", "max entries, default 50")
+            })
+            put("level", buildJsonObject {
+                put("type", "string")
+                put("description", "only this level, e.g. error / warn / log")
+            })
+            put("grep", buildJsonObject {
+                put("type", "string")
+                put("description", "case-insensitive substring filter on message")
+            })
+        })
+    },
+    execute = { input ->
+        val limit = input.jsonObject["limit"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()?.coerceIn(1, 500) ?: 50
+        val levelFilter = input.jsonObject["level"]?.jsonPrimitive?.contentOrNull?.trim()?.uppercase()
+        val grep = input.jsonObject["grep"]?.jsonPrimitive?.contentOrNull?.trim()
+        val bus = runCatching { hookEventBus() }.getOrNull()
+        val all = bus?.console?.value.orEmpty()
+        val filtered = all.filter { line ->
+            (levelFilter.isNullOrEmpty() || line.level.equals(levelFilter, ignoreCase = true)) &&
+                (grep.isNullOrEmpty() || line.message.contains(grep, ignoreCase = true))
+        }.takeLast(limit)
+        val out = buildJsonObject {
+            put("count", filtered.size)
+            put("total", all.size)
+            if (all.isEmpty()) {
+                put("hint", "还没有 console 输出：确认页面已加载（browser_open 后稍等），或页面本身没有打印")
+            }
+            putJsonArray("lines") {
+                filtered.forEach { line ->
+                    add(buildJsonObject {
+                        put("level", line.level)
+                        put("message", line.message)
+                        put("at", line.at)
+                    })
+                }
+            }
+        }
+        textPart(out)
+    },
+)
+
+fun browserSnapshotTool(): Tool = Tool(
+    name = BrowserToolDefaults.SNAPSHOT,
+    description = "Snapshot the interactive elements of the page: {count, elements:[{ref, tag, type, text, " +
+        "selector, x, y, w, h}]}. Cheaper and far more reliable than guessing CSS selectors: read the list, " +
+        "then pass the `selector` field straight to browser_click / browser_type / browser_select. " +
+        "Only visible elements are returned, in DOM order; refs (@e1, @e2 …) belong to this snapshot only — " +
+        "call it again after the page changes.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("selector", buildJsonObject {
+                put("type", "string")
+                put("description", "limit the scan to this subtree, e.g. 'main' or '#login'. Default body")
+            })
+            put("max", buildJsonObject {
+                put("type", "integer")
+                put("description", "max elements, default 60, cap 200")
+            })
+        })
+    },
+    execute = { input ->
+        val selector = input.jsonObject["selector"]?.jsonPrimitive?.contentOrNull?.trim()
+            ?.takeIf { it.isNotBlank() } ?: "body"
+        val max = (input.jsonObject["max"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 60)
+            .coerceIn(1, 200)
+        val code = """
+            (function(){
+                try {
+                    var root = document.querySelector(${jsString(selector)});
+                    if (!root) return JSON.stringify({error:'selector_not_found', selector:${jsString(selector)}});
+                    var MAX = $max;
+                    var q = 'a[href],button,input,textarea,select,summary,[role=button],[role=link],'
+                          + '[role=tab],[role=checkbox],[role=menuitem],[onclick],[contenteditable=true]';
+                    function cssSel(el) {
+                        if (el.id) { try { return '#' + CSS.escape(el.id); } catch(e) { return '#' + el.id; } }
+                        var nm = el.getAttribute('name');
+                        if (nm) return el.tagName.toLowerCase() + '[name="' + nm.replace(/"/g,'\\"') + '"]';
+                        var parts = [], cur = el, guard = 0;
+                        while (cur && cur.nodeType === 1 && guard++ < 8) {
+                            if (cur.id) { try { parts.unshift('#' + CSS.escape(cur.id)); } catch(e) { parts.unshift('#' + cur.id); } break; }
+                            var tag = cur.tagName.toLowerCase();
+                            var par = cur.parentElement;
+                            if (par) {
+                                var idx = Array.prototype.indexOf.call(par.children, cur) + 1;
+                                tag += ':nth-child(' + idx + ')';
+                            }
+                            parts.unshift(tag);
+                            cur = par;
+                        }
+                        return parts.join(' > ');
+                    }
+                    var nodes = root.querySelectorAll(q);
+                    var out = [];
+                    for (var i = 0; i < nodes.length && out.length < MAX; i++) {
+                        var el = nodes[i];
+                        var r = el.getBoundingClientRect();
+                        if (r.width <= 1 && r.height <= 1) continue;
+                        var txt = (el.innerText || el.value || el.getAttribute('aria-label')
+                                  || el.getAttribute('placeholder') || el.getAttribute('title') || '');
+                        txt = String(txt).replace(/\s+/g, ' ').trim().slice(0, 80);
+                        out.push({
+                            ref: '@e' + (out.length + 1),
+                            tag: el.tagName.toLowerCase(),
+                            type: el.getAttribute('type') || '',
+                            text: txt,
+                            selector: cssSel(el),
+                            x: Math.round(r.x), y: Math.round(r.y),
+                            w: Math.round(r.width), h: Math.round(r.height)
+                        });
+                    }
+                    return JSON.stringify({
+                        url: location.href,
+                        title: document.title,
+                        total: nodes.length,
+                        count: out.length,
+                        elements: out
+                    });
+                } catch(e) { return JSON.stringify({error:'js_failed', detail:String(e)}); }
+            })()
+        """.trimIndent()
+        val out = withTimeoutOrNull(toolTimeoutMs) {
+            runCatching {
+                BrowserControllerHandle.withController {
+                    parseJsResult(webView.evaluateJavascriptAsync(code))
+                }
+            }.getOrElse { e ->
+                buildJsonObject { put("error", "${e.javaClass.simpleName}: ${e.message}") }
+            }
+        } ?: timeoutEnvelope(BrowserToolDefaults.SNAPSHOT)
+        textPart(out)
+    },
+)
+
 fun browserNetworkListTool(): Tool = Tool(
     name = BrowserToolDefaults.NETWORK_LIST,
     description = "List network requests captured by the hook engine. Each entry has method/url/status/" +
@@ -555,7 +700,9 @@ fun browserHookCreateTool(): Tool = Tool(
     description = "Install a page hook rule. Wraps the page's fetch / XHR / WebSocket / function / property at document-start. " +
         "Action: log (record hits), block (abort), redirect (rewrite URL), mock (fabricate response body). " +
         "pattern is a URL glob for fetch/xhr/websocket (e.g. https://api.example.com/*) or a function path (e.g. JSON.parse). " +
-        "Returns {id, applied}. Rules persist for the session and take effect on the next page load even if the browser is closed.",
+        "Returns {id, applied}. Rules persist for the session and take effect on the next page load even if the browser is closed. " +
+        "This is the PRIMARY interception path on this app: it works on every device, whereas CDP attach may be " +
+        "refused by the ROM. Prefer it over browser_debug_* unless you specifically need pause/step/call-stack.",
     parameters = {
         InputSchema.Obj(properties = buildJsonObject {
             put("pattern", buildJsonObject {
@@ -776,7 +923,12 @@ fun browserDebugAttachTool(): Tool = Tool(
     description = "Attach the Chrome DevTools Protocol session to the active WebView tab. " +
         "Enables real breakpoints and engine-level Fetch interception (covers Service/Web Workers). " +
         "Idempotent: attaching twice returns already=true. Breakpoints set before a detach are replayed on re-attach. " +
-        "Call browser_debug_detach when done; a paused page stays frozen until browser_debug_resume.",
+        "Call browser_debug_detach when done; a paused page stays frozen until browser_debug_resume. " +
+        "IMPORTANT — DEGRADE, DO NOT RETRY: if this returns an error containing 'Try again', 'timeout' or " +
+        "'对端不响应', the device's WebView devtools channel is not serving requests (seen on some ROMs; " +
+        "it is a device limitation, not a bug you can work around). Do NOT call it a second time. " +
+        "Switch to browser_hook_create immediately — log/mock/redirect/block plus captureBody give you " +
+        "request body, response body, headers and status without CDP.",
     parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
     execute = {
         val out = withTimeoutOrNull(toolTimeoutMs) {
@@ -945,7 +1097,10 @@ fun browserDebugRemoveBreakpointTool(): Tool = Tool(
 fun browserDebugStateTool(): Tool = Tool(
     name = BrowserToolDefaults.DEBUG_STATE,
     description = "Read the paused state: {paused, reason, hitBreakpoints, callFrames:[{callFrameId,functionName,url,line,column,scopes}]}. " +
-        "Empty when the page is running. A frozen page must be released with browser_debug_resume.",
+        "Empty when the page is running. A frozen page must be released with browser_debug_resume. " +
+        "If browser_debug_attach never succeeded on this device, do not call this — use browser_network_list " +
+        "(captured traffic) and browser_hook_hits (rule matches) instead; they carry the same " +
+        "request/response evidence without CDP.",
     parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
     execute = {
         val bus = runCatching { hookEventBus() }.getOrNull()
@@ -2291,6 +2446,8 @@ fun createBrowserTool(
     BrowserToolDefaults.HOOK_REMOVE -> browserHookRemoveTool()
     BrowserToolDefaults.HOOK_HITS -> browserHookHitsTool()
     BrowserToolDefaults.NETWORK_LIST -> browserNetworkListTool()
+    BrowserToolDefaults.CONSOLE_LIST -> browserConsoleListTool()
+    BrowserToolDefaults.SNAPSHOT -> browserSnapshotTool()
     BrowserToolDefaults.DEBUG_ATTACH -> browserDebugAttachTool()
     BrowserToolDefaults.DEBUG_STATUS -> browserDebugStatusTool()
     BrowserToolDefaults.DEBUG_SET_BREAKPOINT -> browserDebugSetBreakpointTool()

@@ -1308,6 +1308,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="browser_mini_chat_generating">思考中…</string>
   <string name="browser_mini_chat_open">打开 AI 聊天</string>
   <string name="browser_mini_chat_placeholder">告诉 AI 要做什么…</string>
+  <string name="browser_mini_chat_copied">已复制</string>
+  <string name="browser_mini_chat_forked">已创建分支</string>
   <string name="browser_mini_chat_send">发送</string>
   <string name="browser_mini_chat_title">询问 AI</string>
   <string name="chat_drawer_statistics">统计数据</string>

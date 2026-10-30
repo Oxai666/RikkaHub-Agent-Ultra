@@ -682,6 +682,13 @@
         var orig = console[level];
         if (typeof orig !== 'function') { return; }
         console[level] = function () {
+          // 无论有没有 CONSOLE 规则都留一份，供 browser_console_list 读取。
+          // 限流：超过 MAX_CONSOLE_REPORT 条后停报，避免刷屏页面拖垮桥。
+          if (!state.consoleCount) { state.consoleCount = 0; }
+          if (state.consoleCount < 500) {
+            state.consoleCount++;
+            report('console', { level: level, text: argsSummary(arguments) });
+          }
           if (state.rules.length) {
             var rules = typeRules('CONSOLE');
             for (var j = 0; j < rules.length; j++) {
@@ -782,6 +789,7 @@
   }
 
   function restoreFnHooks() {
+    clearFnTimers();
     for (var path in state.fnHooks) {
       if (!Object.prototype.hasOwnProperty.call(state.fnHooks, path)) { continue; }
       var h = state.fnHooks[path];
@@ -796,9 +804,9 @@
 
   function hookFunction(rule) {
     var spot = resolvePath(rule.target);
-    if (!spot) { return; }
+    if (!spot) { return false; }
     var orig = spot.owner[spot.name];
-    if (typeof orig !== 'function') { return; }
+    if (typeof orig !== 'function') { return false; }
     var wrapped = function () {
       var replaceAct = hasAction(rule, 'replace');
       var blocked = !!hasAction(rule, 'block');
@@ -820,7 +828,46 @@
     try {
       spot.owner[spot.name] = wrapped;
       state.fnHooks[rule.target] = { owner: spot.owner, name: spot.name, orig: orig, wrapped: wrapped };
-    } catch (e) { /* 只读属性跳过 */ }
+      return true;
+    } catch (e) { return false; } /* 只读属性跳过 */
+  }
+
+  // ===== FUNCTION hook 延迟装配 =====
+  //
+  // 本脚本在 document-start 注入，此时页面的函数（尤其是外链 <script src> 里的）
+  // 通常还不存在。早期版本直接 hookFunction()，目标不存在就静默 return，
+  // 结果是规则上报 applied:true 却永远零命中 —— 这是最容易误判成"hook 引擎坏了"的坑。
+  // 现在把装不上的规则挂起，短暂轮询，等目标出现再装。
+  var FN_RETRY_INTERVAL_MS = 100;
+  var FN_RETRY_MAX_MS = 10000;
+
+  function scheduleFnRetry(rule) {
+    var deadline = Date.now() + FN_RETRY_MAX_MS;
+    var timer = setInterval(function () {
+      var spot = resolvePath(rule.target);
+      var done = false;
+      if (spot) {
+        var cur = spot.owner[spot.name];
+        var hooked = state.fnHooks[rule.target];
+        if (hooked && hooked.wrapped && cur === hooked.wrapped) {
+          done = true;                                  // 已经装上了
+        } else if (typeof cur === 'function') {
+          done = hookFunction(rule);                    // 目标刚出现，立刻装
+        }
+      }
+      if (done || Date.now() > deadline) {
+        clearInterval(timer);
+        report(done ? 'fn_attached' : 'fn_timeout', { rule: rule.id, target: rule.target });
+      }
+    }, FN_RETRY_INTERVAL_MS);
+    state.fnTimers = state.fnTimers || [];
+    state.fnTimers.push(timer);
+  }
+
+  function clearFnTimers() {
+    if (!state.fnTimers) { return; }
+    for (var i = 0; i < state.fnTimers.length; i++) { clearInterval(state.fnTimers[i]); }
+    state.fnTimers = [];
   }
 
   function hookProperty(rule) {
@@ -887,8 +934,9 @@
     restoreFnHooks();
     for (i = 0; i < state.rules.length; i++) {
       r = state.rules[i];
-      if (r.type === 'FUNCTION' || r.type === 'METHOD') { hookFunction(r); }
-      else if (r.type === 'PROPERTY') { hookProperty(r); }
+      if (r.type === 'FUNCTION' || r.type === 'METHOD') {
+        if (!hookFunction(r)) { scheduleFnRetry(r); }
+      } else if (r.type === 'PROPERTY') { hookProperty(r); }
     }
     runScripts(p.scripts || []);
   }

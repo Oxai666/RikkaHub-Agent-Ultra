@@ -34,6 +34,7 @@ class SystemPromptBuilder {
             if (toolPrompts.isNotEmpty()) {
                 if (isNotEmpty()) appendLine()
                 appendLine("Tool cost guidance: prefer low-cost text tools before expensive visual or broad tools. Use read_window_tree/browser_get_text before screenshots when text is enough, and avoid repeating high-cost tools unless the state likely changed.")
+                appendLine("Browser debugging order: browser_hook_create → browser_network_list / browser_hook_hits is the primary path and works on every device. browser_debug_attach (CDP) is optional; if it fails once on this device, stop retrying it and use hooks.")
                 toolPrompts.forEachIndexed { index, toolPrompt ->
                     if (index > 0) appendLine()
                     append(toolPrompt)
