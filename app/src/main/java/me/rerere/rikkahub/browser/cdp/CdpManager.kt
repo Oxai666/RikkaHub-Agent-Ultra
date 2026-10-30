@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.browser.cdp
 
+import android.os.Process
 import android.util.Log
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
@@ -168,20 +169,55 @@ class CdpManager(
         else persistedBreakpoints.remove(tabId)
     }
 
-    /** socket 发现：候选逐个试连；全部失败延迟 300ms 重试，共 3 次。 */
+    /**
+     * 本包名下所有进程的 pid。
+     *
+     * WebView 的 devtools socket 由持有 WebView 的那个进程创建；只要 pid 猜错，
+     * connect 仍会成功（抽象 namespace 里同名 socket 存在时），但对面不答 HTTP，
+     * 于是 GET /json 抛 EAGAIN。所以要把同包进程全试一遍。
+     */
+    private fun packagePids(): List<Int> {
+        val fallback = listOf(Process.myPid())
+        val ctx = runCatching {
+            org.koin.java.KoinJavaComponent.getKoin().get<android.content.Context>()
+        }.getOrNull() ?: return fallback
+        return runCatching {
+            val am = ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE)
+                as android.app.ActivityManager
+            val pkg = ctx.packageName
+            am.runningAppProcesses.orEmpty()
+                .filter { it.pkgName == pkg || it.pkgName.startsWith("$pkg:") }
+                .map { it.pid }
+                .ifEmpty { fallback }
+        }.getOrDefault(fallback)
+    }
+
+    /**
+     * socket 发现：候选逐个**用 GET /json 验证**（不是只 connect —— 抽象 socket 谁都能连上，
+     * 连到死 socket 会得到「connect 成功但没人应答」的假阳性），全部失败延迟 300ms 重试共 3 次。
+     */
     private suspend fun discoverTransport(): LocalSocketCdpTransport {
         var lastError: Exception? = null
-        var discovery = DevToolsSocketResolver.discover()
+        var discovery = DevToolsSocketResolver.discover(packagePids())
         repeat(3) { attempt ->
-            if (attempt > 0) discovery = DevToolsSocketResolver.discover()
+            if (attempt > 0) discovery = DevToolsSocketResolver.discover(packagePids())
             for (name in discovery.candidates) {
-                val transport = LocalSocketCdpTransport(name)
+                val probeError: Exception
                 try {
-                    transport.open().close()
-                    return transport
+                    val conn = LocalSocketCdpTransport(name).open()
+                    val body = try {
+                        HttpOverSocket.get(conn, "/json")
+                    } finally {
+                        conn.close()
+                    }
+                    if (body.contains("webSocketDebuggerUrl")) {
+                        return LocalSocketCdpTransport(name)
+                    }
+                    probeError = IOException("$name: /json 无 webSocketDebuggerUrl（不是 devtools socket）")
                 } catch (e: Exception) {
-                    lastError = e
+                    probeError = e
                 }
+                lastError = probeError
             }
             if (attempt < 2) delay(300)
         }

@@ -58,6 +58,14 @@ const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 class RikkaHubApp : Application() {
     override fun onCreate() {
         super.onCreate()
+
+        // WebView 的 devtools socket 是在进程首次初始化 WebView 时就注册的。
+        // 如果等到 CDP attach 时才 setWebContentsDebuggingEnabled(true)，socket 可能
+        // 早就以「未调试」状态建好了，于是出现「连得上但 GET /json 不应答」。
+        // 所以启动即开（仅 debug 构建；socket 只对本机同 UID 可见）。
+        if (BuildConfig.DEBUG) {
+            runCatching { android.webkit.WebView.setWebContentsDebuggingEnabled(true) }
+        }
         // Restore files and settings before eager Koin singletons or workers can access them.
         try {
             val restored = runBlocking(Dispatchers.IO) {

@@ -97,13 +97,19 @@ object DevToolsSocketResolver {
 
     data class Discovery(val candidates: List<String>, val scanError: String?)
 
-    /** 候选列表（按优先级）；调用方逐个试连。 */
+    /**
+     * 候选列表（按优先级）；调用方逐个试连。
+     *
+     * pids 传**本包所有进程的 pid**：WebView 的 devtools socket 只有 browser 进程会建，
+     * 而多进程 App 里 myPid() 不一定是持有 WebView 的那个进程。真机上只猜 myPid 会连到
+     * 一个「能 connect 但谁都不应答」的抽象 socket（表现为 GET /json 抛 EAGAIN/Try again）。
+     */
     fun discover(
-        pid: Int = Process.myPid(),
+        pids: List<Int> = listOf(Process.myPid()),
         readUnixSockets: () -> List<String> = { File("/proc/net/unix").readLines() },
     ): Discovery {
-        val result = ArrayList<String>(2)
-        result += PREFIX + pid
+        val result = ArrayList<String>(pids.size + 2)
+        pids.distinct().forEach { result += PREFIX + it }
         val scan = runCatching { readUnixSockets() }
         val proc = scan.getOrDefault(emptyList())
         proc.mapNotNull { line ->
