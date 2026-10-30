@@ -104,7 +104,7 @@ class CdpManager(
             }
             AttachResult.Attached(target.url)
         } catch (e: Exception) {
-            Log.e("TaiXuCdp", "attach failed; ${WebViewDebugging.diagnostics()}", e)
+            Log.e("RikkaCdp", "attach failed; ${WebViewDebugging.diagnostics()}", e)
             throw e
         }
     }

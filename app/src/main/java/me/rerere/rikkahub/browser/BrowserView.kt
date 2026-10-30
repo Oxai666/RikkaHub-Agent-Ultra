@@ -146,6 +146,7 @@ private fun WebViewHost(
     val ctx = LocalContext.current
     // 页内 hook 安装器（Koin 单例）：document-start 注入 + 规则推送都靠它。
     val hookInstaller = koinInject<HookInstaller>()
+    val browserEventBus = koinInject<BrowserEventBus>()
     // Construct the WebView ONCE — `remember` survives recomp + (with key=Unit) survives
     // configuration changes (the Activity declares `configChanges` so the system never
     // recreates us). Recreating per-recomp would reset history, scroll, and JS state.
@@ -217,7 +218,11 @@ private fun WebViewHost(
 
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                     super.onPageStarted(view, url, favicon)
-                    if (url != null) onUrlChange(url)
+                    if (url != null) {
+                        onUrlChange(url)
+                        // CDP attach 要靠它把 target 对上 tab（多 page target 时按 URL 精确匹配）
+                        browserEventBus?.noteTabUrl(HOOK_TAB_ID, url)
+                    }
                     view?.let { hookInstaller?.injectFallback(it) }
                 }
                 override fun onPageFinished(view: WebView?, url: String?) {

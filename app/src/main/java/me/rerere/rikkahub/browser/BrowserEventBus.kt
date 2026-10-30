@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.browser
 
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +38,20 @@ class BrowserEventBus {
     /** 当前处于 paused 的 tab（key = tabId）。断点命中时写入，resume 时移除。 */
     private val _paused = MutableStateFlow<Map<String, DebugPausedState>>(emptyMap())
     val paused: StateFlow<Map<String, DebugPausedState>> = _paused.asStateFlow()
+
+    /**
+     * tabId → 最近一次页面 URL。CDP attach 需要它把 target 对上 tab
+     * （CdpTargetMatcher 在多个 page target 时按 URL 精确匹配）。
+     * 由 BrowserController 在页面开始/结束加载时登记；没登记时返回 null，
+     * matcher 会退化到单 page 直取或页内 marker 探测。
+     */
+    private val tabUrls = ConcurrentHashMap<String, String>()
+
+    fun noteTabUrl(tabId: String, url: String) {
+        if (url.isNotBlank()) tabUrls[tabId] = url
+    }
+
+    fun urlOf(tabId: String): String? = tabUrls[tabId]
 
     fun publish(event: BrowserEvent) {
         _events.tryEmit(event)
