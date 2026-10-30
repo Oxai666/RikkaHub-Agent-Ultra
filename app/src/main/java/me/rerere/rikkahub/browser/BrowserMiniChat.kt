@@ -46,7 +46,6 @@ import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import me.rerere.ai.ui.UIMessage
 import androidx.compose.runtime.collectAsState
@@ -98,7 +97,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.snapshotFlow
 
 
 /**
@@ -273,32 +271,17 @@ private fun BrowserMiniChatCard(
     val keyboard = LocalSoftwareKeyboardController.current
     val listState = rememberLazyListState()
 
-    // 是否还「跟随」底部。默认跟随，用户一旦手动往上翻就退出跟随，
-    // 自己滑回底部附近再自动恢复。
+    // 滚动完全交给用户：这里只在「首次拿到消息」时定位到最新一条，
+    // 之后无论流式输出还是新消息到达，都不再动列表位置。
     //
-    // 之前是无条件 animateScrollToItem：流式输出时这个 effect 每帧都触发，
-    // 用户往上翻就被立刻顶回去；而且连续动画互相打断、排队，观感是
-    // 「一直往上滑 / 来回抽动」。跟随开关交给用户，不要替他做决定。
-    var followBottom by remember { mutableStateOf(true) }
-
-    LaunchedEffect(listState) {
-        snapshotFlow {
-            val info = listState.layoutInfo
-            if (info.totalItemsCount == 0) {
-                true
-            } else {
-                val lastVisible = info.visibleItemsInfo.lastOrNull()?.index ?: -1
-                // 距底部 2 条以内算「还在底部」，留一点容差避免抖动
-                lastVisible >= info.totalItemsCount - 2
-            }
-        }.collect { followBottom = it }
-    }
-
-    LaunchedEffect(nodes.size, nodes.lastOrNull()?.messages?.lastOrNull()?.parts, isGenerating) {
-        if (nodes.isNotEmpty() && followBottom) {
-            // scrollToItem（瞬时）而不是 animateScrollToItem：流式输出时每帧都会走到这里，
-            // 动画版本会一帧起一个新动画、互相打断，看着像在抽。
+    // 之前的实现（无条件 animateScrollToItem，后来改成「跟随底部」）本质都是
+    // 自动滚动，都会和手动滑动抢控制权；而重新进入浏览器时列表从第 1 条开始，
+    // 又得自己一路往下滑。两件事分开处理：进入时跳到最后，之后一概不插手。
+    var didInitialScroll by remember { mutableStateOf(false) }
+    LaunchedEffect(nodes.size) {
+        if (!didInitialScroll && nodes.isNotEmpty()) {
             listState.scrollToItem(nodes.lastIndex)
+            didInitialScroll = true
         }
     }
 
@@ -356,7 +339,7 @@ private fun BrowserMiniChatCard(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    itemsIndexed(nodes) { index, node ->
+                    itemsIndexed(nodes, key = { _, node -> node.id }) { index, node ->
                         ChatMessage(
                             node = node,
                             loading = isGenerating && index == nodes.lastIndex,
