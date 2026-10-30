@@ -169,6 +169,28 @@ adb logcat -s RikkaWebView RikkaCdp
 
 ---
 
+## 7.5 CDP 在本机的实测结论（2026-10-30，重要）
+
+**结论：CDP 调试在这台设备（MIUI + WebView 151）上不可用，不是代码问题。**
+
+完整证据链：
+
+```
+RikkaHub   webview_devtools_remote_5204    → 超时
+Chrome     chrome_devtools_remote          → 超时
+万象       webview_devtools_remote_29075   → 超时
+自建 socket（python bind 同进程）           → 秒通     ← 证明检测方式没问题
+```
+
+已排除：SELinux（setenforce 0 后仍超时）、权限（root 直连同样超时）、
+App 代码（三个不同 App 表现一致）、socket 名字（pid 与 ps 对得上、在 /proc/net/unix 里）。
+
+症状是「socket 在 listen（Flags=0x00010000），连得上，但不 accept、不回 HTTP」。
+换设备或换 ROM 才能验证 CDP；在本机不要再花时间排查这一层。
+
+**不要做的事**：不要因为「attach 失败」去改 discoverTransport 的判定逻辑——
+太墟上游的写法（connect 成功即通过）是对的，加额外校验只会把有效候选丢掉。
+
 ## 8. 坑清单（都是实战踩出来的）
 
 | # | 现象 | 真因 | 修法 |

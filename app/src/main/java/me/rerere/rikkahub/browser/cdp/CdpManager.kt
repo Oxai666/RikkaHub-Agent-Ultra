@@ -195,10 +195,19 @@ class CdpManager(
             }
             if (attempt < 2) delay(300)
         }
+        // 区分两种失败：①根本没有候选 socket  ②socket 能连但 GET 无响应。
+        // 后者在部分 ROM（MIUI 等）上是系统级行为：三个不同 App 的 devtools socket
+        // 都会 listen 却不 accept，代码层无解，直接说清楚，省得使用者反复重试。
+        val hint = when {
+            lastError?.message?.contains("Try again") == true ->
+                "。socket 存在且能连上，但对端不响应 HTTP —— " +
+                    "若三个不同 App 的 devtools socket 都是这个表现，说明该 ROM 禁用了 WebView 调试通道"
+            else -> ""
+        }
         throw IOException(
             "webview devtools socket 连接失败（已重试 3 次；" +
                 "候选=${discovery.candidates}; /proc/net/unix=${discovery.scanError ?: "readable"}; " +
-                "${WebViewDebugging.diagnostics()}）: ${lastError?.message}",
+                "${WebViewDebugging.diagnostics()}）: ${lastError?.message}$hint",
             lastError,
         )
     }
