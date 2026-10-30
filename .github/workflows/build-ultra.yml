@@ -173,11 +173,17 @@ jobs:
 
       - name: Package APK
         if: success()
+        id: pkg          # 下面的 Publish release 要从这里取 outputs
         shell: bash
         run: |
           set -euo pipefail
           STAMP="$(date -u +%Y%m%d-%H%M)"
           OUT="rikkahub-agent-armor-${STAMP}"
+          # 必须显式写进 GITHUB_OUTPUT —— 这两个变量原本只是脚本里的局部 shell 变量，
+          # steps.pkg.outputs.* 一直是空字符串，于是 release 步骤拿到 TAG="ultra-"、
+          # --title ""，直接失败（而 APK 其实已经打好并上传 artifact 了）。
+          echo "stamp=${STAMP}" >> "$GITHUB_OUTPUT"
+          echo "out=${OUT}" >> "$GITHUB_OUTPUT"
           mkdir -p dist
           shopt -s nullglob
           apks=(app/build/outputs/apk/debug/*.apk)
@@ -210,7 +216,8 @@ jobs:
           OUT: ${{ steps.pkg.outputs.out }}
         run: |
           set -euo pipefail
-          TAG="ultra-${STAMP}"
+          # 带上 run number：同一分钟内连跑两次时 STAMP 相同，tag 会撞
+          TAG="ultra-${STAMP}-${GITHUB_RUN_NUMBER}"
           {
             echo "commit: \`${GITHUB_SHA}\`"
             echo ""
