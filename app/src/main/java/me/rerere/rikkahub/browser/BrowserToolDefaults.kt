@@ -28,6 +28,16 @@ object BrowserToolDefaults {
     const val HOOK_LIST = "browser_hook_list"
     const val HOOK_HITS = "browser_hook_hits"
     const val NETWORK_LIST = "browser_network_list"
+    /** CDP 断点调试：读类默认开，写类默认关。 */
+    const val DEBUG_STATUS = "browser_debug_status"
+    const val DEBUG_LIST_BREAKPOINTS = "browser_debug_list_breakpoints"
+    const val DEBUG_STATE = "browser_debug_state"
+    const val DEBUG_ATTACH = "browser_debug_attach"
+    const val DEBUG_SET_BREAKPOINT = "browser_debug_set_breakpoint"
+    const val DEBUG_REMOVE_BREAKPOINT = "browser_debug_remove_breakpoint"
+    const val DEBUG_RESUME = "browser_debug_resume"
+    const val DEBUG_STEP = "browser_debug_step"
+    const val DEBUG_DETACH = "browser_debug_detach"
     const val HOOK_CREATE = "browser_hook_create"
     const val HOOK_REMOVE = "browser_hook_remove"
 
@@ -57,11 +67,16 @@ object BrowserToolDefaults {
         HOOK_LIST,
         HOOK_HITS,
         NETWORK_LIST,
+        DEBUG_STATUS,
+        DEBUG_LIST_BREAKPOINTS,
+        DEBUG_STATE,
     )
 
     val WRITE_TOOLS: Set<String> = setOf(
         CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ, DEBUG_EVAL,
         HOOK_CREATE, HOOK_REMOVE,
+        DEBUG_ATTACH, DEBUG_SET_BREAKPOINT, DEBUG_REMOVE_BREAKPOINT,
+        DEBUG_RESUME, DEBUG_STEP, DEBUG_DETACH,
     )
 
     val LOOP_CONTROL_TOOLS: Set<String> = setOf(DONE)
@@ -73,9 +88,14 @@ object BrowserToolDefaults {
         HOOK_LIST,
         HOOK_HITS,
         NETWORK_LIST,
+        DEBUG_STATUS,
+        DEBUG_LIST_BREAKPOINTS,
+        DEBUG_STATE,
         CLICK, TYPE, SCROLL, SUBMIT, SELECT, PRESS_KEY, EVAL_JS, CLICK_AND_READ,
         DEBUG_EVAL,
         HOOK_CREATE, HOOK_REMOVE,
+        DEBUG_ATTACH, DEBUG_SET_BREAKPOINT, DEBUG_REMOVE_BREAKPOINT,
+        DEBUG_RESUME, DEBUG_STEP, DEBUG_DETACH,
         DONE,
     )
 

@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.browser
 
 import kotlinx.serialization.Serializable
+import me.rerere.rikkahub.browser.cdp.DebugPausedState
 import me.rerere.rikkahub.browser.hook.HookHitRecord
 
 /**
@@ -25,6 +26,19 @@ sealed interface BrowserEvent {
     data class HookHit(
         override val tabId: String,
         val hit: HookHitRecord,
+        override val at: Long = System.currentTimeMillis(),
+    ) : BrowserEvent
+
+    @Serializable
+    data class DebugPaused(
+        override val tabId: String,
+        val state: DebugPausedState,
+        override val at: Long = System.currentTimeMillis(),
+    ) : BrowserEvent
+
+    @Serializable
+    data class DebugResumed(
+        override val tabId: String,
         override val at: Long = System.currentTimeMillis(),
     ) : BrowserEvent
 

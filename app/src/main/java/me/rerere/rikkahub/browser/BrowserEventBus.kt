@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import me.rerere.rikkahub.browser.cdp.DebugPausedState
 import me.rerere.rikkahub.browser.hook.HookHitRecord
 
 /**
@@ -33,6 +34,10 @@ class BrowserEventBus {
     private val _hookHits = MutableStateFlow<List<HookHitRecord>>(emptyList())
     val hookHits: StateFlow<List<HookHitRecord>> = _hookHits.asStateFlow()
 
+    /** 当前处于 paused 的 tab（key = tabId）。断点命中时写入，resume 时移除。 */
+    private val _paused = MutableStateFlow<Map<String, DebugPausedState>>(emptyMap())
+    val paused: StateFlow<Map<String, DebugPausedState>> = _paused.asStateFlow()
+
     fun publish(event: BrowserEvent) {
         _events.tryEmit(event)
         when (event) {
@@ -48,6 +53,10 @@ class BrowserEventBus {
             is BrowserEvent.HookHit -> _hookHits.update { current ->
                 (current + event.hit).takeLast(MAX_HOOK_HITS)
             }
+
+            is BrowserEvent.DebugPaused -> _paused.update { it + (event.tabId to event.state) }
+
+            is BrowserEvent.DebugResumed -> _paused.update { it - event.tabId }
         }
     }
 

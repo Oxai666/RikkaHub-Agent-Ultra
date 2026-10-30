@@ -39,6 +39,10 @@ import me.rerere.rikkahub.browser.hook.HookType
 import me.rerere.rikkahub.browser.hook.NetworkBodyStore
 import me.rerere.rikkahub.browser.hook.validate
 import me.rerere.rikkahub.browser.BrowserToolDefaults
+import me.rerere.rikkahub.browser.cdp.CdpDebugController
+import me.rerere.rikkahub.browser.cdp.CdpManager
+import me.rerere.rikkahub.browser.cdp.DebugBreakpoint
+import me.rerere.rikkahub.browser.cdp.DebugStep
 import me.rerere.rikkahub.browser.cdp.CdpAttach
 import me.rerere.rikkahub.browser.cdp.CdpProbe
 import me.rerere.rikkahub.browser.HeadlessBrowserSessionPool
@@ -745,6 +749,313 @@ fun browserHookHitsTool(): Tool = Tool(
                 }
             }
         }
+        textPart(out)
+    },
+)
+
+// ---------------------------------------------------------------------------------------------
+// CDP 断点调试（移植自太墟 cdp 层：CdpManager / CdpTabConnection / CdpDebugController）
+// ---------------------------------------------------------------------------------------------
+
+private fun cdpManager(): CdpManager =
+    org.koin.java.KoinJavaComponent.getKoin().get()
+
+private fun cdpDebugController(): CdpDebugController? =
+    runCatching { cdpManager().connectionOf(HOOK_TAB_ID)?.debug }.getOrNull()
+
+private fun breakpointJson(bp: DebugBreakpoint): JsonObject = buildJsonObject {
+    put("id", bp.id)
+    put("url", bp.url)
+    put("line", bp.lineNumber)
+    put("column", bp.columnNumber)
+    if (bp.condition.isNotBlank()) put("condition", bp.condition)
+}
+
+fun browserDebugAttachTool(): Tool = Tool(
+    name = BrowserToolDefaults.DEBUG_ATTACH,
+    description = "Attach the Chrome DevTools Protocol session to the active WebView tab. " +
+        "Enables real breakpoints and engine-level Fetch interception (covers Service/Web Workers). " +
+        "Idempotent: attaching twice returns already=true. Breakpoints set before a detach are replayed on re-attach. " +
+        "Call browser_debug_detach when done; a paused page stays frozen until browser_debug_resume.",
+    parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
+    execute = {
+        val out = withTimeoutOrNull(toolTimeoutMs) {
+            runCatching { cdpManager().attach(HOOK_TAB_ID) }.fold(
+                onSuccess = { result ->
+                    buildJsonObject {
+                        when (result) {
+                            is CdpManager.AttachResult.Attached -> {
+                                put("attached", true)
+                                put("url", result.targetUrl)
+                            }
+
+                            is CdpManager.AttachResult.AlreadyAttached -> {
+                                put("attached", true)
+                                put("already", true)
+                                put("url", result.targetUrl)
+                            }
+                        }
+                    }
+                },
+                onFailure = { e ->
+                    buildJsonObject { put("error", "${e.javaClass.simpleName}: ${e.message}") }
+                },
+            )
+        } ?: timeoutEnvelope(BrowserToolDefaults.DEBUG_ATTACH)
+        textPart(out)
+    },
+)
+
+fun browserDebugStatusTool(): Tool = Tool(
+    name = BrowserToolDefaults.DEBUG_STATUS,
+    description = "Report CDP state: which tabs are attached, whether the page is paused at a breakpoint, " +
+        "breakpoint count and worker session count. Use it to check whether a debug session is still alive.",
+    parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
+    execute = {
+        val manager = runCatching { cdpManager() }.getOrNull()
+        val out = if (manager == null) {
+            buildJsonObject { put("error", "cdp manager unavailable") }
+        } else {
+            val status = manager.status()
+            buildJsonObject {
+                put("devToolsSocketActive", status.devToolsSocketActive)
+                put("attachedTabs", status.attachedTabs.size)
+                putJsonArray("tabs") {
+                    status.attachedTabs.forEach { tab ->
+                        add(buildJsonObject {
+                            put("tabId", tab.tabId)
+                            put("url", tab.targetUrl)
+                            put("paused", tab.paused)
+                            put("breakpoints", tab.breakpoints)
+                            put("workers", tab.workers)
+                        })
+                    }
+                }
+            }
+        }
+        textPart(out)
+    },
+)
+
+fun browserDebugSetBreakpointTool(): Tool = Tool(
+    name = BrowserToolDefaults.DEBUG_SET_BREAKPOINT,
+    description = "Set a real CDP breakpoint on a script URL. line/column are 0-based. " +
+        "url matches by suffix (pass the script path/name, e.g. app.js or /static/main.js). " +
+        "condition is an optional JS expression; the breakpoint only fires when it is truthy. " +
+        "Requires browser_debug_attach first. After the page pauses, use browser_debug_state to read call frames, " +
+        "then browser_debug_resume or browser_debug_step.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("url", buildJsonObject {
+                put("type", "string")
+                put("description", "script URL or its suffix, e.g. app.js")
+            })
+            put("line", buildJsonObject {
+                put("type", "integer")
+                put("description", "0-based line number")
+            })
+            put("column", buildJsonObject {
+                put("type", "integer")
+                put("description", "0-based column, default 0")
+            })
+            put("condition", buildJsonObject {
+                put("type", "string")
+                put("description", "optional JS expression guard")
+            })
+        }, required = listOf("url", "line"))
+    },
+    execute = { input ->
+        val url = input.jsonObject["url"]?.jsonPrimitive?.contentOrNull?.trim()
+        val line = input.jsonObject["line"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()
+        val column = input.jsonObject["column"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: 0
+        val condition = input.jsonObject["condition"]?.jsonPrimitive?.contentOrNull
+        val debug = cdpDebugController()
+        val out = when {
+            url.isNullOrBlank() -> missingArgEnvelope("url", "url is required")
+            line == null -> missingArgEnvelope("line", "line is required (0-based)")
+            debug == null -> buildJsonObject {
+                put("error", "cdp 未 attach")
+                put("hint", "先调 browser_debug_attach")
+            }
+            else -> withTimeoutOrNull(toolTimeoutMs) {
+                runCatching { debug.setBreakpoint(url, line, column, condition) }.fold(
+                    onSuccess = { bp -> breakpointJson(bp) },
+                    onFailure = { e ->
+                        buildJsonObject { put("error", "${e.javaClass.simpleName}: ${e.message}") }
+                    },
+                )
+            } ?: timeoutEnvelope(BrowserToolDefaults.DEBUG_SET_BREAKPOINT)
+        }
+        textPart(out)
+    },
+)
+
+fun browserDebugListBreakpointsTool(): Tool = Tool(
+    name = BrowserToolDefaults.DEBUG_LIST_BREAKPOINTS,
+    description = "List CDP breakpoints of the attached tab: {count, breakpoints:[{id,url,line,column,condition}]}.",
+    parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
+    execute = {
+        val debug = cdpDebugController()
+        val out = if (debug == null) {
+            buildJsonObject {
+                put("error", "cdp 未 attach")
+                put("hint", "先调 browser_debug_attach")
+            }
+        } else {
+            val list = debug.breakpoints()
+            buildJsonObject {
+                put("count", list.size)
+                putJsonArray("breakpoints") { list.forEach { add(breakpointJson(it)) } }
+            }
+        }
+        textPart(out)
+    },
+)
+
+fun browserDebugRemoveBreakpointTool(): Tool = Tool(
+    name = BrowserToolDefaults.DEBUG_REMOVE_BREAKPOINT,
+    description = "Remove a CDP breakpoint by id. Returns {removed}.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("id", buildJsonObject {
+                put("type", "string")
+                put("description", "breakpoint id from browser_debug_list_breakpoints")
+            })
+        }, required = listOf("id"))
+    },
+    execute = { input ->
+        val id = input.jsonObject["id"]?.jsonPrimitive?.contentOrNull?.trim()
+        val debug = cdpDebugController()
+        val out = when {
+            id.isNullOrBlank() -> missingArgEnvelope("id", "id is required")
+            debug == null -> buildJsonObject { put("error", "cdp 未 attach") }
+            else -> withTimeoutOrNull(toolTimeoutMs) {
+                runCatching { debug.removeBreakpoint(id) }.fold(
+                    onSuccess = { buildJsonObject { put("id", id); put("removed", it) } },
+                    onFailure = { e ->
+                        buildJsonObject { put("error", "${e.javaClass.simpleName}: ${e.message}") }
+                    },
+                )
+            } ?: timeoutEnvelope(BrowserToolDefaults.DEBUG_REMOVE_BREAKPOINT)
+        }
+        textPart(out)
+    },
+)
+
+fun browserDebugStateTool(): Tool = Tool(
+    name = BrowserToolDefaults.DEBUG_STATE,
+    description = "Read the paused state: {paused, reason, hitBreakpoints, callFrames:[{callFrameId,functionName,url,line,column,scopes}]}. " +
+        "Empty when the page is running. A frozen page must be released with browser_debug_resume.",
+    parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
+    execute = {
+        val bus = runCatching { hookEventBus() }.getOrNull()
+        val state = bus?.paused?.value?.get(HOOK_TAB_ID)
+        val out = if (state == null) {
+            buildJsonObject { put("paused", false) }
+        } else {
+            buildJsonObject {
+                put("paused", true)
+                put("reason", state.reason)
+                put("hitBreakpoints", state.hitBreakpoints.joinToString(","))
+                putJsonArray("callFrames") {
+                    state.callFrames.forEach { frame ->
+                        add(buildJsonObject {
+                            put("callFrameId", frame.callFrameId)
+                            put("functionName", frame.functionName)
+                            put("url", frame.url)
+                            put("line", frame.lineNumber)
+                            put("column", frame.columnNumber)
+                            putJsonArray("scopes") {
+                                frame.scopes.forEach { scope ->
+                                    add(buildJsonObject {
+                                        put("type", scope.type)
+                                        put("name", scope.name)
+                                        put("objectId", scope.objectId)
+                                    })
+                                }
+                            }
+                        })
+                    }
+                }
+            }
+        }
+        textPart(out)
+    },
+)
+
+fun browserDebugResumeTool(): Tool = Tool(
+    name = BrowserToolDefaults.DEBUG_RESUME,
+    description = "Resume a paused page. MUST be called when you are done inspecting a breakpoint, " +
+        "otherwise the page stays frozen forever. Returns {resumed}.",
+    parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
+    execute = {
+        val debug = cdpDebugController()
+        val out = if (debug == null) {
+            buildJsonObject { put("error", "cdp 未 attach") }
+        } else {
+            withTimeoutOrNull(toolTimeoutMs) {
+                runCatching { debug.resume() }.fold(
+                    onSuccess = { buildJsonObject { put("resumed", it) } },
+                    onFailure = { e ->
+                        buildJsonObject { put("error", "${e.javaClass.simpleName}: ${e.message}") }
+                    },
+                )
+            } ?: timeoutEnvelope(BrowserToolDefaults.DEBUG_RESUME)
+        }
+        textPart(out)
+    },
+)
+
+fun browserDebugStepTool(): Tool = Tool(
+    name = BrowserToolDefaults.DEBUG_STEP,
+    description = "Step while paused: over (next line) / into (enter callee) / out (return to caller). " +
+        "After stepping the page stays paused; read browser_debug_state then resume.",
+    parameters = {
+        InputSchema.Obj(properties = buildJsonObject {
+            put("mode", buildJsonObject {
+                put("type", "string")
+                put("description", "over | into | out (default over)")
+            })
+        })
+    },
+    execute = { input ->
+        val mode = input.jsonObject["mode"]?.jsonPrimitive?.contentOrNull?.trim()?.lowercase() ?: "over"
+        val step = when (mode) {
+            "into", "in" -> DebugStep.INTO
+            "out" -> DebugStep.OUT
+            else -> DebugStep.OVER
+        }
+        val debug = cdpDebugController()
+        val out = if (debug == null) {
+            buildJsonObject { put("error", "cdp 未 attach") }
+        } else {
+            withTimeoutOrNull(toolTimeoutMs) {
+                runCatching { debug.step(step) }.fold(
+                    onSuccess = { buildJsonObject { put("stepped", it); put("mode", mode) } },
+                    onFailure = { e ->
+                        buildJsonObject { put("error", "${e.javaClass.simpleName}: ${e.message}") }
+                    },
+                )
+            } ?: timeoutEnvelope(BrowserToolDefaults.DEBUG_STEP)
+        }
+        textPart(out)
+    },
+)
+
+fun browserDebugDetachTool(): Tool = Tool(
+    name = BrowserToolDefaults.DEBUG_DETACH,
+    description = "Detach the CDP session(s). Resumes a paused page first, keeps the breakpoint list for replay on next attach. " +
+        "Returns {detached} = number of closed sessions.",
+    parameters = { InputSchema.Obj(properties = buildJsonObject { }) },
+    execute = {
+        val out = withTimeoutOrNull(toolTimeoutMs) {
+            runCatching { cdpManager().detach(null) }.fold(
+                onSuccess = { buildJsonObject { put("detached", it) } },
+                onFailure = { e ->
+                    buildJsonObject { put("error", "${e.javaClass.simpleName}: ${e.message}") }
+                },
+            )
+        } ?: timeoutEnvelope(BrowserToolDefaults.DEBUG_DETACH)
         textPart(out)
     },
 )
@@ -1980,6 +2291,15 @@ fun createBrowserTool(
     BrowserToolDefaults.HOOK_REMOVE -> browserHookRemoveTool()
     BrowserToolDefaults.HOOK_HITS -> browserHookHitsTool()
     BrowserToolDefaults.NETWORK_LIST -> browserNetworkListTool()
+    BrowserToolDefaults.DEBUG_ATTACH -> browserDebugAttachTool()
+    BrowserToolDefaults.DEBUG_STATUS -> browserDebugStatusTool()
+    BrowserToolDefaults.DEBUG_SET_BREAKPOINT -> browserDebugSetBreakpointTool()
+    BrowserToolDefaults.DEBUG_LIST_BREAKPOINTS -> browserDebugListBreakpointsTool()
+    BrowserToolDefaults.DEBUG_REMOVE_BREAKPOINT -> browserDebugRemoveBreakpointTool()
+    BrowserToolDefaults.DEBUG_STATE -> browserDebugStateTool()
+    BrowserToolDefaults.DEBUG_RESUME -> browserDebugResumeTool()
+    BrowserToolDefaults.DEBUG_STEP -> browserDebugStepTool()
+    BrowserToolDefaults.DEBUG_DETACH -> browserDebugDetachTool()
     BrowserToolDefaults.SCREENSHOT -> browserScreenshotTool(context)
     BrowserToolDefaults.GET_TEXT -> browserGetTextTool()
     BrowserToolDefaults.GET_DOM -> browserGetDomTool()
