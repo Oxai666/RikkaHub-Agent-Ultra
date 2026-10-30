@@ -98,6 +98,29 @@ object DevToolsSocketResolver {
     data class Discovery(val candidates: List<String>, val scanError: String?)
 
     /**
+     * 本包名下所有进程的 pid（含 `:sub` 子进程）。
+     *
+     * devtools socket 由**持有 WebView 的那个进程**创建，多进程 App 里 myPid()
+     * 不一定是它；只猜 myPid 会连上一个「能 connect 但没人应答」的抽象 socket
+     * （真机表现为 GET /json 抛 EAGAIN / Try again）。取不到进程列表时退回 myPid。
+     */
+    fun packagePids(): List<Int> {
+        val fallback = listOf(Process.myPid())
+        val ctx = runCatching {
+            org.koin.java.KoinJavaComponent.getKoin().get<android.content.Context>()
+        }.getOrNull() ?: return fallback
+        return runCatching {
+            val am = ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE)
+                as android.app.ActivityManager
+            val pkg = ctx.packageName
+            am.runningAppProcesses.orEmpty()
+                .filter { it.processName == pkg || it.processName.startsWith("$pkg:") }
+                .map { it.pid }
+                .ifEmpty { fallback }
+        }.getOrDefault(fallback)
+    }
+
+    /**
      * 候选列表（按优先级）；调用方逐个试连。
      *
      * pids 传**本包所有进程的 pid**：WebView 的 devtools socket 只有 browser 进程会建，

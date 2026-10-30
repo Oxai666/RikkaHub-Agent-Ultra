@@ -170,37 +170,14 @@ class CdpManager(
     }
 
     /**
-     * 本包名下所有进程的 pid。
-     *
-     * WebView 的 devtools socket 由持有 WebView 的那个进程创建；只要 pid 猜错，
-     * connect 仍会成功（抽象 namespace 里同名 socket 存在时），但对面不答 HTTP，
-     * 于是 GET /json 抛 EAGAIN。所以要把同包进程全试一遍。
-     */
-    private fun packagePids(): List<Int> {
-        val fallback = listOf(Process.myPid())
-        val ctx = runCatching {
-            org.koin.java.KoinJavaComponent.getKoin().get<android.content.Context>()
-        }.getOrNull() ?: return fallback
-        return runCatching {
-            val am = ctx.getSystemService(android.content.Context.ACTIVITY_SERVICE)
-                as android.app.ActivityManager
-            val pkg = ctx.packageName
-            am.runningAppProcesses.orEmpty()
-                .filter { it.processName == pkg || it.processName.startsWith("$pkg:") }
-                .map { it.pid }
-                .ifEmpty { fallback }
-        }.getOrDefault(fallback)
-    }
-
-    /**
      * socket 发现：候选逐个**用 GET /json 验证**（不是只 connect —— 抽象 socket 谁都能连上，
      * 连到死 socket 会得到「connect 成功但没人应答」的假阳性），全部失败延迟 300ms 重试共 3 次。
      */
     private suspend fun discoverTransport(): LocalSocketCdpTransport {
         var lastError: Exception? = null
-        var discovery = DevToolsSocketResolver.discover(packagePids())
+        var discovery = DevToolsSocketResolver.discover(DevToolsSocketResolver.packagePids())
         repeat(3) { attempt ->
-            if (attempt > 0) discovery = DevToolsSocketResolver.discover(packagePids())
+            if (attempt > 0) discovery = DevToolsSocketResolver.discover(DevToolsSocketResolver.packagePids())
             for (name in discovery.candidates) {
                 val probeError: Exception = try {
                     val conn = LocalSocketCdpTransport(name).open()

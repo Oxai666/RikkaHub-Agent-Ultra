@@ -54,7 +54,7 @@ object CdpProbe {
             errors += "setWebContentsDebuggingEnabled: ${e.javaClass.simpleName}: ${e.message}"
         }
 
-        val discovery = DevToolsSocketResolver.discover()
+        val discovery = DevToolsSocketResolver.discover(DevToolsSocketResolver.packagePids())
         discovery.scanError?.let { errors += "scan /proc/net/unix: $it" }
 
         for (socketName in discovery.candidates) {
