@@ -58,9 +58,17 @@ class HookInstaller(
         runCatching { view.removeJavascriptInterface("RikkaBridge") }
     }
 
-    /** onPageStarted：仅降级路径需要（无 document-start 支持的古董 WebView）。 */
+    /**
+     * onPageStarted 补种。
+     *
+     * 之前只在「不支持 document-start」时才注入，等于把成败押在
+     * [WebViewCompat.addDocumentStartJavaScript] 一定成功上 —— 而那一步被 runCatching
+     * 吞掉了异常。真机上因此出现过「系统声称支持、实际没注入、降级也不走」的静默失败，
+     * 页面里连 window.__rikkaHooks 都没有，规则 hits 永远 0。
+     *
+     * runtime 自带 __rikkaHooks 幂等守卫（重复注入直接 return），所以这里无条件补一次。
+     */
     override fun injectFallback(view: WebView) {
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
         runCatching { view.evaluateJavascript(runtimeScript, null) }
     }
 
