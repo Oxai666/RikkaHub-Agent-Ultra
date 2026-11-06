@@ -122,12 +122,14 @@ object VirtualScreenManager {
 
     suspend fun stop() = withContext(Dispatchers.IO) {
         val port = _state.value.port
-        if (port != 0) {
-            runCatching { send(port, "quit") }
-        }
-        // 兜底：万一 quit 没送到，按命令行特征杀掉
-        runCatching { RootShell.exec("pkill -f $CORE_CLASS", 8_000) }
+        // 先清状态：UI 立刻停止拉流，不再占着那条长连接
         _state.value = State()
+        if (port != 0) {
+            // 短超时：quit 能送到最好，送不到也别在这里卡住用户
+            runCatching { send(port, "quit", timeoutMs = 1_500) }
+        }
+        // 兜底：按命令行特征杀掉 helper。quit 走不通时（比如服务端被占住）靠这个收尾
+        runCatching { RootShell.exec("pkill -f $CORE_CLASS", 8_000) }
     }
 
     /** 抓一帧。失败返回 null，原因写进 state.error。 */
@@ -163,11 +165,20 @@ object VirtualScreenManager {
         }
     }
 
-    /** 短连接命令：轻点。坐标是虚拟屏像素。 */
+    /** 短连接命令：轻点。坐标是虚拟屏像素。失败原因写进 state.error。 */
     suspend fun tap(x: Float, y: Float): Boolean = withContext(Dispatchers.IO) {
         val port = _state.value.port
         if (!_state.value.running || port == 0) return@withContext false
-        runCatching { send(port, "tap ${x.toInt()} ${y.toInt()}").startsWith("OK") }.getOrDefault(false)
+        val reply = runCatching { send(port, "tap ${x.toInt()} ${y.toInt()}") }.getOrElse { t ->
+            _state.value = _state.value.copy(error = "tap 连接失败：${t.message}")
+            return@withContext false
+        }
+        if (reply.startsWith("OK")) {
+            true
+        } else {
+            _state.value = _state.value.copy(error = reply.removePrefix("ERR ").ifBlank { "tap 失败" })
+            false
+        }
     }
 
     /** 短连接命令：滑动。 */
@@ -199,7 +210,7 @@ object VirtualScreenManager {
 
         Socket().use { socket ->
             socket.connect(InetSocketAddress("127.0.0.1", port), 3_000)
-            socket.soTimeout = 10_000
+            socket.soTimeout = 30_000
             val bis = java.io.BufferedInputStream(socket.getInputStream())
             val writer = java.io.OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8)
 
@@ -287,10 +298,10 @@ object VirtualScreenManager {
             ?.takeIf { it.isNotBlank() }
     }
 
-    private fun send(port: Int, command: String): String {
+    private fun send(port: Int, command: String, timeoutMs: Int = 20_000): String {
         Socket().use { socket ->
             socket.connect(InetSocketAddress("127.0.0.1", port), 3_000)
-            socket.soTimeout = 20_000
+            socket.soTimeout = timeoutMs
             val out = PrintWriter(OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8), true)
             val input = BufferedReader(InputStreamReader(socket.getInputStream(), Charsets.UTF_8))
             out.println(command)

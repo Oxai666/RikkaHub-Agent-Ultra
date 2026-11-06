@@ -127,7 +127,7 @@ fun VirtualScreenWindowPage() {
                 }
             }
 
-            streamError?.let {
+            (streamError ?: state.error)?.let {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodySmall,

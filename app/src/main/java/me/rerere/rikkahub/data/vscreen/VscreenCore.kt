@@ -98,6 +98,9 @@ object VscreenCore {
         }
     }
 
+    /** quit 命令会让整个进程退出：多个客户端线程共用一个标志。 */
+    private val stopping = java.util.concurrent.atomic.AtomicBoolean(false)
+
     private fun serve(
         server: ServerSocket,
         reader: ImageReader,
@@ -106,93 +109,112 @@ object VscreenCore {
         display: VirtualDisplay,
         displayId: Int,
     ) {
-        var running = true
-        while (running) {
+        // 每个连接一个线程。
+        // 串行处理的话，小窗的 stream 长连接会把服务端占死，
+        // tap / quit 全都排在后面 —— 表现就是「点了没反应、停止也停不掉」。
+        while (!stopping.get()) {
             val socket: Socket = try {
                 server.accept()
             } catch (_: Throwable) {
                 break
             }
-            socket.use { client ->
-                client.soTimeout = 20_000
-                val input = BufferedReader(InputStreamReader(client.getInputStream(), Charsets.UTF_8))
-                val out = java.io.BufferedOutputStream(client.getOutputStream())
-
-                fun sendLine(text: String) {
-                    out.write((text + "\n").toByteArray(Charsets.UTF_8))
-                    out.flush()
-                }
-
-                val command = runCatching { input.readLine() }.getOrNull()?.trim().orEmpty()
-                when {
-                    command == "ping" -> sendLine("OK pong")
-                    command == "size" -> sendLine("OK $width $height")
-                    command == "info" -> sendLine(
-                        "OK {\"display_id\":$displayId,\"width\":$width,\"height\":$height}"
-                    )
-                    command == "shot" -> {
-                        val jpeg = captureJpeg(reader, width, height)
-                        if (jpeg == null) {
-                            sendLine("ERR no frame yet")
-                        } else {
-                            sendLine("OK $width $height ${Base64.encodeToString(jpeg, Base64.NO_WRAP)}")
-                        }
-                    }
-                    // 持续推帧：每帧先发一行 `FRAME <字节数>`，紧跟 JPEG 原始字节。
-                    // 客户端断开后这里会抛 IOException，自然退出循环。
-                    command == "stream" -> {
-                        sendLine("OK stream")
-                        while (true) {
-                            val jpeg = captureJpeg(reader, width, height)
-                            if (jpeg == null) {
-                                Thread.sleep(30)
-                                continue
-                            }
-                            sendLine("FRAME ${jpeg.size}")
-                            out.write(jpeg)
-                            out.flush()
-                            Thread.sleep(66)
-                        }
-                    }
-                    // tap <x> <y>：按下 + 抬起
-                    command.startsWith("tap ") -> {
-                        val p = command.split(" ").filter { it.isNotBlank() }
-                        val x = p.getOrNull(1)?.toFloatOrNull()
-                        val y = p.getOrNull(2)?.toFloatOrNull()
-                        if (x == null || y == null) {
-                            sendLine("ERR tap needs <x> <y>")
-                        } else {
-                            val ok = runCatching { injectTap(x, y, displayId) }.isSuccess
-                            sendLine(if (ok) "OK tap" else "ERR inject failed")
-                        }
-                    }
-                    // swipe <x1> <y1> <x2> <y2> [durationMs]
-                    command.startsWith("swipe ") -> {
-                        val p = command.split(" ").filter { it.isNotBlank() }
-                        val x1 = p.getOrNull(1)?.toFloatOrNull()
-                        val y1 = p.getOrNull(2)?.toFloatOrNull()
-                        val x2 = p.getOrNull(3)?.toFloatOrNull()
-                        val y2 = p.getOrNull(4)?.toFloatOrNull()
-                        val dur = p.getOrNull(5)?.toLongOrNull() ?: 250L
-                        if (x1 == null || y1 == null || x2 == null || y2 == null) {
-                            sendLine("ERR swipe needs <x1> <y1> <x2> <y2> [duration]")
-                        } else {
-                            val ok = runCatching { injectSwipe(x1, y1, x2, y2, dur, displayId) }.isSuccess
-                            sendLine(if (ok) "OK swipe" else "ERR inject failed")
-                        }
-                    }
-                    command == "quit" -> {
-                        sendLine("OK bye")
-                        running = false
-                    }
-                    else -> sendLine("ERR unknown command: $command")
-                }
-            }
+            Thread {
+                runCatching { handleClient(socket, reader, width, height, displayId) }
+            }.apply { isDaemon = true }.start()
         }
         runCatching { display.release() }
         runCatching { reader.close() }
         runCatching { server.close() }
     }
+
+    private fun handleClient(
+        socket: Socket,
+        reader: ImageReader,
+        width: Int,
+        height: Int,
+        displayId: Int,
+    ) {
+        socket.use { client ->
+            client.soTimeout = 30_000
+            val input = BufferedReader(InputStreamReader(client.getInputStream(), Charsets.UTF_8))
+            val out = java.io.BufferedOutputStream(client.getOutputStream())
+
+            fun sendLine(text: String) {
+                out.write((text + "\n").toByteArray(Charsets.UTF_8))
+                out.flush()
+            }
+
+            val command = runCatching { input.readLine() }.getOrNull()?.trim().orEmpty()
+            when {
+                command == "ping" -> sendLine("OK pong")
+                command == "size" -> sendLine("OK $width $height")
+                command == "info" -> sendLine(
+                    "OK {\"display_id\":$displayId,\"width\":$width,\"height\":$height}"
+                )
+                command == "shot" -> {
+                    val jpeg = captureJpeg(reader, width, height)
+                    if (jpeg == null) {
+                        sendLine("ERR no frame yet")
+                    } else {
+                        sendLine("OK $width $height ${Base64.encodeToString(jpeg, Base64.NO_WRAP)}")
+                    }
+                }
+                // 持续推帧。界面完全静止时 ImageReader 不出新帧，这里重发上一帧，
+                // 保证客户端不会因为「太久没数据」而超时断开。
+                command == "stream" -> {
+                    sendLine("OK stream")
+                    var lastJpeg: ByteArray? = null
+                    while (!stopping.get()) {
+                        val fresh = captureJpeg(reader, width, height)
+                        if (fresh != null) lastJpeg = fresh
+                        val toSend = lastJpeg
+                        if (toSend != null) {
+                            sendLine("FRAME ${toSend.size}")
+                            out.write(toSend)
+                            out.flush()
+                        }
+                        Thread.sleep(66)
+                    }
+                }
+                command.startsWith("tap ") -> {
+                    val p = command.split(" ").filter { it.isNotBlank() }
+                    val x = p.getOrNull(1)?.toFloatOrNull()
+                    val y = p.getOrNull(2)?.toFloatOrNull()
+                    if (x == null || y == null) {
+                        sendLine("ERR tap needs <x> <y>")
+                    } else {
+                        val failure = runCatching { injectTap(x, y, displayId) }.exceptionOrNull()
+                        sendLine(if (failure == null) "OK tap" else "ERR ${describe(failure)}")
+                    }
+                }
+                command.startsWith("swipe ") -> {
+                    val p = command.split(" ").filter { it.isNotBlank() }
+                    val x1 = p.getOrNull(1)?.toFloatOrNull()
+                    val y1 = p.getOrNull(2)?.toFloatOrNull()
+                    val x2 = p.getOrNull(3)?.toFloatOrNull()
+                    val y2 = p.getOrNull(4)?.toFloatOrNull()
+                    val dur = p.getOrNull(5)?.toLongOrNull() ?: 250L
+                    if (x1 == null || y1 == null || x2 == null || y2 == null) {
+                        sendLine("ERR swipe needs <x1> <y1> <x2> <y2> [duration]")
+                    } else {
+                        val failure = runCatching { injectSwipe(x1, y1, x2, y2, dur, displayId) }
+                            .exceptionOrNull()
+                        sendLine(if (failure == null) "OK swipe" else "ERR ${describe(failure)}")
+                    }
+                }
+                command == "quit" -> {
+                    sendLine("OK bye")
+                    stopping.set(true)
+                    // 主线程阻塞在 accept() 上，直接结束进程最干脆
+                    kotlin.system.exitProcess(0)
+                }
+                else -> sendLine("ERR unknown command: $command")
+            }
+        }
+    }
+
+    private fun describe(t: Throwable): String =
+        "${t.javaClass.simpleName}: ${t.message ?: "no message"}"
 
     /**
      * 抓一帧转 JPEG。
@@ -303,20 +325,31 @@ object VscreenCore {
     ) {
         val event = android.view.MotionEvent.obtain(downTime, eventTime, action, x, y, 0)
         try {
+            // 反射设 displayId —— 不设的话事件落在主屏，虚拟屏上点不动。
+            // 这里不能吞异常：吞了以后「点了没反应」会变成一个查不出来的静默失败。
             runCatching {
                 android.view.MotionEvent::class.java
                     .getMethod("setDisplayId", Int::class.javaPrimitiveType)
                     .invoke(event, displayId)
+            }.getOrElse {
+                throw IllegalStateException("MotionEvent.setDisplayId 反射失败（display=$displayId）：${it.message}", it)
             }
+
             val inputManagerClass = Class.forName("android.hardware.input.InputManager")
             val inputManager = inputManagerClass.getMethod("getInstance").invoke(null)
-                ?: error("InputManager.getInstance returned null")
+                ?: error("InputManager.getInstance() 返回 null（这个进程没有 system context）")
             val inject = inputManagerClass.getMethod(
                 "injectInputEvent",
                 android.view.InputEvent::class.java,
                 Int::class.javaPrimitiveType,
             )
-            inject.invoke(inputManager, event, 2) // INJECT_INPUT_EVENT_MODE_ASYNC
+            // 2 = INJECT_INPUT_EVENT_MODE_ASYNC
+            val injected = inject.invoke(inputManager, event, 2) as? Boolean ?: false
+            if (!injected) {
+                throw IllegalStateException(
+                    "injectInputEvent 返回 false —— 通常是缺少 INJECT_EVENTS 权限（当前 uid 不是 root？）"
+                )
+            }
         } finally {
             event.recycle()
         }
