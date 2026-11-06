@@ -1637,6 +1637,9 @@
   <string name="setting_virtual_screen_capture">Capture</string>
   <string name="setting_virtual_screen_launch">Launch</string>
   <string name="setting_virtual_screen_launch_hint">package name</string>
+  <string name="setting_virtual_screen_open_window">Open live window</string>
+  <string name="setting_virtual_screen_window_title">Virtual Screen</string>
+  <string name="setting_virtual_screen_window_not_running">Virtual screen is not running</string>
   <string name="setting_virtual_screen_mirror">Mirror this screen</string>
   <string name="setting_virtual_screen_mirror_desc">Off creates a separate, empty display. On mirrors what your phone currently shows (read-only).</string>
   <string name="tool_name_virtual_screen">Virtual Screen</string>

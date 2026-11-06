@@ -37,9 +37,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.vscreen.VirtualScreenManager
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 
 /**
@@ -52,6 +54,7 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 fun SettingVirtualScreenPage() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val navController = LocalNavController.current
     val state by VirtualScreenManager.state.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -208,6 +211,14 @@ fun SettingVirtualScreenPage() {
                     ) {
                         Text(stringResource(R.string.setting_virtual_screen_stop))
                     }
+                }
+
+                // 小窗：实时画面 + 自己在上面点
+                Button(
+                    onClick = { navController.navigate(Screen.VirtualScreenWindow) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.setting_virtual_screen_open_window))
                 }
 
                 shot?.let { bitmap ->

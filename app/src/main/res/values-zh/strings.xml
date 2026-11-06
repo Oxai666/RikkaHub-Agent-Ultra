@@ -1937,6 +1937,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_virtual_screen_capture">截图</string>
   <string name="setting_virtual_screen_launch">投送</string>
   <string name="setting_virtual_screen_launch_hint">包名，如 com.android.settings</string>
+  <string name="setting_virtual_screen_open_window">打开实时小窗</string>
+  <string name="setting_virtual_screen_window_title">虚拟屏幕</string>
+  <string name="setting_virtual_screen_window_not_running">虚拟屏没在运行</string>
   <string name="setting_virtual_screen_mirror">镜像当前屏幕</string>
   <string name="setting_virtual_screen_mirror_desc">关掉时是一块独立的空屏；打开后显示你手机屏幕的内容（只读镜像）。</string>
   <string name="tool_name_virtual_screen">虚拟屏幕</string>

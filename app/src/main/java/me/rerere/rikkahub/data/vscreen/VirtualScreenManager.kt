@@ -6,8 +6,10 @@ import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.root.RootShell
 import java.io.BufferedReader
@@ -157,6 +159,80 @@ object VirtualScreenManager {
             else -> {
                 _state.value = _state.value.copy(error = "未知返回：$reply")
                 null
+            }
+        }
+    }
+
+    /** 短连接命令：轻点。坐标是虚拟屏像素。 */
+    suspend fun tap(x: Float, y: Float): Boolean = withContext(Dispatchers.IO) {
+        val port = _state.value.port
+        if (!_state.value.running || port == 0) return@withContext false
+        runCatching { send(port, "tap ${x.toInt()} ${y.toInt()}").startsWith("OK") }.getOrDefault(false)
+    }
+
+    /** 短连接命令：滑动。 */
+    suspend fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long = 250): Boolean =
+        withContext(Dispatchers.IO) {
+            val port = _state.value.port
+            if (!_state.value.running || port == 0) return@withContext false
+            runCatching {
+                send(
+                    port,
+                    "swipe ${x1.toInt()} ${y1.toInt()} ${x2.toInt()} ${y2.toInt()} $durationMs",
+                ).startsWith("OK")
+            }.getOrDefault(false)
+        }
+
+    /**
+     * 实时帧流。
+     *
+     * 协议：客户端发 `stream`，服务端回 `OK stream`，之后每帧先发一行 `FRAME <字节数>`，
+     * 紧跟 JPEG 原始字节。协程取消 → socket 关闭 → helper 那边写入抛异常 → 推流循环退出。
+     *
+     * 注意这里不能用 BufferedReader 读头再切回 InputStream：BufferedReader 会
+     * 预读一大块，把后面的二进制也吞进它自己的缓冲区。所以统一用 BufferedInputStream
+     * 自己按字节读行。
+     */
+    suspend fun stream(onFrame: suspend (Bitmap) -> Unit) = withContext(Dispatchers.IO) {
+        val port = _state.value.port
+        if (!_state.value.running || port == 0) return@withContext
+
+        Socket().use { socket ->
+            socket.connect(InetSocketAddress("127.0.0.1", port), 3_000)
+            socket.soTimeout = 10_000
+            val bis = java.io.BufferedInputStream(socket.getInputStream())
+            val writer = java.io.OutputStreamWriter(socket.getOutputStream(), Charsets.UTF_8)
+
+            writer.write("stream\n")
+            writer.flush()
+
+            fun readLine(): String? {
+                val sb = StringBuilder()
+                while (true) {
+                    val b = bis.read()
+                    if (b < 0) return if (sb.isEmpty()) null else sb.toString()
+                    if (b == '\n'.code) return sb.toString()
+                    if (b != '\r'.code) sb.append(b.toChar())
+                }
+            }
+
+            if (!readLine().orEmpty().startsWith("OK")) return@withContext
+
+            while (currentCoroutineContext().isActive) {
+                val header = readLine() ?: break
+                if (!header.startsWith("FRAME ")) continue
+                val len = header.removePrefix("FRAME ").trim().toIntOrNull() ?: continue
+                if (len <= 0 || len > 8 * 1024 * 1024) continue
+                val bytes = ByteArray(len)
+                var read = 0
+                while (read < len) {
+                    val n = bis.read(bytes, read, len - read)
+                    if (n < 0) break
+                    read += n
+                }
+                if (read < len) break
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, len) ?: continue
+                onFrame(bitmap)
             }
         }
     }
