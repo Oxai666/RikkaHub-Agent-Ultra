@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.components.message
 
 import androidx.compose.ui.util.fastForEachIndexed
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.utils.isHiddenHint
 
 /**
  * 思考步骤类型，用于分组 Reasoning、客户端 Tool 和 ServerTool
@@ -44,6 +45,8 @@ fun List<UIMessagePart>.groupMessageParts(): List<MessagePartBlock> {
     }
 
     this.fastForEachIndexed { index, part ->
+        // 隐藏提示（附件说明之类）只给模型看，界面上不渲染
+        if (part.isHiddenHint()) return@fastForEachIndexed
         when (part) {
             is UIMessagePart.Reasoning -> {
                 currentThinkingSteps.add(ThinkingStep.ReasoningStep(part))

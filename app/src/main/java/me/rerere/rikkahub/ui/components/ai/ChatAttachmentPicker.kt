@@ -14,6 +14,8 @@ import androidx.compose.ui.platform.LocalResources
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.dokar.sonner.ToastType
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.R
@@ -25,6 +27,7 @@ import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.ImageUtils
+import me.rerere.rikkahub.utils.attachmentHintFor
 import me.rerere.rikkahub.utils.isAllowedFileType
 import org.koin.compose.koinInject
 import java.io.File
@@ -180,6 +183,19 @@ internal fun rememberChatAttachmentPickerActions(
                 }
                 if (documents.isNotEmpty()) {
                     inputState.addFiles(documents)
+                    // 读不了的文件（压缩包 / 二进制）再补一条隐藏提示：
+                    // 只给模型看，界面上 groupMessageParts 会跳过它
+                    val hints = documents.mapNotNull { doc ->
+                        attachmentHintFor(doc.fileName, doc.mime)?.let { hint ->
+                            UIMessagePart.Text(
+                                text = hint,
+                                metadata = buildJsonObject { put("hidden", true) },
+                            )
+                        }
+                    }
+                    if (hints.isNotEmpty()) {
+                        inputState.messageContent = inputState.messageContent + hints
+                    }
                     onAttachmentAdded()
                 }
             }

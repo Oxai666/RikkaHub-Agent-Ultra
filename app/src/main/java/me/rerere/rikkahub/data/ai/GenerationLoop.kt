@@ -31,6 +31,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
@@ -944,12 +947,28 @@ class GenerationLoop(
                                 .filter { it.isExecuted }
                                 .map { PriorToolCall(it.toolName, it.toolName + "::" + it.input, epochMs) }
                         }
-                        val loopDecision = LoopGuard.evaluate(
-                            priorCalls = priorCalls,
-                            toolName = tool.toolName,
-                            signature = signature,
-                            nowMs = System.currentTimeMillis(),
-                        )
+                        // virtual_screen 是混合工具：screenshot / status / diagnose 属于「观察」，
+                        // 用同样参数反复看是完全正常的（每次拿到的是新画面），不该按空转处理。
+                        // 光给 TTL 不够 —— AI 两次截图间隔可能只有一秒多，照样被拦。
+                        // 这里直接按 action 豁免，其余 action（tap/swipe/launch/start/stop）照旧计数。
+                        val isVirtualScreenObservation = tool.toolName == "virtual_screen" && runCatching {
+                            json.parseToJsonElement(tool.input)
+                                .jsonObject["action"]
+                                ?.jsonPrimitive
+                                ?.contentOrNull
+                                ?.lowercase() in setOf("screenshot", "status", "diagnose")
+                        }.getOrDefault(false)
+
+                        val loopDecision = if (isVirtualScreenObservation) {
+                            LoopGuardDecision(block = false, priorOccurrences = 0)
+                        } else {
+                            LoopGuard.evaluate(
+                                priorCalls = priorCalls,
+                                toolName = tool.toolName,
+                                signature = signature,
+                                nowMs = System.currentTimeMillis(),
+                            )
+                        }
                         val priorOccurrences = loopDecision.priorOccurrences
                         if (loopDecision.block) {
                             loopGuardTripCount++
