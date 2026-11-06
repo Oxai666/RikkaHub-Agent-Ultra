@@ -1903,9 +1903,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_external_storage_desc">让文件工具可在 U 盘、SD 卡、下载目录和云存储上使用。每个目录树都需要通过 SAF 选择器一次性授权。</string>
   <string name="assistant_page_local_tools_archive_title">压缩包（zip）</string>
   <string name="assistant_page_local_tools_archive_desc">直接创建和解压 .zip 压缩包。v1 暂不支持密码。可在 file:// 和 content:// URI 上使用。</string>
-  <string name="assistant_page_local_tools_root_title">Root 权限</string>
+  <string name="assistant_page_local_tools_root_title">Root</string>
   <string name="assistant_page_local_tools_root_desc">以真 root 身份通过 su 执行 shell 命令。权限比 Shizuku 高一档，只在 shell UID 不够用时才开。每次调用都要批准，命令本身还过 HARDLINE 底线。</string>
-  <string name="tool_name_root">Root 权限</string>
+  <string name="tool_name_root">Root</string>
   <string name="assistant_page_local_tools_shizuku_title">Shizuku</string>
   <string name="assistant_page_local_tools_shizuku_desc">以 Shizuku 的权限（shell UID，无需 root）运行 shell 命令。需要安装并运行 Shizuku 应用；请在设置 → Shizuku 中授权。每次调用都需授权。</string>
   <string name="assistant_page_local_tools_section_keyboard">键盘控制</string>
@@ -1921,7 +1921,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_browser_single_task_timeout_unit">分钟</string>
   <string name="setting_page_termux">Termux</string>
   <string name="setting_page_termux_desc">Shell 命令、超时和 Termux 集成。</string>
-  <string name="setting_page_root">Root 权限</string>
+  <string name="setting_page_root">Root</string>
   <string name="setting_page_root_desc">检测 su，并允许助手以 root 身份执行命令。</string>
   <string name="setting_page_virtual_screen">虚拟屏幕</string>
   <string name="setting_page_virtual_screen_desc">开一块额外的虚拟显示器，并能从里面截图。</string>
@@ -1937,6 +1937,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_virtual_screen_capture">截图</string>
   <string name="setting_virtual_screen_launch">投送</string>
   <string name="setting_virtual_screen_launch_hint">包名，如 com.android.settings</string>
+  <string name="setting_virtual_screen_window_short">大窗</string>
+  <string name="setting_virtual_screen_overlay_short">悬浮</string>
+  <string name="setting_virtual_screen_launch_label">投送应用</string>
+  <string name="setting_virtual_screen_no_preview">画面未就绪</string>
   <string name="setting_virtual_screen_open_window">打开实时小窗</string>
   <string name="setting_virtual_screen_open_overlay">悬浮小窗</string>
   <string name="setting_virtual_screen_close_overlay">关闭悬浮窗</string>
@@ -1947,7 +1951,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="tool_name_virtual_screen">虚拟屏幕</string>
   <string name="assistant_page_local_tools_virtual_screen_title">虚拟屏幕</string>
   <string name="assistant_page_local_tools_virtual_screen_desc">开一块额外的虚拟显示器并截图。需要 root。屏上是空的，得先往里投应用。</string>
-  <string name="setting_root_title">Root 权限</string>
+  <string name="setting_root_title">Root</string>
   <string name="setting_root_section_status">状态</string>
   <string name="setting_root_probing">检测中…</string>
   <string name="setting_root_status_available">Root 可用</string>

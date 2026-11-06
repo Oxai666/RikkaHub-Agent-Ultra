@@ -212,7 +212,6 @@ object VirtualScreenOverlay {
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    @SuppressLint("ClickableViewAccessibility")
     private fun attachDrag(
         context: Context,
         wm: WindowManager,

@@ -1550,9 +1550,9 @@
   <string name="assistant_page_local_tools_external_storage_desc">Lets file tools work on USB drives, SD cards, Downloads, and cloud storage. Each tree requires a one-time grant via the SAF picker.</string>
   <string name="assistant_page_local_tools_archive_title">Archive (zip)</string>
   <string name="assistant_page_local_tools_archive_desc">Create and extract .zip archives directly. No password support in v1. Works on file:// and content:// URIs.</string>
-  <string name="assistant_page_local_tools_root_title">Root Access</string>
+  <string name="assistant_page_local_tools_root_title">Root</string>
   <string name="assistant_page_local_tools_root_desc">Run shell commands as real root via su. Strictly more powerful than Shizuku — use it only when the shell UID is not enough. Every call asks for approval, and the command still goes through the HARDLINE floor.</string>
-  <string name="tool_name_root">Root Access</string>
+  <string name="tool_name_root">Root</string>
   <string name="assistant_page_local_tools_shizuku_title">Shizuku</string>
   <string name="assistant_page_local_tools_shizuku_desc">Run shell commands with Shizuku\'s privileges (the shell UID, no root). Requires the Shizuku app installed and running; grant permission from Settings → Shizuku. Approval required per call.</string>
   <string name="assistant_page_local_tools_section_keyboard">Keyboard control</string>
@@ -1621,7 +1621,7 @@
   <string name="setting_browser_single_task_timeout_unit">minutes</string>
   <string name="setting_page_termux">Termux</string>
   <string name="setting_page_termux_desc">Shell commands, timeouts, and Termux integration.</string>
-  <string name="setting_page_root">Root Access</string>
+  <string name="setting_page_root">Root</string>
   <string name="setting_page_root_desc">Detect su and allow the assistant to run commands as root.</string>
   <string name="setting_page_virtual_screen">Virtual Screen</string>
   <string name="setting_page_virtual_screen_desc">Spawn an extra VirtualDisplay and capture frames from it.</string>
@@ -1637,6 +1637,10 @@
   <string name="setting_virtual_screen_capture">Capture</string>
   <string name="setting_virtual_screen_launch">Launch</string>
   <string name="setting_virtual_screen_launch_hint">package name</string>
+  <string name="setting_virtual_screen_window_short">Full</string>
+  <string name="setting_virtual_screen_overlay_short">Float</string>
+  <string name="setting_virtual_screen_launch_label">Launch an app</string>
+  <string name="setting_virtual_screen_no_preview">No preview yet</string>
   <string name="setting_virtual_screen_open_window">Open live window</string>
   <string name="setting_virtual_screen_open_overlay">Floating window</string>
   <string name="setting_virtual_screen_close_overlay">Close floating window</string>
@@ -1647,7 +1651,7 @@
   <string name="tool_name_virtual_screen">Virtual Screen</string>
   <string name="assistant_page_local_tools_virtual_screen_title">Virtual Screen</string>
   <string name="assistant_page_local_tools_virtual_screen_desc">Create and capture an extra VirtualDisplay. Requires root. The display stays empty until you launch something onto it.</string>
-  <string name="setting_root_title">Root Access</string>
+  <string name="setting_root_title">Root</string>
   <string name="setting_root_section_status">Status</string>
   <string name="setting_root_probing">Detecting…</string>
   <string name="setting_root_status_available">Root available</string>

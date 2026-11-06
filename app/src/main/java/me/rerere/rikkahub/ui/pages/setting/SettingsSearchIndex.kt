@@ -117,6 +117,18 @@ fun settingsSearchIndex(developerMode: Boolean): List<SettingsSearchEntry> {
             route = Screen.SettingTermux,
         ),
         SettingsSearchEntry(
+            titleRes = R.string.setting_page_root,
+            descriptionRes = R.string.setting_page_root_desc,
+            groupRes = R.string.setting_page_model_and_services,
+            route = Screen.SettingRoot,
+        ),
+        SettingsSearchEntry(
+            titleRes = R.string.setting_page_virtual_screen,
+            descriptionRes = R.string.setting_page_virtual_screen_desc,
+            groupRes = R.string.setting_page_model_and_services,
+            route = Screen.SettingVirtualScreen,
+        ),
+        SettingsSearchEntry(
             titleRes = R.string.setting_page_shizuku,
             descriptionRes = R.string.setting_page_shizuku_desc,
             groupRes = R.string.setting_page_model_and_services,
