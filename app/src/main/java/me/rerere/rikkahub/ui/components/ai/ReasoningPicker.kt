@@ -16,12 +16,12 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.SliderState
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -97,24 +97,21 @@ fun ReasoningPicker(
     onUpdateReasoningLevel: (ReasoningLevel) -> Unit,
 ) {
     val currentIndex = levels.indexOf(reasoningLevel).coerceAtLeast(0)
-    val sliderState = remember {
-        SliderState(
-            value = currentIndex.toFloat(),
-            trackRange = 0f..(levelCount - 1).toFloat(),
-            steps = levelCount - 2,
-        )
-    }
+    // material3 1.5.0-alpha27 的 SliderState 还没有 trackRange，Slider(state = ...) 也没有
+    // onValueChange / onValueChangeFinished。改用 value + valueRange 的那个重载，
+    // 拖动值和提交时机自己持有，行为与官方 beta 版一致。
+    var sliderValue by remember { mutableFloatStateOf(currentIndex.toFloat()) }
     val interactionSource = remember { MutableInteractionSource() }
     val hapticFeedback = LocalHapticFeedback.current
     // 拖动过程中就跟随滑块预览，松手后才真正提交
-    val previewLevel = levels[sliderState.value.roundToInt().coerceIn(0, levelCount - 1)]
+    val previewLevel = levels[sliderValue.roundToInt().coerceIn(0, levelCount - 1)]
 
     LaunchedEffect(currentIndex) {
-        sliderState.value = currentIndex.toFloat()
+        sliderValue = currentIndex.toFloat()
     }
 
-    LaunchedEffect(sliderState) {
-        snapshotFlow { sliderState.value.roundToInt() }
+    LaunchedEffect(Unit) {
+        snapshotFlow { sliderValue.roundToInt() }
             .drop(1)
             .collect { hapticFeedback.performHapticFeedback(HapticFeedbackType.SegmentTick) }
     }
@@ -155,26 +152,27 @@ fun ReasoningPicker(
             }
 
             Slider(
-                state = sliderState,
-                onValueChange = { sliderState.value = it },
+                value = sliderValue,
+                onValueChange = { sliderValue = it },
                 onValueChangeFinished = {
-                    val snappedIndex = sliderState.value.roundToInt().coerceIn(0, levelCount - 1)
-                    sliderState.value = snappedIndex.toFloat()
+                    val snappedIndex = sliderValue.roundToInt().coerceIn(0, levelCount - 1)
+                    sliderValue = snappedIndex.toFloat()
                     onUpdateReasoningLevel(levels[snappedIndex])
                 },
                 modifier = Modifier.fillMaxWidth(),
+                valueRange = 0f..(levelCount - 1).toFloat(),
+                steps = levelCount - 2,
                 interactionSource = interactionSource,
                 thumb = {
                     SliderDefaults.Thumb(
                         interactionSource = interactionSource,
-                        isVertical = false,
                         thumbSize = DpSize(4.dp, 52.dp),
                     )
                 },
-                track = { sliderState ->
+                track = { state ->
                     SliderDefaults.Track(
-                        sliderState = sliderState,
-                        trackCornerSize = 12.dp,
+                        sliderState = state,
+                        trackInsideCornerSize = 12.dp,
                         modifier = Modifier.height(40.dp),
                     )
                 }
