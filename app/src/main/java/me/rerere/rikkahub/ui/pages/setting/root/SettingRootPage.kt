@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.pages.setting.root
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -12,6 +13,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -35,6 +37,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.root.RootPreferences
 import me.rerere.rikkahub.data.root.RootShell
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -55,6 +58,7 @@ fun SettingRootPage() {
     var probe by remember { mutableStateOf<RootShell.Probe?>(null) }
     var testOutput by remember { mutableStateOf<String?>(null) }
     var testRunning by remember { mutableStateOf(false) }
+    var suCommandInput by remember { mutableStateOf(RootPreferences.suCommand()) }
     // 防重入：进入页面时 LaunchedEffect 和 ON_RESUME 会各触发一次，
     // 两个探测并发跑完各写一次 probe，界面就闪两下。
     var refreshJob by remember { mutableStateOf<Job?>(null) }
@@ -134,6 +138,56 @@ fun SettingRootPage() {
                         Text(probe?.suPath ?: stringResource(R.string.setting_root_su_not_found))
                     },
                 )
+            }
+
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.setting_root_su_command),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    OutlinedTextField(
+                        value = suCommandInput,
+                        onValueChange = { suCommandInput = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text(RootPreferences.DEFAULT_SU_COMMAND) },
+                        supportingText = {
+                            Text(stringResource(R.string.setting_root_su_command_hint))
+                        },
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                suCommandInput = RootPreferences.DEFAULT_SU_COMMAND
+                                RootPreferences.setSuCommand(RootPreferences.DEFAULT_SU_COMMAND)
+                                RootShell.invalidate()
+                                refresh()
+                            },
+                            enabled = !probing,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(stringResource(R.string.setting_root_su_command_reset))
+                        }
+                        Button(
+                            onClick = {
+                                RootPreferences.setSuCommand(suCommandInput)
+                                RootShell.invalidate()
+                                refresh()
+                            },
+                            enabled = !probing,
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(stringResource(R.string.setting_root_su_command_save))
+                        }
+                    }
+                }
             }
 
             Card(

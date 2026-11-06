@@ -1630,6 +1630,10 @@
   <string name="setting_root_status_unavailable">Root unavailable</string>
   <string name="setting_root_no_detail">No detail</string>
   <string name="setting_root_su_path">su path</string>
+  <string name="setting_root_su_command">su command</string>
+  <string name="setting_root_su_command_hint">Default is su. Some KernelSU / APatch builds need extra flags (e.g. su -mm); you can also paste an absolute path when the default su is not on PATH.</string>
+  <string name="setting_root_su_command_save">Save</string>
+  <string name="setting_root_su_command_reset">Reset</string>
   <string name="setting_root_su_not_found">Not found</string>
   <string name="setting_root_recheck">Re-detect</string>
   <string name="setting_root_test">Run test command</string>

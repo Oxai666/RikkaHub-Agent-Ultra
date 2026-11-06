@@ -58,16 +58,41 @@ object RootShell {
     @Volatile
     private var probed: Boolean = false
 
-    /** 探测结果（绝对路径），没有 root 时为 null。 */
+    /**
+     * 解析出真正要执行的 argv。
+     *
+     * 三种情况：
+     *  - 用户填了绝对路径（`/system/xbin/su -mm`）→ 直接检查文件
+     *  - 用户保留默认的 `su` → 按候选列表扫（部分 ROM 的 su 不在 PATH 里）
+     *  - 用户填了别的命令名（`ksu`）→ 按 PATH 找
+     *
+     * 返回 null 表示找不到可执行的 su。
+     */
+    fun resolveCommand(): List<String>? {
+        val tokens = RootPreferences.suTokens()
+        val head = tokens.first()
+        val resolvedHead = when {
+            head.contains('/') ->
+                File(head).takeIf { it.exists() && it.canExecute() }?.absolutePath
+
+            head == RootPreferences.DEFAULT_SU_COMMAND ->
+                suCandidates.firstNotNullOfOrNull { candidate ->
+                    if (candidate.contains('/')) {
+                        File(candidate).takeIf { it.exists() && it.canExecute() }?.absolutePath
+                    } else {
+                        which(candidate)
+                    }
+                }
+
+            else -> which(head)
+        } ?: return null
+        return listOf(resolvedHead) + tokens.drop(1)
+    }
+
+    /** 探测结果（可直接展示的命令行），没有 root 时为 null。 */
     fun suPath(): String? {
         if (probed) return cachedSu
-        val found = suCandidates.firstNotNullOfOrNull { candidate ->
-            if (candidate.contains('/')) {
-                File(candidate).takeIf { it.exists() && it.canExecute() }?.absolutePath
-            } else {
-                which(candidate)
-            }
-        }
+        val found = resolveCommand()?.joinToString(" ")
         cachedSu = found
         probed = true
         return found
@@ -97,39 +122,44 @@ object RootShell {
      */
     suspend fun isAvailable(): Boolean {
         invalidate()
-        val su = suPath() ?: return false
-        val result = run(su, "id -u", PROBE_TIMEOUT_MS)
+        val argv = resolveCommand() ?: return false
+        val result = run(argv, "id -u", PROBE_TIMEOUT_MS)
         return result.ok && result.stdout.trim() == "0"
     }
 
     /** 探测详情，给设置页显示用。 */
     suspend fun probe(): Probe {
         invalidate()
-        val su = suPath() ?: return Probe(available = false, suPath = null, detail = "没有找到 su 可执行文件")
+        val argv = resolveCommand() ?: return Probe(
+            available = false,
+            suPath = null,
+            detail = "没有找到 su 可执行文件（当前配置：${RootPreferences.suCommand()}）",
+        )
+        val display = argv.joinToString(" ")
         // 一次 su 调用把要的信息全拿到。
         // 分两次跑的话，KernelSU/Magisk 在「每次询问」授权模式下会连弹两次框。
         val result = run(
-            su,
+            argv,
             "id -u; echo ---SEP---; getprop ro.build.version.release; uname -r",
             PROBE_TIMEOUT_MS,
         )
         if (result.timedOut) {
-            return Probe(available = false, suPath = su, detail = "su 超时未响应（授权弹窗被拦下了？）")
+            return Probe(available = false, suPath = display, detail = "su 超时未响应（授权弹窗被拦下了？）")
         }
         if (!result.ok) {
             return Probe(
                 available = false,
-                suPath = su,
+                suPath = display,
                 detail = "su 退出码 ${result.exitCode}：${result.stderr.trim().ifBlank { "无输出" }}",
             )
         }
         val parts = result.stdout.split("---SEP---", limit = 2)
         val uid = parts.getOrNull(0).orEmpty().trim()
         if (uid != "0") {
-            return Probe(available = false, suPath = su, detail = "su 返回的 uid 不是 0：$uid")
+            return Probe(available = false, suPath = display, detail = "su 返回的 uid 不是 0：$uid")
         }
         val version = parts.getOrNull(1).orEmpty().trim().lines().filter { it.isNotBlank() }.joinToString(" / ")
-        return Probe(available = true, suPath = su, detail = version)
+        return Probe(available = true, suPath = display, detail = version)
     }
 
     data class Probe(
@@ -140,18 +170,19 @@ object RootShell {
 
     /** 执行一条命令。su 不存在时直接返回失败，不抛异常。 */
     suspend fun exec(command: String, timeoutMs: Long = defaultTimeoutMs): Result {
-        val su = suPath() ?: return Result(-1, "", "su not found: 这台设备没有可用的 root shell")
-        return run(su, command, timeoutMs.coerceIn(minTimeoutMs, maxTimeoutMs))
+        val argv = resolveCommand()
+            ?: return Result(-1, "", "su not found: 这台设备没有可用的 root shell（当前配置：${RootPreferences.suCommand()}）")
+        return run(argv, command, timeoutMs.coerceIn(minTimeoutMs, maxTimeoutMs))
     }
 
-    private suspend fun run(su: String, command: String, timeoutMs: Long): Result =
+    private suspend fun run(argv: List<String>, command: String, timeoutMs: Long): Result =
         withContext(Dispatchers.IO) {
             val process = try {
-                ProcessBuilder(su, "-c", command)
+                ProcessBuilder(argv + listOf("-c", command))
                     .redirectErrorStream(false)
                     .start()
             } catch (t: Throwable) {
-                return@withContext Result(-1, "", "failed to start su: ${t.message}")
+                return@withContext Result(-1, "", "failed to start ${argv.joinToString(" ")}: ${t.message}")
             }
 
             val stdout = StringBuilder()

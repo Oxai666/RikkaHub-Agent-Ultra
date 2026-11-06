@@ -100,6 +100,9 @@ class RikkaHubApp : Application() {
         // 不影响启动，也不影响用户自定义 profile。
         BuiltinSubAgents.init(this)
 
+        // Root 设置（自定义 su 命令）。只有一个字符串，放 SharedPreferences。
+        me.rerere.rikkahub.data.root.RootPreferences.init(this)
+
         // Sweep orphan headless conversations created by workers that were killed mid-execute.
         sweepOrphanHeadlessConversations()
 

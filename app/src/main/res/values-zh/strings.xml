@@ -1930,6 +1930,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_root_status_unavailable">Root 不可用</string>
   <string name="setting_root_no_detail">没有更多信息</string>
   <string name="setting_root_su_path">su 路径</string>
+  <string name="setting_root_su_command">su 命令</string>
+  <string name="setting_root_su_command_hint">默认是 su。有些 KernelSU / APatch 版本需要额外参数，例如 su -mm；找不到默认 su 时也可以填绝对路径。</string>
+  <string name="setting_root_su_command_save">保存</string>
+  <string name="setting_root_su_command_reset">恢复默认</string>
   <string name="setting_root_su_not_found">未找到</string>
   <string name="setting_root_recheck">重新检测</string>
   <string name="setting_root_test">执行测试命令</string>
