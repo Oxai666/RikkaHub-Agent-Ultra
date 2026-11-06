@@ -40,6 +40,9 @@ fun virtualScreenTool(context: Context): Tool = Tool(
         action=tap and action=swipe inject touch into the virtual display — coordinates are in
         virtual-screen pixels (720x1280 by default), origin at the top-left. Call action=screenshot
         first to see the current layout and pick coordinates.
+        If a screenshot comes back almost entirely black, the display may simply not have finished
+        rendering yet — wait a second and take another screenshot before concluding the app crashed
+        or exited. A genuinely closed app also renders as a black frame, which is normal.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(

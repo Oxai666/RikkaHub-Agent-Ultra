@@ -34,6 +34,8 @@ fun rootShellTool(): Tool = Tool(
         Requires the device to be rooted (Magisk / KernelSU / APatch) and the assistant's
         Root tool toggle to be on. Prefer shizuku_exec when shell UID is enough — root is a
         bigger hammer than most tasks need.
+        Note: on Android 14+, `dumpsys activity activities` no longer prints `mResumedActivity`;
+        grep for `topResumedActivity` instead.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
