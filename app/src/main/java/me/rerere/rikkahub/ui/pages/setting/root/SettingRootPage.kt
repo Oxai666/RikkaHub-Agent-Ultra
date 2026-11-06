@@ -31,6 +31,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.R
@@ -54,9 +55,13 @@ fun SettingRootPage() {
     var probe by remember { mutableStateOf<RootShell.Probe?>(null) }
     var testOutput by remember { mutableStateOf<String?>(null) }
     var testRunning by remember { mutableStateOf(false) }
+    // 防重入：进入页面时 LaunchedEffect 和 ON_RESUME 会各触发一次，
+    // 两个探测并发跑完各写一次 probe，界面就闪两下。
+    var refreshJob by remember { mutableStateOf<Job?>(null) }
 
     fun refresh() {
-        scope.launch {
+        if (refreshJob?.isActive == true) return
+        refreshJob = scope.launch {
             probing = true
             probe = withContext(Dispatchers.IO) { RootShell.probe() }
             probing = false
@@ -65,11 +70,15 @@ fun SettingRootPage() {
 
     LaunchedEffect(Unit) { refresh() }
 
-    // 从外部回来（比如刚在 KernelSU 里授权）时自动重测
+    // 从外部回来（比如刚在 KernelSU 里授权）时自动重测。
+    // 首次 ON_RESUME 跳过：那时 LaunchedEffect 已经在探了。
     val lifecycleOwner = LocalLifecycleOwner.current
+    var firstResumeSkipped by remember { mutableStateOf(false) }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) refresh()
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (firstResumeSkipped) refresh() else firstResumeSkipped = true
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }

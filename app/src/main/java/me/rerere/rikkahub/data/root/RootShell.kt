@@ -106,27 +106,30 @@ object RootShell {
     suspend fun probe(): Probe {
         invalidate()
         val su = suPath() ?: return Probe(available = false, suPath = null, detail = "没有找到 su 可执行文件")
-        val id = run(su, "id -u", PROBE_TIMEOUT_MS)
-        if (id.timedOut) {
+        // 一次 su 调用把要的信息全拿到。
+        // 分两次跑的话，KernelSU/Magisk 在「每次询问」授权模式下会连弹两次框。
+        val result = run(
+            su,
+            "id -u; echo ---SEP---; getprop ro.build.version.release; uname -r",
+            PROBE_TIMEOUT_MS,
+        )
+        if (result.timedOut) {
             return Probe(available = false, suPath = su, detail = "su 超时未响应（授权弹窗被拦下了？）")
         }
-        if (!id.ok) {
+        if (!result.ok) {
             return Probe(
                 available = false,
                 suPath = su,
-                detail = "su 退出码 ${id.exitCode}：${id.stderr.trim().ifBlank { "无输出" }}",
+                detail = "su 退出码 ${result.exitCode}：${result.stderr.trim().ifBlank { "无输出" }}",
             )
         }
-        if (id.stdout.trim() != "0") {
-            return Probe(available = false, suPath = su, detail = "su 返回的 uid 不是 0：${id.stdout.trim()}")
+        val parts = result.stdout.split("---SEP---", limit = 2)
+        val uid = parts.getOrNull(0).orEmpty().trim()
+        if (uid != "0") {
+            return Probe(available = false, suPath = su, detail = "su 返回的 uid 不是 0：$uid")
         }
-        // 能拿到 uid 0 之后，再取一行版本信息，方便确认是哪套 root 方案
-        val version = run(su, "getprop ro.build.version.release; uname -r", PROBE_TIMEOUT_MS)
-        return Probe(
-            available = true,
-            suPath = su,
-            detail = version.stdout.trim().lines().filter { it.isNotBlank() }.joinToString(" / "),
-        )
+        val version = parts.getOrNull(1).orEmpty().trim().lines().filter { it.isNotBlank() }.joinToString(" / ")
+        return Probe(available = true, suPath = su, detail = version)
     }
 
     data class Probe(

@@ -1,6 +1,7 @@
 package me.rerere.workspace
 
 import java.io.BufferedInputStream
+import java.io.DataInputStream
 import java.io.EOFException
 import java.io.File
 import java.io.IOException
@@ -84,6 +85,7 @@ class RootfsInstaller(
                 )
             )
             extractTar(source, stagingDir, format, onProgress)
+            validateRootfs(stagingDir)
             linuxDir.deleteRecursively()
             require(stagingDir.renameTo(linuxDir)) {
                 "Failed to move rootfs into workspace"
@@ -93,6 +95,60 @@ class RootfsInstaller(
         } finally {
             stagingDir.deleteRecursively()
         }
+    }
+
+    /**
+     * 解压后校验：确认这真是一个能跑的 rootfs，而且架构对得上。
+     *
+     * 文件名白名单只能挡住「选错文件」，挡不住「选错架构」—— 往 arm64 手机上装
+     * amd64 的包，解压会成功，但 proot 起不来，最后报的错和真正的原因差得很远。
+     * 这里照 Lyra-Code 的做法读 shell 的 ELF 头，装之前就把问题指出来。
+     */
+    private fun validateRootfs(rootfs: File) {
+        // 有些发行版 tarball 会多套一层 ubuntu-base-xxx/，先进去再校验
+        normalizeSingleTopLevelDirectory(rootfs)
+
+        val shell = listOf("bin/bash", "bin/sh")
+            .map { File(rootfs, it) }
+            .firstOrNull { it.exists() }
+            ?: throw IllegalArgumentException(
+                "不是 Linux rootfs：解压后既没有 /bin/sh 也没有 /bin/bash，这个包可能在根目录之外又套了一层，或者根本不是发行版镜像"
+            )
+        val resolved = runCatching { shell.canonicalFile }.getOrElse { shell }
+        if (!resolved.isFile) {
+            throw IllegalArgumentException("rootfs 的 shell 不是有效文件：${resolved.path}")
+        }
+        val machine = readElfMachine(resolved)
+            ?: throw IllegalArgumentException(
+                "无法解析 ${resolved.name} 的 ELF 头，这个包里没有可执行的 Linux shell"
+            )
+        val expected = deviceElfMachine()
+        if (expected > 0 && machine != expected) {
+            throw IllegalArgumentException(
+                "架构不匹配：这台设备需要 ${abiName(expected)}（ELF machine $expected），" +
+                    "而包里的 shell 是 ${abiName(machine)}（ELF machine $machine）"
+            )
+        }
+    }
+
+    private fun hasShell(rootfs: File): Boolean =
+        File(rootfs, "bin/bash").exists() || File(rootfs, "bin/sh").exists()
+
+    /**
+     * 只有一个顶层目录、且 shell 在那个目录里时，把内容提上来。
+     * 不这么做的话，proot 会去 /bin/sh 找不到东西。
+     */
+    private fun normalizeSingleTopLevelDirectory(rootfs: File) {
+        if (hasShell(rootfs)) return
+        val children = rootfs.listFiles().orEmpty()
+        val nested = children.singleOrNull()?.takeIf { it.isDirectory } ?: return
+        if (!hasShell(nested)) return
+        nested.listFiles().orEmpty().forEach { child ->
+            require(child.renameTo(File(rootfs, child.name))) {
+                "无法规范化 rootfs 目录：${child.name}"
+            }
+        }
+        nested.delete()
     }
 
     private fun download(
@@ -478,6 +534,42 @@ class RootfsInstaller(
             val name = fileName.lowercase(Locale.ROOT)
             return name.startsWith(ALLOWED_ROOTFS_PREFIX) &&
                 ALLOWED_ROOTFS_SUFFIX.any { name.endsWith(it) }
+        }
+
+        /**
+         * 读 ELF 头的 e_machine 字段（偏移 18，小端 2 字节）。
+         *
+         * 183 = AArch64，62 = x86-64。解析失败返回 null（不是 ELF 或文件损坏）。
+         */
+        internal fun readElfMachine(file: File): Int? = runCatching {
+            DataInputStream(file.inputStream().buffered()).use { input ->
+                val header = ByteArray(20)
+                input.readFully(header)
+                if (header[0] != 0x7f.toByte() ||
+                    header[1] != 'E'.code.toByte() ||
+                    header[2] != 'L'.code.toByte() ||
+                    header[3] != 'F'.code.toByte()
+                ) {
+                    return@use null
+                }
+                (header[18].toInt() and 0xff) or ((header[19].toInt() and 0xff) shl 8)
+            }
+        }.getOrNull()
+
+        /** 设备自身的 ELF machine。判断不出来时返回 -1，调用方跳过架构检查。 */
+        internal fun deviceElfMachine(): Int =
+            when (System.getProperty("os.arch")?.lowercase(Locale.ROOT)) {
+                "aarch64", "arm64", "arm64-v8a" -> 183
+                "x86_64", "amd64" -> 62
+                else -> -1
+            }
+
+        internal fun abiName(machine: Int): String = when (machine) {
+            183 -> "arm64 (aarch64)"
+            62 -> "x86_64"
+            40 -> "arm (armhf)"
+            3 -> "x86 (i386)"
+            else -> "未知架构"
         }
     }
 }
