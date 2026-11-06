@@ -33,6 +33,7 @@ object VirtualScreenManager {
         val port: Int = 0,
         val width: Int = 0,
         val height: Int = 0,
+        val mirror: Boolean = false,
         val error: String? = null,
     )
 
@@ -52,6 +53,7 @@ object VirtualScreenManager {
         width: Int = 720,
         height: Int = 1280,
         dpi: Int = 320,
+        mirror: Boolean = false,
     ): Boolean = withContext(Dispatchers.IO) {
         if (_state.value.running) return@withContext true
         _state.value = State(starting = true)
@@ -73,6 +75,7 @@ object VirtualScreenManager {
             append(" --width ").append(width)
             append(" --height ").append(height)
             append(" --dpi ").append(dpi)
+            append(" --mirror ").append(mirror)
             append(" > /data/local/tmp/rikkahub-vscreen.log 2>&1 &")
         }
 
@@ -89,8 +92,14 @@ object VirtualScreenManager {
         val deadline = System.currentTimeMillis() + 10_000
         while (System.currentTimeMillis() < deadline) {
             if (ping(port)) {
-                _state.value = State(running = true, port = port, width = width, height = height)
-                Log.i(TAG, "virtual screen ready on port $port (${width}x$height)")
+                _state.value = State(
+                    running = true,
+                    port = port,
+                    width = width,
+                    height = height,
+                    mirror = mirror,
+                )
+                Log.i(TAG, "virtual screen ready on port $port (${width}x$height, mirror=$mirror)")
                 return@withContext true
             }
             Thread.sleep(250)

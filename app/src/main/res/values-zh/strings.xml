@@ -1935,6 +1935,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_virtual_screen_start">启动</string>
   <string name="setting_virtual_screen_stop">停止</string>
   <string name="setting_virtual_screen_capture">截图</string>
+  <string name="setting_virtual_screen_mirror">镜像当前屏幕</string>
+  <string name="setting_virtual_screen_mirror_desc">关掉时是一块独立的空屏；打开后显示你手机屏幕的内容（只读镜像）。</string>
   <string name="tool_name_virtual_screen">虚拟屏幕</string>
   <string name="assistant_page_local_tools_virtual_screen_title">虚拟屏幕</string>
   <string name="assistant_page_local_tools_virtual_screen_desc">开一块额外的虚拟显示器并截图。需要 root。屏上是空的，得先往里投应用。</string>

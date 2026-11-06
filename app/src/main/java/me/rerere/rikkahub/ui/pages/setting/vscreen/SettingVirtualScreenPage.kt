@@ -17,6 +17,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
@@ -57,6 +59,7 @@ fun SettingVirtualScreenPage() {
     var shot by remember { mutableStateOf<Bitmap?>(null) }
     var widthText by rememberSaveable { mutableStateOf("720") }
     var heightText by rememberSaveable { mutableStateOf("1280") }
+    var mirror by rememberSaveable { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -134,6 +137,23 @@ fun SettingVirtualScreenPage() {
                         modifier = Modifier.weight(1f),
                     )
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.setting_virtual_screen_mirror),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            text = stringResource(R.string.setting_virtual_screen_mirror_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Switch(checked = mirror, onCheckedChange = { mirror = it })
+                }
                 Button(
                     onClick = {
                         scope.launch {
@@ -142,6 +162,7 @@ fun SettingVirtualScreenPage() {
                                 context = context,
                                 width = widthText.toIntOrNull()?.coerceIn(240, 2160) ?: 720,
                                 height = heightText.toIntOrNull()?.coerceIn(240, 2160) ?: 1280,
+                                mirror = mirror,
                             )
                             busy = false
                         }

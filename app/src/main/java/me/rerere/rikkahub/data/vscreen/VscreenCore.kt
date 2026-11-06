@@ -48,6 +48,7 @@ object VscreenCore {
             val height = opts["height"]?.toIntOrNull() ?: 1280
             val dpi = opts["dpi"]?.toIntOrNull() ?: 320
             val port = opts["port"]?.toIntOrNull() ?: 8765
+            val mirror = opts["mirror"]?.toBooleanStrictOrNull() ?: false
 
             // 主 Looper 必须先建：ActivityThread 构造时就会创建 Handler，
             // 没有 Looper 会直接抛 "Can't create handler inside thread that has not
@@ -67,7 +68,7 @@ object VscreenCore {
                 height,
                 dpi,
                 reader.surface,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC,
+                virtualDisplayFlags(mirror),
             ) ?: error("createVirtualDisplay returned null")
 
             val server = ServerSocket(port)
@@ -176,6 +177,35 @@ object VscreenCore {
         } finally {
             runCatching { acquired.close() }
         }
+    }
+
+    /**
+     * 组装 VirtualDisplay 的 flags。
+     *
+     * `OWN_CONTENT_ONLY` 是分水岭：
+     *  - 有它 → 独立的一块屏，只有主动投上去的 Activity 才会显示（默认）
+     *  - 没有 → 镜像主显示（你手机现在显示什么，它就显示什么）
+     *
+     * 后面几个常量在不同 API 级别是 hidden 的，Kotlin 编译期看不到，
+     * 所以一律用反射取名字，取不到就跳过 —— 少了它们只会损失触摸/焦点能力，
+     * 不会让创建失败。
+     */
+    private fun virtualDisplayFlags(mirror: Boolean): Int {
+        var flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
+        if (!mirror) {
+            flags = flags or DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
+        }
+        for (name in listOf(
+            "VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH",
+            "VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL",
+            "VIRTUAL_DISPLAY_FLAG_OWN_FOCUS",
+            // TRUSTED 需要系统签名，普通 su 进程带上反而会被拒；不加。
+        )) {
+            flags = flags or runCatching {
+                DisplayManager::class.java.getField(name).getInt(null)
+            }.getOrDefault(0)
+        }
+        return flags
     }
 
     private fun parse(args: Array<String>): Map<String, String> {
