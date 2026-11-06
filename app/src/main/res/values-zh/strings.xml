@@ -1931,7 +1931,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_root_no_detail">没有更多信息</string>
   <string name="setting_root_su_path">su 路径</string>
   <string name="setting_root_su_command">su 命令</string>
-  <string name="setting_root_su_command_hint">默认是 su。有些 KernelSU / APatch 版本需要额外参数，例如 su -mm；找不到默认 su 时也可以填绝对路径。</string>
+  <string name="setting_root_su_command_hint">两种写法：\n① 直接填 su 或带参数，如 su -mm —— 会自动解析成绝对路径；\n② 写成含 {command} 的模板，如 su -mm -c {command} 或 /data/adb/ksu/bin/su -c {command}，整条交给 sh 解释，命令部分自动转义。</string>
   <string name="setting_root_su_command_save">保存</string>
   <string name="setting_root_su_command_reset">恢复默认</string>
   <string name="setting_root_su_not_found">未找到</string>

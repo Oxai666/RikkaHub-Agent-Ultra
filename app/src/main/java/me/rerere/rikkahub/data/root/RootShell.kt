@@ -122,27 +122,24 @@ object RootShell {
      */
     suspend fun isAvailable(): Boolean {
         invalidate()
-        val argv = resolveCommand() ?: return false
-        val result = run(argv, "id -u", PROBE_TIMEOUT_MS)
+        val argv = buildInvocation("id -u") ?: return false
+        val result = run(argv, PROBE_TIMEOUT_MS)
         return result.ok && result.stdout.trim() == "0"
     }
 
     /** 探测详情，给设置页显示用。 */
     suspend fun probe(): Probe {
         invalidate()
-        val argv = resolveCommand() ?: return Probe(
+        // 一次 su 调用把要的信息全拿到。
+        // 分两次跑的话，KernelSU/Magisk 在「每次询问」授权模式下会连弹两次框。
+        val probeCommand = "id -u; echo ---SEP---; getprop ro.build.version.release; uname -r"
+        val argv = buildInvocation(probeCommand) ?: return Probe(
             available = false,
             suPath = null,
             detail = "没有找到 su 可执行文件（当前配置：${RootPreferences.suCommand()}）",
         )
-        val display = argv.joinToString(" ")
-        // 一次 su 调用把要的信息全拿到。
-        // 分两次跑的话，KernelSU/Magisk 在「每次询问」授权模式下会连弹两次框。
-        val result = run(
-            argv,
-            "id -u; echo ---SEP---; getprop ro.build.version.release; uname -r",
-            PROBE_TIMEOUT_MS,
-        )
+        val display = displayCommand()
+        val result = run(argv, PROBE_TIMEOUT_MS)
         if (result.timedOut) {
             return Probe(available = false, suPath = display, detail = "su 超时未响应（授权弹窗被拦下了？）")
         }
@@ -168,17 +165,53 @@ object RootShell {
         val detail: String,
     )
 
-    /** 执行一条命令。su 不存在时直接返回失败，不抛异常。 */
-    suspend fun exec(command: String, timeoutMs: Long = defaultTimeoutMs): Result {
-        val argv = resolveCommand()
-            ?: return Result(-1, "", "su not found: 这台设备没有可用的 root shell（当前配置：${RootPreferences.suCommand()}）")
-        return run(argv, command, timeoutMs.coerceIn(minTimeoutMs, maxTimeoutMs))
+    /**
+     * 当前配置的可读形式：模板模式直接显示原文，前缀模式显示解析后的绝对路径。
+     */
+    fun displayCommand(): String {
+        val raw = RootPreferences.suCommand()
+        if ("{command}" in raw) return raw
+        return resolveCommand()?.joinToString(" ") ?: raw
     }
 
-    private suspend fun run(argv: List<String>, command: String, timeoutMs: Long): Result =
+    /** 执行一条命令。su 不存在时直接返回失败，不抛异常。 */
+    suspend fun exec(command: String, timeoutMs: Long = defaultTimeoutMs): Result {
+        val argv = buildInvocation(command)
+            ?: return Result(-1, "", "su not found: 这台设备没有可用的 root shell（当前配置：${RootPreferences.suCommand()}）")
+        return run(argv, timeoutMs.coerceIn(minTimeoutMs, maxTimeoutMs))
+    }
+
+    /**
+     * 组装最终要执行的 argv。
+     *
+     * 两种写法：
+     *  - **模板模式**：配置里含 `{command}`，例如 `su -mm -c {command}` 或
+     *    `/data/adb/ksu/bin/su -c {command}`。整条交给 /system/bin/sh 解释，
+     *    命令部分会先做 shell 转义。
+     *  - **前缀模式**（默认）：配置只有 `su` 或 `su -mm`。这里会先把 su 解析成
+     *    绝对路径，兜住 su 不在 PATH 的 ROM。
+     */
+    private fun buildInvocation(command: String): List<String>? {
+        val raw = RootPreferences.suCommand()
+        if ("{command}" in raw) {
+            val invocation = raw.replace("{command}", shellQuote(command))
+            return listOf("/system/bin/sh", "-c", invocation)
+        }
+        val argv = resolveCommand() ?: return null
+        return argv + listOf("-c", command)
+    }
+
+    /**
+     * 把整条命令包成 shell 里的一个字面量。
+     * 单引号内没有特殊字符，遇到单引号本身用 '"'"' 拼接。
+     */
+    private fun shellQuote(value: String): String =
+        "'" + value.replace("'", "'\"'\"'") + "'"
+
+    private suspend fun run(argv: List<String>, timeoutMs: Long): Result =
         withContext(Dispatchers.IO) {
             val process = try {
-                ProcessBuilder(argv + listOf("-c", command))
+                ProcessBuilder(argv)
                     .redirectErrorStream(false)
                     .start()
             } catch (t: Throwable) {

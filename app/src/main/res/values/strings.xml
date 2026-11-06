@@ -1631,7 +1631,7 @@
   <string name="setting_root_no_detail">No detail</string>
   <string name="setting_root_su_path">su path</string>
   <string name="setting_root_su_command">su command</string>
-  <string name="setting_root_su_command_hint">Default is su. Some KernelSU / APatch builds need extra flags (e.g. su -mm); you can also paste an absolute path when the default su is not on PATH.</string>
+  <string name="setting_root_su_command_hint">Two forms:\n① Plain, e.g. su or su -mm — resolved to an absolute path automatically.\n② A template containing {command}, e.g. su -mm -c {command} or /data/adb/ksu/bin/su -c {command}. It is handed to sh as-is, with the command quoted.</string>
   <string name="setting_root_su_command_save">Save</string>
   <string name="setting_root_su_command_reset">Reset</string>
   <string name="setting_root_su_not_found">Not found</string>
