@@ -75,6 +75,9 @@ import me.rerere.hugeicons.stroke.SmartPhone01
 import me.rerere.hugeicons.stroke.Sun01
 import me.rerere.hugeicons.stroke.Tiktok
 import me.rerere.hugeicons.stroke.WavingHand01
+import me.rerere.hugeicons.stroke.ComputerTerminal01
+import me.rerere.hugeicons.stroke.Fullscreen
+import me.rerere.hugeicons.stroke.Cpu
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.isNotConfigured
@@ -308,25 +311,25 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingTermux) },
-                        leadingContent = { Icon(HugeIcons.Console, null) },
+                        leadingContent = { Icon(HugeIcons.ComputerTerminal01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_termux_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_termux)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingRoot) },
-                        leadingContent = { Icon(HugeIcons.Console, null) },
+                        leadingContent = { Icon(HugeIcons.Shield01, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_root_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_root)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingVirtualScreen) },
-                        leadingContent = { Icon(HugeIcons.Console, null) },
+                        leadingContent = { Icon(HugeIcons.Fullscreen, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_virtual_screen_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_virtual_screen)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingShizuku) },
-                        leadingContent = { Icon(HugeIcons.Console, null) },
+                        leadingContent = { Icon(HugeIcons.Cpu, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_shizuku_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_shizuku)) },
                     )

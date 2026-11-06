@@ -105,6 +105,16 @@ object VscreenCore {
     /** quit 命令会让整个进程退出：多个客户端线程共用一个标志。 */
     private val stopping = java.util.concurrent.atomic.AtomicBoolean(false)
 
+    /**
+     * 最近一帧的缓存。
+     *
+     * 静态页面只产生一帧。stream 消费掉之后，screenshot 再 acquireLatestImage
+     * 就永远拿不到（ImageReader 不会重发已消费的帧）—— 这是 AI 那批
+     * "no frame yet" 的真正原因。所以这里留一份，谁要都给得出来。
+     */
+    @Volatile
+    private var lastFrameJpeg: ByteArray? = null
+
     private fun serve(
         server: ServerSocket,
         reader: ImageReader,
@@ -169,7 +179,9 @@ object VscreenCore {
                     "OK {\"display_id\":$displayId,\"width\":$width,\"height\":$height}"
                 )
                 command == "shot" -> {
-                    val jpeg = captureJpeg(reader, width, height, display)
+                    val fresh = captureJpeg(reader, width, height, display)
+                    if (fresh != null) lastFrameJpeg = fresh
+                    val jpeg = lastFrameJpeg
                     if (jpeg == null) {
                         sendLine("ERR no frame yet")
                     } else {
@@ -180,11 +192,10 @@ object VscreenCore {
                 // 保证客户端不会因为「太久没数据」而超时断开。
                 command == "stream" -> {
                     sendLine("OK stream")
-                    var lastJpeg: ByteArray? = null
                     while (!stopping.get()) {
                         val fresh = captureJpeg(reader, width, height, display)
-                        if (fresh != null) lastJpeg = fresh
-                        val toSend = lastJpeg
+                        if (fresh != null) lastFrameJpeg = fresh
+                        val toSend = lastFrameJpeg
                         if (toSend != null) {
                             sendLine("FRAME ${toSend.size}")
                             out.write(toSend)
