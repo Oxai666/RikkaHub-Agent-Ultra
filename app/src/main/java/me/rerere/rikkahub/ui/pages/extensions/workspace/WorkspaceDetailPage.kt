@@ -35,6 +35,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
@@ -119,6 +120,15 @@ fun WorkspaceDetailPage(id: String) {
     var showInstallDialog by remember { mutableStateOf(false) }
     var previewImageUri by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    // 本地导入 rootfs：先按 */* 选，文件名白名单（ubuntu-base-*.tar.gz|.tar.xz）由 RootfsInstaller 校验
+    val rootfsFilePicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        uri?.let {
+            showInstallDialog = false
+            vm.installRootfsFromFile(it, context)
+        }
+    }
     val filePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
@@ -320,6 +330,9 @@ fun WorkspaceDetailPage(id: String) {
                 onConfirm = { url ->
                     vm.installRootfs(url)
                     showInstallDialog = false
+                },
+                onPickLocal = {
+                    runCatching { rootfsFilePicker.launch(arrayOf("*/*")) }
                 },
             )
         }
@@ -604,6 +617,7 @@ private fun InstallRootfsDialog(
     workspace: WorkspaceEntity,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
+    onPickLocal: () -> Unit,
 ) {
     var url by rememberSaveable(workspace.id) { mutableStateOf(DEFAULT_ROOTFS_URL) }
 
@@ -623,6 +637,17 @@ private fun InstallRootfsDialog(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.workspace_detail_download_url)) },
                     maxLines = 5,
+                )
+                OutlinedButton(
+                    onClick = onPickLocal,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.workspace_detail_install_from_file))
+                }
+                Text(
+                    text = stringResource(R.string.workspace_detail_install_from_file_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },

@@ -46,6 +46,55 @@ class RootfsInstaller(
         }
     }
 
+    /**
+     * 从本地文件安装 rootfs。
+     *
+     * 只接受 Ubuntu base 的官方 tarball：文件名必须形如
+     * `ubuntu-base-<version>-base-<arch>.tar.gz`（或 `.tar.xz`）。
+     *
+     * 为什么不校验内容哈希：离线安装的前提就是用户自己挑好了文件，
+     * 我们没法验证来源。限定文件名是为了挡掉「误选了一个 apk、一张图、
+     * 或者别的项目的压缩包」这类明显错误 —— 解压出来的目录结构不对时，
+     * ProotShellRunner 起不来，报错会更晚也更难懂。
+     */
+    fun installFromFile(
+        root: String,
+        source: File,
+        onProgress: (RootfsInstallProgress) -> Unit = {},
+    ) {
+        require(source.isFile) { "Rootfs archive not found: ${source.absolutePath}" }
+        require(isAllowedRootfsArchive(source.name)) {
+            "只支持 Ubuntu base 的 rootfs 包（ubuntu-base-*-arm64.tar.gz / .tar.xz），" +
+                "当前文件：${source.name}"
+        }
+        manager.ensureWorkspace(root)
+        val format = ArchiveFormat.fromFile(source)
+        val tempDir = manager.tempDir(root)
+        val stagingDir = File(tempDir, "rootfs-staging")
+        val linuxDir = manager.linuxDir(root)
+
+        try {
+            stagingDir.deleteRecursively()
+            stagingDir.mkdirs()
+            onProgress(
+                RootfsInstallProgress(
+                    stage = RootfsInstallStage.EXTRACTING,
+                    bytesRead = source.length(),
+                    totalBytes = source.length(),
+                )
+            )
+            extractTar(source, stagingDir, format, onProgress)
+            linuxDir.deleteRecursively()
+            require(stagingDir.renameTo(linuxDir)) {
+                "Failed to move rootfs into workspace"
+            }
+            patcher.patch(linuxDir)
+            onProgress(RootfsInstallProgress(stage = RootfsInstallStage.INSTALLED))
+        } finally {
+            stagingDir.deleteRecursively()
+        }
+    }
+
     private fun download(
         url: String,
         target: File,
@@ -414,5 +463,21 @@ class RootfsInstaller(
         private const val PROGRESS_STEP_BYTES = 512 * 1024
         private const val CONNECT_TIMEOUT_MS = 30_000
         private const val READ_TIMEOUT_MS = 60_000
+
+        private const val ALLOWED_ROOTFS_PREFIX = "ubuntu-base-"
+        private val ALLOWED_ROOTFS_SUFFIX = listOf(".tar.gz", ".tar.xz")
+
+        /**
+         * 本地导入的白名单：只认 Ubuntu base 官方 tarball。
+         *
+         * 不做内容校验（离线安装本来就是相信用户选的文件），
+         * 限定文件名是为了挡住「误选 apk / 别家压缩包」这类明显错误 ——
+         * 解压出来的结构不对时，proot 起不来，报错更晚也更难懂。
+         */
+        fun isAllowedRootfsArchive(fileName: String): Boolean {
+            val name = fileName.lowercase(Locale.ROOT)
+            return name.startsWith(ALLOWED_ROOTFS_PREFIX) &&
+                ALLOWED_ROOTFS_SUFFIX.any { name.endsWith(it) }
+        }
     }
 }

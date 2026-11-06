@@ -137,6 +137,7 @@ private fun LocalToolOption.shortName(ctx: Context): String = when (this) {
     LocalToolOption.ExternalStorage -> ctx.getString(R.string.tool_name_ext_storage)
     LocalToolOption.Archive -> ctx.getString(R.string.tool_name_archive)
     LocalToolOption.Shizuku -> ctx.getString(R.string.tool_name_shizuku)
+    LocalToolOption.Root -> ctx.getString(R.string.tool_name_root)
     LocalToolOption.AppLauncher -> ctx.getString(R.string.tool_name_app_launcher)
     LocalToolOption.KeyboardControl -> ctx.getString(R.string.tool_name_keyboard)
     else -> this::class.simpleName ?: "?"

@@ -36,6 +36,10 @@ object ToolApprovalDefaults {
         // Shell via Shizuku (shell UID, no root)
         "shizuku_exec",
 
+        // Shell as real root (su). Strictly more powerful than shizuku_exec, so it asks
+        // every time and its command still goes through the HARDLINE floor.
+        "root_shell",
+
         // Remote shell (SSH)
         "ssh_exec",
         "ssh_exec_saved",

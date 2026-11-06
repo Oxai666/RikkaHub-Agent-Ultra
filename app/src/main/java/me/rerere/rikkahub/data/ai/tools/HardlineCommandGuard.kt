@@ -171,7 +171,7 @@ object HardlineCommandGuard {
             }
             toolName == "ssh_exec" || toolName == "ssh_exec_saved" ->
                 checkCommand(input["command"]?.jsonPrimitive?.contentOrNull)
-            toolName == "shizuku_exec" ->
+            toolName == "shizuku_exec" || toolName == "root_shell" ->
                 checkCommand(input["command"]?.jsonPrimitive?.contentOrNull)
             // Sub-agent dispatch — the spawned LLM gets the parent's full tool surface
             // headlessly, so a `task` / `prompt` containing a literal hardline-blocked

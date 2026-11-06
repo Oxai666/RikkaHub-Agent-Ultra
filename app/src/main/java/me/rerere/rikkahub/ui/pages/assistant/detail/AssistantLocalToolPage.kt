@@ -1127,6 +1127,20 @@ private fun AssistantLocalToolContent(
             )
             item(
                 headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_root_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_root_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.Root),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.Root, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_shizuku_title))
                 },
                 supportingContent = {

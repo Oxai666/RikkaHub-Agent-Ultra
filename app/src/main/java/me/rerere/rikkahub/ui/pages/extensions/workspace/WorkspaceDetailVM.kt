@@ -359,6 +359,49 @@ class WorkspaceDetailVM(
         }
     }
 
+    /**
+     * 从本地文件安装 rootfs。
+     *
+     * 命名白名单（ubuntu-base-*.tar.gz / .tar.xz）由 RootfsInstaller 把关，
+     * 这里只负责把 content:// 复制成一个真实文件 —— 解压走的是 java.io.File，
+     * 不能直接吃 SAF 的流。
+     */
+    fun installRootfsFromFile(uri: Uri, context: android.content.Context) {
+        viewModelScope.launch {
+            _installError.value = null
+            val workspace = state.value.workspace ?: return@launch
+            val appContext = context.applicationContext
+            var localFile: File? = null
+            _installProgress.value = RootfsInstallProgress(stage = RootfsInstallStage.EXTRACTING)
+            try {
+                terminalSessionManager.closeWorkspace(workspace.root)
+                localFile = withContext(Dispatchers.IO) {
+                    val name = DocumentFile.fromSingleUri(appContext, uri)?.name
+                        ?: uri.lastPathSegment
+                        ?: "rootfs.tar.gz"
+                    val dir = File(appContext.cacheDir, "rootfs-import").apply { mkdirs() }
+                    val target = File(dir, name)
+                    appContext.contentResolver.openInputStream(uri)?.use { input ->
+                        target.outputStream().use { output -> input.copyTo(output) }
+                    } ?: error("无法读取所选文件")
+                    target
+                }
+                repository.installRootfsFromFile(workspace.id, localFile) { progress ->
+                    _installProgress.value = progress
+                }
+                loadWorkspace()
+                refresh()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (error: Throwable) {
+                _installError.value = error.message ?: "Rootfs 安装失败"
+            } finally {
+                localFile?.let { runCatching { it.delete() } }
+                _installProgress.value = null
+            }
+        }
+    }
+
     fun dismissInstallError() {
         _installError.value = null
     }

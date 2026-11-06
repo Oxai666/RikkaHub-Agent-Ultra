@@ -179,6 +179,14 @@ sealed class LocalToolOption {
     @Serializable @SerialName("cron_jobs")       data object CronJobs       : LocalToolOption()
     @Serializable @SerialName("ssh")             data object Ssh            : LocalToolOption()
     @Serializable @SerialName("shizuku")         data object Shizuku        : LocalToolOption()
+    /**
+     * root_shell：以 root 身份执行命令。
+     *
+     * 和 Shizuku 分开是因为权限级别差一档：Shizuku 拿到的是 shell UID（等同 adb shell），
+     * 这个走 `su -c`，是真 root，能碰系统分区和其他应用的数据。
+     * 默认不勾选；即使勾了，每次调用还要单独批准，命令本身也过 HARDLINE 底线。
+     */
+    @Serializable @SerialName("root")            data object Root           : LocalToolOption()
     @Serializable @SerialName("telegram_bot")    data object TelegramBot    : LocalToolOption()
     @Serializable @SerialName("screen_automation") data object ScreenAutomation : LocalToolOption()
     /**
@@ -855,6 +863,9 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.Shizuku)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.shizukuExecTool(context))
+        }
+        if (options.contains(LocalToolOption.Root)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.rootShellTool())
         }
         if (options.contains(LocalToolOption.TelegramBot)) {
             tools.add(telegramSetTokenTool(telegramBotPreferences, telegramBotClient))

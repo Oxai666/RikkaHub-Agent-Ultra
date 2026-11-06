@@ -117,6 +117,38 @@ class WorkspaceRepository(
         return true
     }
 
+    suspend fun installRootfsFromFile(
+        id: String,
+        file: java.io.File,
+        onProgress: (RootfsInstallProgress) -> Unit = {},
+    ): Boolean {
+        val workspace = dao.getById(id) ?: return false
+        updateShellState(workspace, WorkspaceShellStatus.INSTALLING.name)
+        try {
+            runInterruptible(Dispatchers.IO) {
+                rootfsInstaller.installFromFile(workspace.root, file, onProgress)
+            }
+            updateShellState(workspace, WorkspaceShellStatus.READY.name)
+            return true
+        } catch (e: CancellationException) {
+            withContext(NonCancellable) {
+                restoreShellState(workspace)
+            }
+            throw e
+        } catch (e: InterruptedException) {
+            withContext(NonCancellable) {
+                restoreShellState(workspace)
+            }
+            throw CancellationException("Rootfs install cancelled").also { it.initCause(e) }
+        } catch (e: Throwable) {
+            Log.e(TAG, "installRootfsFromFile failed: workspace=${workspace.id}, file=${file.name}", e)
+            withContext(NonCancellable) {
+                restoreShellState(workspace)
+            }
+            throw e
+        }
+    }
+
     suspend fun installRootfs(
         id: String,
         url: String,
