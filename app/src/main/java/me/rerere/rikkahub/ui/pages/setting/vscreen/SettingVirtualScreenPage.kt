@@ -292,7 +292,7 @@ fun SettingVirtualScreenPage() {
                         onClick = {
                             scope.launch {
                                 busy = true
-                                val result = VirtualScreenManager.launchApp(packageInput)
+                                val result = VirtualScreenManager.launchApp(context, packageInput)
                                 launchMessage = if (result.ok) "已投送：${result.message}" else result.message
                                 busy = false
                             }

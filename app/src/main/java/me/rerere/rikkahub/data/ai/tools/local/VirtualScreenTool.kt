@@ -114,7 +114,7 @@ fun virtualScreenTool(context: Context): Tool = Tool(
                         )
                     )
                 }
-                val result = VirtualScreenManager.launchApp(packageName, activity)
+                val result = VirtualScreenManager.launchApp(context, packageName, activity)
                 listOf(
                     UIMessagePart.Text(
                         buildJsonObject {

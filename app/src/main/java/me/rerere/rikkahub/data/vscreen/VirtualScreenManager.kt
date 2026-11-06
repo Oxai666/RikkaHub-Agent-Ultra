@@ -54,9 +54,13 @@ object VirtualScreenManager {
     private const val KEY_HEIGHT = "height"
     private const val KEY_MIRROR = "mirror"
     private const val KEY_DISPLAY = "display_id"
+    private const val KEY_WAS_RUNNING = "was_running"
+    private const val KEY_PACKAGE = "launched_package"
+    private const val KEY_ACTIVITY = "launched_activity"
 
     private fun persist(context: Context, state: State) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putBoolean(KEY_WAS_RUNNING, true)
             .putInt(KEY_PORT, state.port)
             .putInt(KEY_WIDTH, state.width)
             .putInt(KEY_HEIGHT, state.height)
@@ -65,42 +69,71 @@ object VirtualScreenManager {
             .apply()
     }
 
+    /** 记住最后一次投送的应用，下次恢复时自动把它放回去。 */
+    private fun persistLaunch(context: Context, packageName: String, activity: String?) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putString(KEY_PACKAGE, packageName)
+            .putString(KEY_ACTIVITY, activity)
+            .apply()
+    }
+
     private fun clearPersisted(context: Context) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
     }
 
     /**
-     * 把「上次开着的虚拟屏」认回来。
+     * 恢复到上次的现场。
      *
-     * App 进程被杀之后 helper 仍然活着（setsid 过来的独立会话），但内存里的
-     * state 没了，界面会显示「未运行」。这里读持久化记录 + ping 一次：
-     * 通了就恢复状态，不通就顺手把残留进程清掉，避免 display 泄漏。
+     * 三种情况：
+     *  1. 进程还在（ping 通）→ 恢复 state，然后把上次投的应用重新放上去
+     *  2. 进程没了但之前是运行状态 → 按记录重启 helper，再重新投送
+     *  3. 本来就没开过 → 什么都不做
+     *
+     * 第 2 种是这次补的：之前只恢复状态、不重启进程，所以退出重进永远是空的。
      */
     suspend fun restore(context: Context): Boolean = withContext(Dispatchers.IO) {
         if (_state.value.running) return@withContext true
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val port = prefs.getInt(KEY_PORT, 0)
-        if (port == 0) return@withContext false
+        if (!prefs.getBoolean(KEY_WAS_RUNNING, false)) return@withContext false
 
-        if (ping(port)) {
+        val width = prefs.getInt(KEY_WIDTH, 720)
+        val height = prefs.getInt(KEY_HEIGHT, 1280)
+        val mirror = prefs.getBoolean(KEY_MIRROR, false)
+        val port = prefs.getInt(KEY_PORT, 0)
+
+        if (port != 0 && ping(port)) {
             val displayId = runCatching { parseDisplayId(send(port, "info")) }.getOrDefault(-1)
             _state.value = State(
                 running = true,
                 port = port,
-                width = prefs.getInt(KEY_WIDTH, 720),
-                height = prefs.getInt(KEY_HEIGHT, 1280),
-                mirror = prefs.getBoolean(KEY_MIRROR, false),
+                width = width,
+                height = height,
+                mirror = mirror,
                 displayId = displayId,
             )
-            Log.i(TAG, "restored virtual screen on port $port (display=$displayId)")
-            true
-        } else {
-            // 记录还在但进程没了：清理残留，别让半个 display 一直挂着
-            clearPersisted(context)
-            _state.value = State()
-            runCatching { RootShell.exec("pkill -f $CORE_CLASS", 8_000) }
-            false
+            Log.i(TAG, "restored live virtual screen on port $port (display=$displayId)")
+            relaunchLast(context)
+            return@withContext true
         }
+
+        // 进程没了，按记录重新拉起来
+        Log.i(TAG, "helper gone, restarting with ${width}x$height mirror=$mirror")
+        val ok = start(context, width, height, mirror = mirror)
+        if (!ok) {
+            clearPersisted(context)
+            return@withContext false
+        }
+        relaunchLast(context)
+        true
+    }
+
+    /** 把上次投送的应用重新放到虚拟屏上；没记录就跳过。 */
+    private suspend fun relaunchLast(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val packageName = prefs.getString(KEY_PACKAGE, null)?.takeIf { it.isNotBlank() } ?: return
+        val activity = prefs.getString(KEY_ACTIVITY, null)
+        val result = launchApp(context, packageName, activity)
+        Log.i(TAG, "relaunch last app $packageName -> ${result.ok} ${result.message}")
     }
 
     /** helper 进程还活着吗（跟 socket 是否可用分开看）。 */
@@ -375,12 +408,15 @@ object VirtualScreenManager {
      * `am start --display <id>` 需要 shell/root 身份（普通应用只能投自己），所以走 RootShell。
      * 不给 activity 时用 `cmd package resolve-activity` 找启动入口。
      */
-    suspend fun launchApp(packageName: String, activity: String? = null): LaunchResult =
-        withContext(Dispatchers.IO) {
-            val state = _state.value
-            if (!state.running) return@withContext LaunchResult(false, "虚拟屏没在运行")
-            if (state.displayId < 0) return@withContext LaunchResult(false, "拿不到 displayId，重建一次虚拟屏试试")
-            if (state.mirror) return@withContext LaunchResult(false, "镜像模式不能投应用，先关掉「镜像当前屏幕」")
+    suspend fun launchApp(
+        context: Context,
+        packageName: String,
+        activity: String? = null,
+    ): LaunchResult = withContext(Dispatchers.IO) {
+        val state = _state.value
+        if (!state.running) return@withContext LaunchResult(false, "虚拟屏没在运行")
+        if (state.displayId < 0) return@withContext LaunchResult(false, "拿不到 displayId，重建一次虚拟屏试试")
+        if (state.mirror) return@withContext LaunchResult(false, "镜像模式不能投应用，先关掉「镜像当前屏幕」")
 
             val component = activity?.let {
                 if ('/' in it) it else "$packageName/$it"
@@ -392,6 +428,7 @@ object VirtualScreenManager {
 
             val result = RootShell.exec("am start --display ${state.displayId} -n $component", 20_000)
             if (result.ok) {
+                persistLaunch(context, packageName, activity)
                 LaunchResult(true, component)
             } else {
                 LaunchResult(
