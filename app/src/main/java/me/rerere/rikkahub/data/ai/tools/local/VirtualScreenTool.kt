@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.util.Base64
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
@@ -31,9 +32,11 @@ fun virtualScreenTool(context: Context): Tool = Tool(
         Drive a virtual display (VirtualDisplay) on the device. Requires root.
         action=start creates a 720x1280 (default) virtual screen in a separate app_process;
         action=screenshot captures the current frame and returns it as an image;
-        action=status reports whether it is running; action=stop tears it down.
-        This is an EXTRA display, not a mirror of the user's screen. To put something on it,
-        launch an activity onto that display id with root_shell (am start --display <id>).
+        action=launch sends an installed app onto that display (pass package, optionally activity),
+        which is how you actually put content on it;
+        action=status reports whether it is running and its display id;
+        action=stop tears it down.
+        This is an EXTRA display, not a mirror of the user's screen (unless started with mirror=true).
         The virtual screen has no input injection in this version — it is read-only.
     """.trimIndent().replace("\n", " "),
     parameters = {
@@ -41,7 +44,15 @@ fun virtualScreenTool(context: Context): Tool = Tool(
             properties = buildJsonObject {
                 put("action", buildJsonObject {
                     put("type", "string")
-                    put("description", "One of: start / screenshot / status / stop")
+                    put("description", "One of: start / screenshot / launch / status / stop")
+                })
+                put("package", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Package name to launch on the virtual screen, e.g. com.android.settings. Required by action=launch.")
+                })
+                put("activity", buildJsonObject {
+                    put("type", "string")
+                    put("description", "Optional activity: '.Settings' or a full 'pkg/.Activity'. Omit to auto-resolve the launcher activity.")
                 })
                 put("width", buildJsonObject {
                     put("type", "integer")
@@ -51,6 +62,10 @@ fun virtualScreenTool(context: Context): Tool = Tool(
                     put("type", "integer")
                     put("description", "Virtual screen height in pixels. Default 1280. Only used by start.")
                 })
+                put("mirror", buildJsonObject {
+                    put("type", "boolean")
+                    put("description", "true mirrors the phone's own screen instead of creating an empty display. Default false.")
+                })
             },
             required = listOf("action")
         )
@@ -59,29 +74,53 @@ fun virtualScreenTool(context: Context): Tool = Tool(
         val action = input.jsonObject["action"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val width = input.jsonObject["width"]?.jsonPrimitive?.intOrNull ?: 720
         val height = input.jsonObject["height"]?.jsonPrimitive?.intOrNull ?: 1280
+        val mirror = input.jsonObject["mirror"]?.jsonPrimitive?.booleanOrNull ?: false
+        val packageName = input.jsonObject["package"]?.jsonPrimitive?.contentOrNull
+        val activity = input.jsonObject["activity"]?.jsonPrimitive?.contentOrNull
         val state = VirtualScreenManager.state.value
 
         when (action) {
             "start" -> {
-                val ok = VirtualScreenManager.start(context, width, height)
+                val ok = VirtualScreenManager.start(context, width, height, mirror = mirror)
                 val now = VirtualScreenManager.state.value
                 listOf(
                     UIMessagePart.Text(
                         buildJsonObject {
                             put("ok", ok)
                             put("running", now.running)
+                            put("display_id", now.displayId)
                             put("port", now.port)
                             put("width", now.width)
                             put("height", now.height)
+                            put("mirror", now.mirror)
                             now.error?.let { put("error", it) }
                             if (ok) {
                                 put(
                                     "hint",
-                                    "虚拟屏已就绪。要往上放东西，用 root_shell 执行 " +
-                                        "`am start --display <displayId>`；displayId 可在 " +
-                                        "`dumpsys display` 里按名称 rikkahub-vscreen 查找。"
+                                    "虚拟屏已就绪。用 action=launch 传 package 把应用投上去，" +
+                                        "或者用 root_shell 执行 `am start --display ${now.displayId} -n <pkg>/<activity>`。"
                                 )
                             }
+                        }.toString()
+                    )
+                )
+            }
+
+            "launch" -> {
+                if (packageName.isNullOrBlank()) {
+                    return@Tool listOf(
+                        UIMessagePart.Text(
+                            buildJsonObject { put("error", "action=launch 需要 package 参数") }.toString()
+                        )
+                    )
+                }
+                val result = VirtualScreenManager.launchApp(packageName, activity)
+                listOf(
+                    UIMessagePart.Text(
+                        buildJsonObject {
+                            put("ok", result.ok)
+                            put("message", result.message)
+                            put("display_id", VirtualScreenManager.state.value.displayId)
                         }.toString()
                     )
                 )
@@ -118,9 +157,11 @@ fun virtualScreenTool(context: Context): Tool = Tool(
                         buildJsonObject {
                             put("running", state.running)
                             put("starting", state.starting)
+                            put("display_id", state.displayId)
                             put("port", state.port)
                             put("width", state.width)
                             put("height", state.height)
+                            put("mirror", state.mirror)
                             state.error?.let { put("error", it) }
                         }.toString()
                     )

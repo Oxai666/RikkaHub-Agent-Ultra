@@ -34,8 +34,11 @@ object VirtualScreenManager {
         val width: Int = 0,
         val height: Int = 0,
         val mirror: Boolean = false,
+        val displayId: Int = -1,
         val error: String? = null,
     )
+
+    data class LaunchResult(val ok: Boolean, val message: String)
 
     private val _state = MutableStateFlow(State())
     val state = _state.asStateFlow()
@@ -92,14 +95,17 @@ object VirtualScreenManager {
         val deadline = System.currentTimeMillis() + 10_000
         while (System.currentTimeMillis() < deadline) {
             if (ping(port)) {
+                // displayId 只有 helper 里拿得到，投应用要用它，所以启动成功就顺手问一次
+                val displayId = runCatching { parseDisplayId(send(port, "info")) }.getOrDefault(-1)
                 _state.value = State(
                     running = true,
                     port = port,
                     width = width,
                     height = height,
                     mirror = mirror,
+                    displayId = displayId,
                 )
-                Log.i(TAG, "virtual screen ready on port $port (${width}x$height, mirror=$mirror)")
+                Log.i(TAG, "virtual screen ready on port $port (${width}x$height, mirror=$mirror, display=$displayId)")
                 return@withContext true
             }
             Thread.sleep(250)
@@ -156,6 +162,54 @@ object VirtualScreenManager {
     }
 
     private fun ping(port: Int): Boolean = runCatching { send(port, "ping") == "OK pong" }.getOrDefault(false)
+
+    private fun parseDisplayId(reply: String): Int =
+        Regex("\"display_id\"\\s*:\\s*(-?\\d+)").find(reply)
+            ?.groupValues?.get(1)?.toIntOrNull() ?: -1
+
+    /**
+     * 把一个应用投到虚拟屏上。
+     *
+     * `am start --display <id>` 需要 shell/root 身份（普通应用只能投自己），所以走 RootShell。
+     * 不给 activity 时用 `cmd package resolve-activity` 找启动入口。
+     */
+    suspend fun launchApp(packageName: String, activity: String? = null): LaunchResult =
+        withContext(Dispatchers.IO) {
+            val state = _state.value
+            if (!state.running) return@withContext LaunchResult(false, "虚拟屏没在运行")
+            if (state.displayId < 0) return@withContext LaunchResult(false, "拿不到 displayId，重建一次虚拟屏试试")
+            if (state.mirror) return@withContext LaunchResult(false, "镜像模式不能投应用，先关掉「镜像当前屏幕」")
+
+            val component = activity?.let {
+                if ('/' in it) it else "$packageName/$it"
+            } ?: resolveLauncherActivity(packageName)
+                ?: return@withContext LaunchResult(
+                    false,
+                    "找不到 $packageName 的启动 Activity。确认包名正确，或者显式传 activity。",
+                )
+
+            val result = RootShell.exec("am start --display ${state.displayId} -n $component", 20_000)
+            if (result.ok) {
+                LaunchResult(true, component)
+            } else {
+                LaunchResult(
+                    false,
+                    "am start 失败（退出码 ${result.exitCode}）：" +
+                        result.stderr.trim().ifBlank { result.stdout.trim() },
+                )
+            }
+        }
+
+    /** 用命令行问系统要这个包的启动 Activity，例如 `com.android.settings/.Settings`。 */
+    private suspend fun resolveLauncherActivity(packageName: String): String? {
+        val result = RootShell.exec("cmd package resolve-activity --brief $packageName", 15_000)
+        if (!result.ok) return null
+        return result.stdout.trim()
+            .lines()
+            .lastOrNull { it.contains('/') }
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+    }
 
     private fun send(port: Int, command: String): String {
         Socket().use { socket ->

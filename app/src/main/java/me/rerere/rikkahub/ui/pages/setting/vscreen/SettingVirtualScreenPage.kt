@@ -60,6 +60,8 @@ fun SettingVirtualScreenPage() {
     var widthText by rememberSaveable { mutableStateOf("720") }
     var heightText by rememberSaveable { mutableStateOf("1280") }
     var mirror by rememberSaveable { mutableStateOf(false) }
+    var packageInput by rememberSaveable { mutableStateOf("") }
+    var launchMessage by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -96,7 +98,9 @@ fun SettingVirtualScreenPage() {
                     },
                     supportingContent = {
                         val detail = when {
-                            state.running -> "127.0.0.1:${state.port} · ${state.width}×${state.height}"
+                            state.running ->
+                                "display ${state.displayId} · 127.0.0.1:${state.port} · ${state.width}×${state.height}" +
+                                    if (state.mirror) " · 镜像" else ""
                             state.error != null -> state.error!!
                             else -> stringResource(R.string.setting_virtual_screen_idle_hint)
                         }
@@ -216,6 +220,40 @@ fun SettingVirtualScreenPage() {
                                 .padding(8.dp),
                         )
                     }
+                }
+
+                // 投应用：独立屏刚开出来是空的，得往里投东西才看得见
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    OutlinedTextField(
+                        value = packageInput,
+                        onValueChange = { packageInput = it.trim() },
+                        label = { Text(stringResource(R.string.setting_virtual_screen_launch_hint)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Button(
+                        onClick = {
+                            scope.launch {
+                                busy = true
+                                val result = VirtualScreenManager.launchApp(packageInput)
+                                launchMessage = if (result.ok) "已投送：${result.message}" else result.message
+                                busy = false
+                            }
+                        },
+                        enabled = !busy && packageInput.isNotBlank() && !state.mirror,
+                    ) {
+                        Text(stringResource(R.string.setting_virtual_screen_launch))
+                    }
+                }
+                launchMessage?.let { message ->
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
         }

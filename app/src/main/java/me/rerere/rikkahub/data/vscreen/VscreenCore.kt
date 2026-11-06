@@ -72,19 +72,20 @@ object VscreenCore {
             ) ?: error("createVirtualDisplay returned null")
 
             val server = ServerSocket(port)
+            val displayId = virtualDisplay.display.displayId
 
             // socket 服务放后台线程，主线程交给 Looper.loop()：
             // ActivityThread 的 handler 需要主线程在 loop，否则 DisplayManager
             // 的回调可能永远不投递。
             Thread {
-                serve(server, reader, width, height, virtualDisplay)
+                serve(server, reader, width, height, virtualDisplay, displayId)
                 // serve 只在 quit / 连接异常时返回；主线程还卡在 Looper.loop()，
                 // 所以直接结束整个进程，别让僵尸进程留在后台。
                 kotlin.system.exitProcess(0)
             }.apply { isDaemon = true }.start()
 
             // 父进程靠这一行确认「起来了并且端口是对的」，之后才去连
-            println("VSCREEN_READY $port $width $height")
+            println("VSCREEN_READY $port $width $height $displayId")
             System.out.flush()
 
             android.os.Looper.loop()
@@ -103,6 +104,7 @@ object VscreenCore {
         width: Int,
         height: Int,
         display: VirtualDisplay,
+        displayId: Int,
     ) {
         var running = true
         while (running) {
@@ -119,6 +121,10 @@ object VscreenCore {
                 when (command) {
                     "ping" -> out.println("OK pong")
                     "size" -> out.println("OK $width $height")
+                    // displayId 只有在这个进程里才拿得到；App 侧投应用时需要它
+                    "info" -> out.println(
+                        "OK {\"display_id\":$displayId,\"width\":$width,\"height\":$height}"
+                    )
                     "shot" -> out.println(capture(reader, width, height))
                     "quit" -> {
                         out.println("OK bye")
