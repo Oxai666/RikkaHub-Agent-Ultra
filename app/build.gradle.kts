@@ -184,6 +184,9 @@ dependencies {
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material3.adaptive)
     implementation(libs.androidx.material3.adaptive.layout)
+    // material3 的 MaterialShapes 用它做形状（RoundedPolygon / Morph）。
+    // material3 的 POM 里这条是 runtime scope，编译期不一定可见，显式声明一次更保险。
+    implementation("androidx.graphics:graphics-shapes:1.0.1")
 
     // Navigation 3
     implementation(libs.androidx.navigation3.runtime)
