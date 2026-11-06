@@ -213,8 +213,14 @@ object VscreenCore {
         }
     }
 
-    private fun describe(t: Throwable): String =
-        "${t.javaClass.simpleName}: ${t.message ?: "no message"}"
+    private fun describe(t: Throwable): String {
+        // 反射调用抛的异常会被包一层 InvocationTargetException，真正的原因在 cause 里
+        var current: Throwable = t
+        while (current is java.lang.reflect.InvocationTargetException) {
+            current = current.targetException ?: break
+        }
+        return "${current.javaClass.simpleName}: ${current.message ?: "no message"}"
+    }
 
     /**
      * 抓一帧转 JPEG。

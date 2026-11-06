@@ -165,34 +165,68 @@ object VirtualScreenManager {
         }
     }
 
-    /** 短连接命令：轻点。坐标是虚拟屏像素。失败原因写进 state.error。 */
+    /**
+     * 轻点。坐标是虚拟屏像素。
+     *
+     * 走 `input -d <displayId> tap x y` 这条命令，不用 InputManager 反射：
+     * Android 15 对 hidden API 的反射拦截很严，即便进程是 root，
+     * `injectInputEvent` 也可能在 invoke 阶段被拒（抛 InvocationTargetException）。
+     * `input` 命令是 shell 自己的工具，带 `-d` 指定 display，绕开整条 hidden API 路径。
+     */
     suspend fun tap(x: Float, y: Float): Boolean = withContext(Dispatchers.IO) {
-        val port = _state.value.port
-        if (!_state.value.running || port == 0) return@withContext false
-        val reply = runCatching { send(port, "tap ${x.toInt()} ${y.toInt()}") }.getOrElse { t ->
-            _state.value = _state.value.copy(error = "tap 连接失败：${t.message}")
-            return@withContext false
-        }
-        if (reply.startsWith("OK")) {
-            true
-        } else {
-            _state.value = _state.value.copy(error = reply.removePrefix("ERR ").ifBlank { "tap 失败" })
-            false
-        }
+        val state = _state.value
+        if (!state.running || state.displayId < 0) return@withContext false
+
+        val shell = RootShell.exec(
+            "input -d ${state.displayId} tap ${x.toInt()} ${y.toInt()}",
+            10_000,
+        )
+        if (shell.ok) return@withContext true
+        val shellReason = shell.stderr.trim().ifBlank { shell.stdout.trim() }
+            .ifBlank { "退出码 ${shell.exitCode}" }
+
+        // 回退：有些 ROM 裁剪了 input 的 -d 参数，这时走 helper 里的反射注入
+        val fallback = runCatching { send(state.port, "tap ${x.toInt()} ${y.toInt()}") }.getOrNull()
+        if (fallback != null && fallback.startsWith("OK")) return@withContext true
+
+        val fallbackReason = fallback?.removePrefix("ERR ") ?: "helper 无响应"
+        _state.value = _state.value.copy(
+            error = "点击失败\n· input 命令：$shellReason\n· 反射注入：$fallbackReason"
+        )
+        false
     }
 
-    /** 短连接命令：滑动。 */
-    suspend fun swipe(x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Long = 250): Boolean =
-        withContext(Dispatchers.IO) {
-            val port = _state.value.port
-            if (!_state.value.running || port == 0) return@withContext false
-            runCatching {
-                send(
-                    port,
-                    "swipe ${x1.toInt()} ${y1.toInt()} ${x2.toInt()} ${y2.toInt()} $durationMs",
-                ).startsWith("OK")
-            }.getOrDefault(false)
-        }
+    /** 滑动。同样走 `input -d` 命令。 */
+    suspend fun swipe(
+        x1: Float,
+        y1: Float,
+        x2: Float,
+        y2: Float,
+        durationMs: Long = 250,
+    ): Boolean = withContext(Dispatchers.IO) {
+        val state = _state.value
+        if (!state.running || state.displayId < 0) return@withContext false
+
+        val shell = RootShell.exec(
+            "input -d ${state.displayId} swipe " +
+                "${x1.toInt()} ${y1.toInt()} ${x2.toInt()} ${y2.toInt()} $durationMs",
+            10_000,
+        )
+        if (shell.ok) return@withContext true
+        val shellReason = shell.stderr.trim().ifBlank { shell.stdout.trim() }
+            .ifBlank { "退出码 ${shell.exitCode}" }
+
+        val fallback = runCatching {
+            send(state.port, "swipe ${x1.toInt()} ${y1.toInt()} ${x2.toInt()} ${y2.toInt()} $durationMs")
+        }.getOrNull()
+        if (fallback != null && fallback.startsWith("OK")) return@withContext true
+
+        val fallbackReason = fallback?.removePrefix("ERR ") ?: "helper 无响应"
+        _state.value = _state.value.copy(
+            error = "滑动失败\n· input 命令：$shellReason\n· 反射注入：$fallbackReason"
+        )
+        false
+    }
 
     /**
      * 实时帧流。
