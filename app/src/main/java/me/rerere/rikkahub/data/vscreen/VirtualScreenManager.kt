@@ -246,6 +246,19 @@ object VirtualScreenManager {
         runCatching { RootShell.exec("pkill -f $CORE_CLASS", 8_000) }
     }
 
+    /**
+     * 诊断：问 helper 这块 display 的状态。
+     *
+     * `screencap -d` 和 ImageReader 同时拿不到帧时先看这里：
+     *  - state 不是 2（STATE_ON）→ display 没被打开
+     *  - surface_valid=false → SurfaceFlinger 已经不往这个 surface 合成了
+     */
+    suspend fun diagnose(): String? = withContext(Dispatchers.IO) {
+        val port = _state.value.port
+        if (!_state.value.running || port == 0) return@withContext null
+        runCatching { send(port, "diag") }.getOrNull()
+    }
+
     /** 抓一帧。失败返回 null，原因写进 state.error。 */
     suspend fun screenshot(): Bitmap? = withContext(Dispatchers.IO) {
         val port = _state.value.port

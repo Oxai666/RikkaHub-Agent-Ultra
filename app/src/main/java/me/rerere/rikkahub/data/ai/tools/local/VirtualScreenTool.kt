@@ -48,7 +48,7 @@ fun virtualScreenTool(context: Context): Tool = Tool(
                     put("type", "string")
                     put(
                         "description",
-                        "One of: start / screenshot / launch / tap / swipe / status / stop"
+                        "One of: start / screenshot / launch / tap / swipe / status / diagnose / stop"
                     )
                 })
                 put("x", buildJsonObject {
@@ -229,6 +229,15 @@ fun virtualScreenTool(context: Context): Tool = Tool(
                             put("duration_ms", duration)
                             if (!ok) put("error", VirtualScreenManager.state.value.error ?: "滑动失败")
                         }.toString()
+                    )
+                )
+            }
+
+            "diagnose" -> {
+                val diag = VirtualScreenManager.diagnose()
+                listOf(
+                    UIMessagePart.Text(
+                        diag ?: buildJsonObject { put("error", "虚拟屏没在运行") }.toString()
                     )
                 )
             }

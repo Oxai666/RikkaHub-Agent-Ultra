@@ -62,8 +62,10 @@ object VscreenCore {
             val context = systemContext()
             val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
 
-            // maxImages = 2：够「拿上一帧 + 正在产生的一帧」，再多只会占内存
-            val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+            // maxImages = 4：surface 生产者是 SurfaceFlinger，它至少需要 2~3 个 buffer
+            // 轮转（double/triple buffering）。给 2 个的话生产者会被卡住，表现就是
+            // acquireLatestImage 永远返回 null —— 也就是 AI 看到的 "no frame yet"。
+            val reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 4)
             val virtualDisplay: VirtualDisplay = displayManager.createVirtualDisplay(
                 "rikkahub-vscreen",
                 width,
@@ -121,7 +123,7 @@ object VscreenCore {
                 break
             }
             Thread {
-                runCatching { handleClient(socket, reader, width, height, displayId) }
+                runCatching { handleClient(socket, reader, width, height, displayId, display) }
             }.apply { isDaemon = true }.start()
         }
         runCatching { display.release() }
@@ -135,6 +137,7 @@ object VscreenCore {
         width: Int,
         height: Int,
         displayId: Int,
+        display: VirtualDisplay,
     ) {
         socket.use { client ->
             client.soTimeout = 30_000
@@ -150,11 +153,23 @@ object VscreenCore {
             when {
                 command == "ping" -> sendLine("OK pong")
                 command == "size" -> sendLine("OK $width $height")
+                // 诊断：display 到底有没有在合成。screencap 失败时看这个最直接。
+                command == "diag" -> {
+                    val d = runCatching { display.display }.getOrNull()
+                    val state = d?.state ?: -1
+                    val refresh = d?.refreshRate ?: 0f
+                    sendLine(
+                        "OK {\"display_id\":$displayId,\"state\":$state," +
+                            "\"width\":$width,\"height\":$height," +
+                            "\"refresh\":$refresh," +
+                            "\"surface_valid\":${display.surface?.isValid == true}}"
+                    )
+                }
                 command == "info" -> sendLine(
                     "OK {\"display_id\":$displayId,\"width\":$width,\"height\":$height}"
                 )
                 command == "shot" -> {
-                    val jpeg = captureJpeg(reader, width, height)
+                    val jpeg = captureJpeg(reader, width, height, display)
                     if (jpeg == null) {
                         sendLine("ERR no frame yet")
                     } else {
@@ -167,7 +182,7 @@ object VscreenCore {
                     sendLine("OK stream")
                     var lastJpeg: ByteArray? = null
                     while (!stopping.get()) {
-                        val fresh = captureJpeg(reader, width, height)
+                        val fresh = captureJpeg(reader, width, height, display)
                         if (fresh != null) lastJpeg = fresh
                         val toSend = lastJpeg
                         if (toSend != null) {
@@ -230,9 +245,38 @@ object VscreenCore {
      * acquireLatestImage 会返回**最近**的一帧；虚拟屏刚创建时可能还没有内容，
      * 所以这里等最多 1.5 秒，等不到就返回空图（而不是抛异常）。
      */
-    private fun captureJpeg(reader: ImageReader, width: Int, height: Int): ByteArray? {
+    /**
+     * 抓一帧。
+     *
+     * 第一次拿不到就重新绑一次 surface 再试：静态页面不产生新帧时，
+     * SurfaceFlinger 可能已经停止向这个 surface 合成，重新 setSurface
+     * 能逼它重新走一遍输出流程。这是常见的「VirtualDisplay 截图全黑 / no frame」
+     * 的解法。
+     */
+    private fun captureJpeg(
+        reader: ImageReader,
+        width: Int,
+        height: Int,
+        display: VirtualDisplay,
+    ): ByteArray? {
+        tryAcquire(reader, width, height, 600)?.let { return it }
+        runCatching {
+            display.surface = null
+            Thread.sleep(60)
+            display.surface = reader.surface
+            Thread.sleep(120)
+        }
+        return tryAcquire(reader, width, height, 1_200)
+    }
+
+    private fun tryAcquire(
+        reader: ImageReader,
+        width: Int,
+        height: Int,
+        timeoutMs: Long,
+    ): ByteArray? {
         var image: android.media.Image? = null
-        val deadline = System.currentTimeMillis() + 600
+        val deadline = System.currentTimeMillis() + timeoutMs
         while (image == null && System.currentTimeMillis() < deadline) {
             image = reader.acquireLatestImage()
             if (image == null) Thread.sleep(16)
@@ -243,7 +287,6 @@ object VscreenCore {
             val buffer = plane.buffer
             val rowStride = plane.rowStride
             val pixelStride = plane.pixelStride
-            // rowStride 可能大于 width * pixelStride（有 padding），要逐行拷贝
             val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
             if (rowStride == width * pixelStride) {
                 bitmap.copyPixelsFromBuffer(buffer)
@@ -381,9 +424,11 @@ object VscreenCore {
         }
         for (name in listOf(
             "VIRTUAL_DISPLAY_FLAG_SUPPORTS_TOUCH",
-            "VIRTUAL_DISPLAY_FLAG_DESTROY_CONTENT_ON_REMOVAL",
             "VIRTUAL_DISPLAY_FLAG_OWN_FOCUS",
-            // TRUSTED 需要系统签名，普通 su 进程带上反而会被拒；不加。
+            // DESTROY_CONTENT_ON_REMOVAL 故意不加：它的语义是「display 不再被
+            // 持有/镜像时销毁内容」，部分 ROM 会因此在没有真实物理输出时把合成
+            // 整个停掉，表现就是 screencap -d 和 ImageReader 都拿不到帧。
+            // TRUSTED 也不加：要系统签名，普通 su 进程带上反而会被拒。
         )) {
             flags = flags or runCatching {
                 DisplayManager::class.java.getField(name).getInt(null)
