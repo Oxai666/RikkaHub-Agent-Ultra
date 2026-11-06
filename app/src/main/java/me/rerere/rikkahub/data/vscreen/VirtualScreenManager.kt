@@ -47,6 +47,68 @@ object VirtualScreenManager {
 
     private const val CORE_CLASS = "me.rerere.rikkahub.data.vscreen.VscreenCore"
 
+    // 状态持久化：App 进程被系统回收后，helper 还在跑，得能把它认回来
+    private const val PREFS = "rikkahub.vscreen"
+    private const val KEY_PORT = "port"
+    private const val KEY_WIDTH = "width"
+    private const val KEY_HEIGHT = "height"
+    private const val KEY_MIRROR = "mirror"
+    private const val KEY_DISPLAY = "display_id"
+
+    private fun persist(context: Context, state: State) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putInt(KEY_PORT, state.port)
+            .putInt(KEY_WIDTH, state.width)
+            .putInt(KEY_HEIGHT, state.height)
+            .putBoolean(KEY_MIRROR, state.mirror)
+            .putInt(KEY_DISPLAY, state.displayId)
+            .apply()
+    }
+
+    private fun clearPersisted(context: Context) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()
+    }
+
+    /**
+     * 把「上次开着的虚拟屏」认回来。
+     *
+     * App 进程被杀之后 helper 仍然活着（setsid 过来的独立会话），但内存里的
+     * state 没了，界面会显示「未运行」。这里读持久化记录 + ping 一次：
+     * 通了就恢复状态，不通就顺手把残留进程清掉，避免 display 泄漏。
+     */
+    suspend fun restore(context: Context): Boolean = withContext(Dispatchers.IO) {
+        if (_state.value.running) return@withContext true
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val port = prefs.getInt(KEY_PORT, 0)
+        if (port == 0) return@withContext false
+
+        if (ping(port)) {
+            val displayId = runCatching { parseDisplayId(send(port, "info")) }.getOrDefault(-1)
+            _state.value = State(
+                running = true,
+                port = port,
+                width = prefs.getInt(KEY_WIDTH, 720),
+                height = prefs.getInt(KEY_HEIGHT, 1280),
+                mirror = prefs.getBoolean(KEY_MIRROR, false),
+                displayId = displayId,
+            )
+            Log.i(TAG, "restored virtual screen on port $port (display=$displayId)")
+            true
+        } else {
+            // 记录还在但进程没了：清理残留，别让半个 display 一直挂着
+            clearPersisted(context)
+            _state.value = State()
+            runCatching { RootShell.exec("pkill -f $CORE_CLASS", 8_000) }
+            false
+        }
+    }
+
+    /** helper 进程还活着吗（跟 socket 是否可用分开看）。 */
+    suspend fun isProcessAlive(): Boolean = withContext(Dispatchers.IO) {
+        val result = RootShell.exec("pidof $CORE_CLASS || pgrep -f $CORE_CLASS", 5_000)
+        result.stdout.isNotBlank()
+    }
+
     /**
      * 启动虚拟屏。
      *
@@ -72,8 +134,14 @@ object VirtualScreenManager {
         val port = (20000..40000).random()
 
         // 命令行里不带任何秘密；apk 路径与参数都可被 ps 看到，但这里没有敏感信息。
+        //
+        // nohup + setsid 两层：
+        //   setsid  脱离 su shell 的进程组 —— 否则 su -c 一退出，子进程被一起回收
+        //   nohup   忽略 SIGHUP
+        //   < /dev/null  断开 stdin，进程不会等着终端输入
+        // 三者缺一个，切走 App 或者 su 那个 shell 退出时就可能把 helper 带走。
         val command = buildString {
-            append("setsid app_process")
+            append("nohup setsid app_process")
             append(" -Djava.class.path=").append(apkPath)
             append(" /system/bin ").append(CORE_CLASS)
             append(" --port ").append(port)
@@ -81,7 +149,7 @@ object VirtualScreenManager {
             append(" --height ").append(height)
             append(" --dpi ").append(dpi)
             append(" --mirror ").append(mirror)
-            append(" > /data/local/tmp/rikkahub-vscreen.log 2>&1 &")
+            append(" < /dev/null > /data/local/tmp/rikkahub-vscreen.log 2>&1 &")
         }
 
         val launched = RootShell.exec(command, timeoutMs = 15_000)
@@ -108,6 +176,18 @@ object VirtualScreenManager {
                     displayId = displayId,
                 )
                 Log.i(TAG, "virtual screen ready on port $port (${width}x$height, mirror=$mirror, display=$displayId)")
+                // 记下来：App 进程被系统回收之后靠它把状态认回来
+                persist(
+                    context,
+                    State(
+                        running = true,
+                        port = port,
+                        width = width,
+                        height = height,
+                        mirror = mirror,
+                        displayId = displayId,
+                    ),
+                )
                 return@withContext true
             }
             Thread.sleep(250)
@@ -120,10 +200,11 @@ object VirtualScreenManager {
         false
     }
 
-    suspend fun stop() = withContext(Dispatchers.IO) {
+    suspend fun stop(context: Context? = null) = withContext(Dispatchers.IO) {
         val port = _state.value.port
         // 先清状态：UI 立刻停止拉流，不再占着那条长连接
         _state.value = State()
+        context?.let { clearPersisted(it) }
         if (port != 0) {
             // 短超时：quit 能送到最好，送不到也别在这里卡住用户
             runCatching { send(port, "quit", timeoutMs = 1_500) }

@@ -169,7 +169,7 @@ fun virtualScreenTool(context: Context): Tool = Tool(
             }
 
             "stop" -> {
-                VirtualScreenManager.stop()
+                VirtualScreenManager.stop(context)
                 listOf(UIMessagePart.Text(buildJsonObject { put("ok", true) }.toString()))
             }
 

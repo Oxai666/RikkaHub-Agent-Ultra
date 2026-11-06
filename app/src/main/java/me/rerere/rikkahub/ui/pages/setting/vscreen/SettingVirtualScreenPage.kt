@@ -69,6 +69,13 @@ fun SettingVirtualScreenPage() {
     var overlayShowing by remember { mutableStateOf(VirtualScreenOverlay.isShowing()) }
     var overlayHint by remember { mutableStateOf<String?>(null) }
 
+    // 进页面时对一次状态：App 进程可能被回收过，helper 却还在
+    LaunchedEffect(Unit) {
+        if (!VirtualScreenManager.state.value.running) {
+            VirtualScreenManager.restore(context)
+        }
+    }
+
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
@@ -204,8 +211,9 @@ fun SettingVirtualScreenPage() {
                         onClick = {
                             scope.launch {
                                 busy = true
-                                VirtualScreenManager.stop()
+                                VirtualScreenManager.stop(context)
                                 shot = null
+                                overlayShowing = false
                                 busy = false
                             }
                         },

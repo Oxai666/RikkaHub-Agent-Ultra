@@ -43,6 +43,8 @@ object VscreenCore {
     @JvmStatic
     fun main(args: Array<String>) {
         try {
+            optionalOomProtection()
+
             val opts = parse(args)
             val width = opts["width"]?.toIntOrNull() ?: 720
             val height = opts["height"]?.toIntOrNull() ?: 1280
@@ -388,6 +390,23 @@ object VscreenCore {
             }.getOrDefault(0)
         }
         return flags
+    }
+
+    /**
+     * 把本进程的 oom_score_adj 压到最低，降低被系统回收的概率。
+     *
+     * app_process 起的进程没有 Activity，默认 adj 偏高，后台一段时间就容易被杀掉。
+     * 我们是 root 身份，可以直接写 /proc/self/oom_score_adj。
+     * 失败不要紧（某些 ROM 锁了），所以整个包在 runCatching 里。
+     */
+    private fun optionalOomProtection() {
+        runCatching {
+            java.io.File("/proc/self/oom_score_adj").writeText("-1000")
+        }
+        runCatching {
+            // 双保险：把自己放进 system 组，某些 ROM 的 lowmemorykiller 按 cgroup 判
+            Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "echo -1000 > /proc/self/oom_score_adj"))
+        }
     }
 
     private fun parse(args: Array<String>): Map<String, String> {
