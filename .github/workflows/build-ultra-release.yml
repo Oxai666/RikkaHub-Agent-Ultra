@@ -1,0 +1,281 @@
+name: build-ultra-release-apk
+
+# release 构建。和 build-ultra.yml 唯一的区别：
+#   1. 编的是 :app:assembleRelease 而不是 assembleDebug
+#   2. 包不 debuggable、走 R8、安装时做 AOT —— 点击进页面、转场动画、列表滚动
+#      靠的就是这三个，debug 包全都没有
+#   3. 自己生成一个 keystore 签 release（CI 上没有你的 local.properties）
+#
+# 包名是 excp.rikkahub（不带 .debug），和现在的 debug 包可以同时装，
+# 但**设置与会话不互通**：debug 包的数据在 /data/data/excp.rikkahub.debug 下，
+# release 包是全新目录，第一次装等于全新应用。
+#
+# 第一次出包建议 disable_minify = true：R8 会裁掉没被静态引用到的类，
+# 这个项目里有 kotlinx.serialization / Room / Koin / 反射注册，keep 规则不全会崩在启动。
+# 先出一版能跑的，确认卡顿消失，再考虑把 minify 打开。
+on:
+  workflow_dispatch:
+    inputs:
+      disable_minify:
+        description: '关掉 R8（第一次出包建议 true，确认能跑再考虑关掉它）'
+        type: boolean
+        default: true
+      publish_release:
+        description: '编完挂到 Release（手机上直接点下载，不过期）'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: ultra-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Record revision
+        run: |
+          set -e
+          echo "commit: $(git rev-parse HEAD)"
+          git log -1 --format='%h %ad %s' --date=short
+          echo "--- submodules ---"
+          git submodule status
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Install SDK packages
+        run: |
+          set -x
+          SDK="${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}"
+          SDKM="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKM" ]; then
+            SDKM=$(ls -d "$SDK"/cmdline-tools/*/bin/sdkmanager 2>/dev/null | head -1)
+          fi
+          echo "SDK=$SDK"
+          echo "SDKM=$SDKM"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+
+          "$SDKM" "platforms;android-37.2" || "$SDKM" "platforms;android-37"
+          "$SDKM" "build-tools;37.0.0"
+          "$SDKM" "cmake;3.22.1"
+          "$SDKM" "ndk;29.0.14206865"
+          echo "--- platforms ---"
+          ls "$SDK/platforms" || true
+          echo "--- ndk ---"
+          ls "$SDK/ndk" || true
+
+      - name: Gradle properties
+        run: |
+          set -e
+          echo "android.ndkVersion=29.0.14206865" >> gradle.properties
+          cat gradle.properties
+
+      # release 签名读的是 local.properties 里的 storeFile/storePassword/keyAlias/keyPassword，
+      # CI 上没有这个文件就编出 unsigned 包，装不上。这里现场生成一个自用 keystore。
+      - name: Generate self-use signing keystore
+        run: |
+          set -e
+          KS="$RUNNER_TEMP/self-release.jks"
+          rm -f "$KS"
+          keytool -genkeypair -v \
+            -keystore "$KS" -storetype JKS \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -alias self -storepass selfuse -keypass selfuse \
+            -dname "CN=RikkaHub Self, OU=Self, O=Self, L=NA, ST=NA, C=NA"
+          {
+            echo "storeFile=$KS"
+            echo "storePassword=selfuse"
+            echo "keyAlias=self"
+            echo "keyPassword=selfuse"
+          } >> local.properties
+          echo "--- local.properties ---"
+          cat local.properties
+          keytool -list -keystore "$KS" -storepass selfuse | tail -3
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v5
+        with:
+          version: 11
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: web-ui dependencies (bun)
+        working-directory: web-ui
+        run: |
+          set -e
+          bun --version
+          bun install --frozen-lockfile
+
+      - name: web-ui bundle (pnpm)
+        working-directory: web-ui
+        run: |
+          set -e
+          pnpm --version
+          pnpm run build
+
+      # R8 开关：只改 buildTypes.release 里那一个 optimization 块，
+      # 用 python 做多行精确替换，不按行号切文件。
+      - name: Apply minify preference
+        run: |
+          set -e
+          if [ "${{ inputs.disable_minify }}" = "true" ]; then
+            python3 - <<'PY'
+            import pathlib, sys
+            p = pathlib.Path("app/build.gradle.kts")
+            text = p.read_text(encoding="utf-8")
+            old = """        release {
+            signingConfig = signingConfigs.getByName("release")
+            optimization {
+                enable = true
+            }"""
+            new = """        release {
+            signingConfig = signingConfigs.getByName("release")
+            optimization {
+                // CI 首次出包时临时关闭（workflow input: disable_minify）
+                enable = false
+            }"""
+            if text.count(old) != 1:
+                print(f"FAIL: expected 1 occurrence, got {text.count(old)}", file=sys.stderr)
+                sys.exit(1)
+            p.write_text(text.replace(old, new), encoding="utf-8")
+            print("OK: release minify disabled")
+            PY
+          else
+            echo "minify 保持开启（optimization.enable = true）"
+          fi
+          grep -n -A 6 "release {" app/build.gradle.kts | head -20
+
+      - name: Armor unit tests
+        run: |
+          set -o pipefail
+          chmod +x gradlew
+          if ls app/src/test/java/me/rerere/rikkahub/data/ai/armor/*.kt >/dev/null 2>&1; then
+            ./gradlew :app:testDebugUnitTest \
+              --tests "me.rerere.rikkahub.data.ai.armor.*" \
+              --no-daemon --no-configuration-cache --stacktrace 2>&1 | tee /tmp/armor-test.log
+          else
+            echo "::warning::这个 ref 上没有 armor 单测，跳过该步骤"
+          fi
+
+      - name: Build release APK
+        run: |
+          set -o pipefail
+          chmod +x gradlew
+          # lintVitalRelease 会在 assembleRelease 时跑，这里跳过：
+          # 它不是本次要验证的东西，红了反而挡住出包。
+          ./gradlew :app:assembleRelease \
+            -x lintVitalRelease \
+            --no-daemon --no-configuration-cache --stacktrace --warning-mode summary \
+            2>&1 | tee /tmp/release-build.log
+
+      - name: Publish failure log to issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          LOG=/tmp/release-build.log
+          [ -f "$LOG" ] || LOG=/tmp/armor-test.log
+          [ -f "$LOG" ] || { echo "没有日志文件"; exit 0; }
+          TITLE="Release CI failure: $(date -u +%Y-%m-%dT%H:%MZ) @ ${GITHUB_SHA:0:7}"
+          {
+            echo "run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "commit: $GITHUB_SHA"
+            echo "disable_minify: ${{ inputs.disable_minify }}"
+            echo ""
+            echo '```'
+            tail -c 60000 "$LOG" | sed 's/\r$//'
+            echo '```'
+          } > /tmp/issue-body.md
+          gh issue create --title "$TITLE" --body-file /tmp/issue-body.md || true
+
+      - name: Package APK
+        if: success()
+        id: pkg
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAMP="$(date -u +%Y%m%d-%H%M)"
+          OUT="rikkahub-ultra-release-${STAMP}"
+          echo "stamp=${STAMP}" >> "$GITHUB_OUTPUT"
+          echo "out=${OUT}" >> "$GITHUB_OUTPUT"
+          mkdir -p dist
+          shopt -s nullglob
+          apks=(app/build/outputs/apk/release/*.apk)
+          if [ ${#apks[@]} -eq 0 ]; then
+            echo "::error::没有找到 release APK"
+            ls -R app/build/outputs || true
+            exit 1
+          fi
+          for f in "${apks[@]}"; do
+            cp "$f" "dist/${OUT}-$(basename "$f")"
+          done
+          ls -lh dist/
+          echo "--- 校验是否已签名 ---"
+          BUILD_TOOLS="$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | tail -1)"
+          for f in dist/*.apk; do
+            "$BUILD_TOOLS/apksigner" verify --print-certs "$f" | head -6 || true
+          done
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v6
+        with:
+          name: rikkahub-ultra-release
+          path: dist/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish release
+        if: success() && inputs.publish_release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STAMP: ${{ steps.pkg.outputs.stamp }}
+          OUT: ${{ steps.pkg.outputs.out }}
+        run: |
+          set -euo pipefail
+          TAG="ultra-release-${STAMP}-${GITHUB_RUN_NUMBER}"
+          {
+            echo "commit: \`${GITHUB_SHA}\`"
+            echo ""
+            echo "分支: \`${GITHUB_REF_NAME}\`"
+            echo ""
+            echo "minify: \`$( [ "${{ inputs.disable_minify }}" = "true" ] && echo disabled || echo enabled )\`"
+            echo ""
+            echo "包名 \`excp.rikkahub\`（不带 .debug），与 debug 包共存但数据不互通。"
+            echo ""
+            echo "release 构建：不可调试、安装时 AOT 编译，点页面和转场动画靠这个。自签，自用。"
+          } > /tmp/notes.md
+          gh release create "$TAG" dist/*.apk \
+            --title "$OUT" \
+            --prerelease \
+            --notes-file /tmp/notes.md
+          echo "已发布: $TAG"
