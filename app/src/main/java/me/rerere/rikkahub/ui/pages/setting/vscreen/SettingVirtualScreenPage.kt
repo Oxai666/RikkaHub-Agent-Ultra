@@ -39,6 +39,7 @@ import kotlinx.coroutines.launch
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.vscreen.VirtualScreenManager
+import me.rerere.rikkahub.data.vscreen.VirtualScreenOverlay
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -65,6 +66,8 @@ fun SettingVirtualScreenPage() {
     var mirror by rememberSaveable { mutableStateOf(false) }
     var packageInput by rememberSaveable { mutableStateOf("") }
     var launchMessage by remember { mutableStateOf<String?>(null) }
+    var overlayShowing by remember { mutableStateOf(VirtualScreenOverlay.isShowing()) }
+    var overlayHint by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
         topBar = {
@@ -219,6 +222,37 @@ fun SettingVirtualScreenPage() {
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.setting_virtual_screen_open_window))
+                }
+
+                // 悬浮小窗：浮在别的应用上面，边刷手机边看
+                OutlinedButton(
+                    onClick = {
+                        if (!VirtualScreenOverlay.ensurePermission(context)) {
+                            overlayHint = "已跳转到授权页，允许「显示在其他应用上层」后回来再点一次"
+                        } else if (VirtualScreenOverlay.isShowing()) {
+                            VirtualScreenOverlay.hide()
+                            overlayShowing = false
+                        } else {
+                            VirtualScreenOverlay.show(context)
+                            overlayShowing = VirtualScreenOverlay.isShowing()
+                            overlayHint = if (overlayShowing) {
+                                "悬浮窗已打开，顶部黑条可以拖动，点画面会转发到虚拟屏"
+                            } else {
+                                "打开失败"
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        stringResource(
+                            if (overlayShowing) R.string.setting_virtual_screen_close_overlay
+                            else R.string.setting_virtual_screen_open_overlay
+                        )
+                    )
+                }
+                overlayHint?.let {
+                    Text(text = it, style = MaterialTheme.typography.bodySmall)
                 }
 
                 shot?.let { bitmap ->
