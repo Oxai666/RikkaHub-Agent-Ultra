@@ -190,6 +190,8 @@ object VirtualScreenManager {
             append(" --height ").append(height)
             append(" --dpi ").append(dpi)
             append(" --mirror ").append(mirror)
+            // helper 靠这个包名做「宿主还活着吗」的看门狗：App 被划掉就自杀
+            append(" --package ").append(context.packageName)
             append(" < /dev/null > /data/local/tmp/rikkahub-vscreen.log 2>&1 &")
         }
 
@@ -242,7 +244,20 @@ object VirtualScreenManager {
     }
 
     suspend fun stop(context: Context? = null) = withContext(Dispatchers.IO) {
-        val port = _state.value.port
+        val state = _state.value
+        val port = state.port
+
+        // 先把投到虚拟屏上的应用停掉，再销毁 display。
+        // 顺序不能反：display 一没，Android 会把这个 display 上的 Activity 迁移回主屏，
+        // 用户会莫名其妙被跳到那个页面（比如停在 VPN 页，一点停止就跳到自己手机的 VPN）。
+        context?.let { ctx ->
+            val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val pkg = prefs.getString(KEY_PACKAGE, null)
+            if (!pkg.isNullOrBlank()) {
+                runCatching { RootShell.exec("am force-stop $pkg", 10_000) }
+            }
+        }
+
         // 先清状态：UI 立刻停止拉流，不再占着那条长连接
         _state.value = State()
         context?.let { clearPersisted(it) }

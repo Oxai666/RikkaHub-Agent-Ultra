@@ -51,6 +51,7 @@ object VscreenCore {
             val dpi = opts["dpi"]?.toIntOrNull() ?: 320
             val port = opts["port"]?.toIntOrNull() ?: 8765
             val mirror = opts["mirror"]?.toBooleanStrictOrNull() ?: false
+            val hostPackage = opts["package"].orEmpty()
 
             // 主 Looper 必须先建：ActivityThread 构造时就会创建 Handler，
             // 没有 Looper 会直接抛 "Can't create handler inside thread that has not
@@ -91,6 +92,8 @@ object VscreenCore {
             // 父进程靠这一行确认「起来了并且端口是对的」，之后才去连
             println("VSCREEN_READY $port $width $height $displayId")
             System.out.flush()
+
+            startHostWatchdog(hostPackage)
 
             android.os.Looper.loop()
         } catch (t: Throwable) {
@@ -444,6 +447,40 @@ object VscreenCore {
             }.getOrDefault(0)
         }
         return flags
+    }
+
+    /**
+     * 宿主看门狗：App 进程没了就自杀。
+     *
+     * 之前为了让虚拟屏「切页面不掉」，加了 nohup + setsid + oom_score_adj=-1000，
+     * 结果矫枉过正 —— 用户把 App 从最近任务里划掉，helper 还赖着不走，
+     * display 和服务全留着。这里用 pidof 盯着宿主包名，20 秒一次，
+     * 找不到就退出（display 跟着释放）。
+     *
+     * 只是切后台、App 进程还在时 pidof 有输出，不会误杀。
+     */
+    private fun startHostWatchdog(hostPackage: String) {
+        if (hostPackage.isBlank()) return
+        Thread {
+            while (!stopping.get()) {
+                Thread.sleep(20_000)
+                val alive = runCatching {
+                    // pidof 部分 ROM 裁剪过，pgrep 兜底
+                    val process = Runtime.getRuntime().exec(
+                        arrayOf(
+                            "/system/bin/sh", "-c",
+                            "pidof $hostPackage > /dev/null 2>&1 || pgrep -f $hostPackage > /dev/null 2>&1"
+                        )
+                    )
+                    process.waitFor() == 0
+                }.getOrDefault(true)
+                if (!alive) {
+                    System.err.println("VSCREEN_EXIT host app gone: $hostPackage")
+                    System.err.flush()
+                    kotlin.system.exitProcess(0)
+                }
+            }
+        }.apply { isDaemon = true }.start()
     }
 
     /**
