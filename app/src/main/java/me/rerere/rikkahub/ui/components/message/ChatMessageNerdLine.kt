@@ -142,8 +142,11 @@ private fun UsageDetails(stats: NerdStats, contextLength: Int?) {
             contextLength = contextLength,
             modifier = Modifier.padding(bottom = 8.dp),
         )
+        // 步数无条件给出：单步就是「这一轮请求了 1 次」，藏起来会让人以为数据没填上。
+        // 累计值（总输入 / 缓存总量 / 总输出）只在多步时才有意义——单步时它们和
+        // 上面那排「缓存 / 输入 / 输出」完全一样，列两遍只会更乱。
+        UsageDetailRow(stringResource(R.string.chat_message_usage_step_count), stats.steps.toString())
         if (stats.steps > 1) {
-            UsageDetailRow(stringResource(R.string.chat_message_usage_step_count), stats.steps.toString())
             UsageDetailRow(stringResource(R.string.chat_message_usage_total_input), total.promptTokens.exact())
             if (total.cachedTokens > 0) UsageDetailRow(stringResource(R.string.chat_message_usage_total_cached), total.cachedTokens.exact())
             UsageDetailRow(stringResource(R.string.chat_message_usage_total_output), total.completionTokens.exact())
@@ -196,8 +199,12 @@ private fun ContextUsageBar(
             )
             if (contextLength != null) {
                 val fraction = contextTokens.toFloat() / contextLength
+                val percent = fraction * 100f
+                // 1M 窗口下 3.5K 只占 0.35%，四舍五入到整数会变成刺眼的「0%」。
+                // 10% 以下给一位小数，以上才取整。
+                val percentText = if (percent < 10f) percent.toFixed(1) else percent.toFixed(0)
                 Text(
-                    text = "${contextTokens.formatNumber()} / ${contextLength.formatNumber()} · ${(fraction * 100).toFixed(0)}%",
+                    text = "${contextTokens.formatNumber()} / ${contextLength.formatNumber()} · ${percentText}%",
                     color = if (fraction >= 0.9f) colorScheme.error else Color.Unspecified,
                 )
             } else {
