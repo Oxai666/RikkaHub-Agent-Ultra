@@ -124,6 +124,8 @@
   <string name="assistant_page_search_placeholder">Search assistants</string>
   <string name="assistant_page_select_background">Select Background Image</string>
   <string name="assistant_page_select_from_gallery">Select from Gallery</string>
+  <string name="assistant_page_select_video_background">Select a video</string>
+  <string name="assistant_page_video_background">Video background set</string>
   <string name="assistant_page_stream_output">Stream Output</string>
   <string name="assistant_page_stream_output_desc">Whether to enable streaming output for messages</string>
   <string name="assistant_page_strict">Strict</string>

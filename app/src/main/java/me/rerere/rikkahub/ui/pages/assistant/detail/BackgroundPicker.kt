@@ -29,6 +29,7 @@ import coil3.compose.AsyncImage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.pages.chat.isVideoBackground
 import org.koin.compose.koinInject
 
 @Composable
@@ -43,7 +44,7 @@ fun BackgroundPicker(
     var showUrlInput by remember { mutableStateOf(false) }
     var urlInput by remember { mutableStateOf("") }
 
-    val imagePickerLauncher = rememberLauncherForActivityResult(
+    val mediaPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
@@ -101,13 +102,22 @@ fun BackgroundPicker(
                 }
             }
 
-            AsyncImage(
-                model = background,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .alpha(previewOpacity)
-            )
+            if (isVideoBackground(background)) {
+                // 视频帧不在设置页解码：这里只说明选中的是视频，实际效果回聊天页看
+                Text(
+                    text = stringResource(R.string.assistant_page_video_background),
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else {
+                AsyncImage(
+                    model = background,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .alpha(previewOpacity)
+                )
+            }
         }
     }
 
@@ -126,11 +136,20 @@ fun BackgroundPicker(
                     Button(
                         onClick = {
                             showPickOption = false
-                            imagePickerLauncher.launch("image/*")
+                            mediaPickerLauncher.launch("image/*")
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(stringResource(R.string.assistant_page_select_from_gallery))
+                    }
+                    Button(
+                        onClick = {
+                            showPickOption = false
+                            mediaPickerLauncher.launch("video/*")
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(stringResource(R.string.assistant_page_select_video_background))
                     }
                     Button(
                         onClick = {
