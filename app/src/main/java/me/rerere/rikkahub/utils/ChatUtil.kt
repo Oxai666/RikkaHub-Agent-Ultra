@@ -108,21 +108,26 @@ fun UIMessagePart.isHiddenHint(): Boolean =
         metadata?.get("hidden")?.jsonPrimitive?.booleanOrNull == true
 
 /** 读不了的文件，挂上去之后给模型的隐藏提示。 */
-fun attachmentHintFor(fileName: String, mime: String): String? {
+fun attachmentHintFor(
+    fileName: String,
+    mime: String,
+    sandboxPath: String? = null,
+): String? {
     val extension = fileName.substringAfterLast('.', "").lowercase()
+    val where = sandboxPath ?: fileName
     return when {
         extension in ARCHIVE_EXTENSIONS ->
-            "[$extension：已复制到沙箱] " +
-                "需要通过工具访问时，请使用文件/工作区工具解压或读取；" +
+            "[$extension：已复制并挂载到 Linux 沙箱 $where] " +
+                "需要通过工具访问时，请使用已有的沙箱工具读取（例如 workspace_shell 里 unzip / tar）；" +
                 "不要使用 Android content:// URI 或宿主机路径。"
         extension in BINARY_EXTENSIONS ->
-            "[$extension：二进制文件，已复制到沙箱] " +
-                "内容不能直接内联，请用文件工具按需读取或转换；" +
+            "[$extension：二进制文件，已复制并挂载到 Linux 沙箱 $where] " +
+                "内容不能直接内联，请用沙箱工具按需读取或转换；" +
                 "不要使用 Android content:// URI 或宿主机路径。"
         mime.startsWith("text/") || extension in ALLOWED_FILE_EXTENSIONS -> null
         else ->
-            "[$extension：已复制到沙箱] " +
-                "需要通过工具访问时，请使用文件/工作区工具读取；" +
+            "[$extension：已复制并挂载到 Linux 沙箱 $where] " +
+                "需要通过工具访问时，请使用已有的沙箱工具读取；" +
                 "不要使用 Android content:// URI 或宿主机路径。"
     }
 }

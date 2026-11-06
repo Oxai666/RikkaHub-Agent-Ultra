@@ -16,10 +16,18 @@ import androidx.core.net.toUri
 import com.dokar.sonner.ToastType
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.data.repository.WorkspaceRepository
+import me.rerere.rikkahub.utils.isInlineReadableFile
+import me.rerere.workspace.WorkspaceStorageArea
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.common.android.appTempFolder
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
@@ -51,6 +59,8 @@ internal fun rememberChatAttachmentPickerActions(
     val resources = LocalResources.current
     val toaster = LocalToaster.current
     val filesManager: FilesManager = koinInject()
+    val workspaceRepository: WorkspaceRepository = koinInject()
+    val scope = rememberCoroutineScope()
     val cameraPermission = rememberPermissionState(PermissionCamera)
     PermissionManager(permissionState = cameraPermission)
 
@@ -183,20 +193,45 @@ internal fun rememberChatAttachmentPickerActions(
                 }
                 if (documents.isNotEmpty()) {
                     inputState.addFiles(documents)
-                    // 读不了的文件（压缩包 / 二进制）再补一条隐藏提示：
-                    // 只给模型看，界面上 groupMessageParts 会跳过它
-                    val hints = documents.mapNotNull { doc ->
-                        attachmentHintFor(doc.fileName, doc.mime)?.let { hint ->
-                            UIMessagePart.Text(
-                                text = hint,
-                                metadata = buildJsonObject { put("hidden", true) },
-                            )
+                    onAttachmentAdded()
+
+                    // 读不了的文件（压缩包 / 二进制）额外导入 Linux 沙箱，
+                    // 再给模型挂一条隐藏提示，写明沙箱里的绝对路径。
+                    val workspaceId = setting.getCurrentAssistant().workspaceId
+                    scope.launch(Dispatchers.IO) {
+                        val hints = mutableListOf<UIMessagePart>()
+                        for (doc in documents) {
+                            if (isInlineReadableFile(doc.fileName, doc.mime)) continue
+                            var sandboxPath: String? = null
+                            if (workspaceId != null) {
+                                sandboxPath = runCatching {
+                                    context.contentResolver
+                                        .openInputStream(Uri.parse(doc.url))
+                                        ?.use { input ->
+                                            workspaceRepository.importFile(
+                                                id = workspaceId.toString(),
+                                                area = WorkspaceStorageArea.FILES,
+                                                destinationPath = "upload",
+                                                fileName = doc.fileName,
+                                                inputStream = input,
+                                            )
+                                        }
+                                    "/workspace/upload/${doc.fileName}"
+                                }.getOrNull()
+                            }
+                            attachmentHintFor(doc.fileName, doc.mime, sandboxPath)?.let { hint ->
+                                hints += UIMessagePart.Text(
+                                    text = hint,
+                                    metadata = buildJsonObject { put("hidden", true) },
+                                )
+                            }
+                        }
+                        if (hints.isNotEmpty()) {
+                            withContext(Dispatchers.Main) {
+                                inputState.messageContent = inputState.messageContent + hints
+                            }
                         }
                     }
-                    if (hints.isNotEmpty()) {
-                        inputState.messageContent = inputState.messageContent + hints
-                    }
-                    onAttachmentAdded()
                 }
             }
         }
