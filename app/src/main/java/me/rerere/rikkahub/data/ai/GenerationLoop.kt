@@ -1353,6 +1353,9 @@ class GenerationLoop(
                 var receivedMeaningfulOutput = false
                 var receivedAnyChunk = false
                 val streamChunkHandler = StreamChunkHandler(model)
+                // 本步的生成耗时起点。用量面板要的是「纯生成耗时」，工具执行时间不算在内，
+                // 所以计时放在 streamText 之前、流结束之后结算。
+                val stepStartMs = android.os.SystemClock.elapsedRealtime()
                 // armor：只读流监看装饰器。不改编任何 chunk、不断流、异常吞掉只记状态，
                 // 判定结果交给 ArmorTransformer 在下一步决定注入纠正 / 续写。
                 val armorProvider: Provider<ProviderSetting> =
@@ -1417,6 +1420,18 @@ class GenerationLoop(
                         clearRetryStatus(processingStatus)
                     }
                     messages = streamChunkHandler.handle(messages, it)
+                    onUpdateMessages(messages)
+                }
+                // 用量面板的数据源：一步 = 一次 streamText，工具执行不计入生成耗时。
+                // 多步共享同一条 assistant 消息（工具结果写回同一个 message 的 tool part），
+                // 所以这里是累加，不是覆盖。
+                val stepElapsedMs = android.os.SystemClock.elapsedRealtime() - stepStartMs
+                if (messages.isNotEmpty() && messages.last().role == MessageRole.ASSISTANT) {
+                    val last = messages.last()
+                    messages = messages.slice(0 until messages.lastIndex) + last.copy(
+                        generationTimeMs = (last.generationTimeMs ?: 0L) + stepElapsedMs,
+                        stepCount = (last.stepCount ?: 0) + 1,
+                    )
                     onUpdateMessages(messages)
                 }
             } else {

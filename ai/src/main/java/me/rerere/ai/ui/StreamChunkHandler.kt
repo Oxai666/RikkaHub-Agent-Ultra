@@ -289,7 +289,13 @@ class StreamChunkHandler(private val model: Model? = null) {
 
             is StreamChunk.ImageEnd -> this.also { imagePartIndexes.remove(chunk.id) }
             is StreamChunk.Annotations -> copy(annotations = (annotations + chunk.annotations).distinct())
-            is StreamChunk.Usage -> copy(usage = usage.merge(chunk.usage))
+            // lastUsage 记的是**最后一次请求**的原始用量。多步工具循环里同一条 assistant
+            // 消息会被反复合并，usage 是各步相加的累计值；而上下文占用要看的是最后一次
+            // 请求发了多少 token，拿累计值算会偏大好几倍。
+            is StreamChunk.Usage -> copy(
+                usage = usage.merge(chunk.usage),
+                lastUsage = chunk.usage,
+            )
             is StreamChunk.Finish -> copy(
                 finishedAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
             ).finishReasoning().also {
