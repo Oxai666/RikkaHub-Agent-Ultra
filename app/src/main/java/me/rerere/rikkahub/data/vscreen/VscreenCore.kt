@@ -259,14 +259,12 @@ object VscreenCore {
         height: Int,
         display: VirtualDisplay,
     ): ByteArray? {
-        tryAcquire(reader, width, height, 600)?.let { return it }
-        runCatching {
-            display.surface = null
-            Thread.sleep(60)
-            display.surface = reader.surface
-            Thread.sleep(120)
-        }
-        return tryAcquire(reader, width, height, 1_200)
+        // 这里**不做**「重绑 surface」的抢救。
+        // setSurface(null) 会让 SurfaceFlinger 丢掉已有的 buffer，而且不保证
+        // 会重新触发合成 —— 实测反而会把本来还活着的输出弄死，
+        // 表现就是 AI 遇到的「返回之后一直 no frame yet，必须重建才好」。
+        // 拿不到就是拿不到，交给 App 侧判断要不要重建整块 display。
+        return tryAcquire(reader, width, height, 1_500)
     }
 
     private fun tryAcquire(

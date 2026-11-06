@@ -45,6 +45,13 @@ object VirtualScreenManager {
     private val _state = MutableStateFlow(State())
     val state = _state.asStateFlow()
 
+    /** 自愈要用：重建 display 需要 Context。start 时记下来。 */
+    @Volatile
+    private var appContext: Context? = null
+
+    /** 连续多少次抓不到帧。到阈值就重建整块 display。 */
+    private var consecutiveFrameFailures = 0
+
     private const val CORE_CLASS = "me.rerere.rikkahub.data.vscreen.VscreenCore"
 
     // 状态持久化：App 进程被系统回收后，helper 还在跑，得能把它认回来
@@ -156,6 +163,7 @@ object VirtualScreenManager {
         mirror: Boolean = false,
     ): Boolean = withContext(Dispatchers.IO) {
         if (_state.value.running) return@withContext true
+        appContext = context.applicationContext
         _state.value = State(starting = true)
 
         if (!RootShell.isAvailable()) {
@@ -259,8 +267,44 @@ object VirtualScreenManager {
         runCatching { send(port, "diag") }.getOrNull()
     }
 
-    /** 抓一帧。失败返回 null，原因写进 state.error。 */
+    /**
+     * 抓一帧。连续 3 次拿不到帧就整块重建。
+     *
+     * 为什么要自愈：实测从别的页面返回之后，这块 display 的合成会停掉，
+     * 之后无论 screenshot 还是 screencap -d 都拿不到画面，只有重建才恢复。
+     * 与其让用户手动停掉重开，不如在这里自己处理。
+     */
     suspend fun screenshot(): Bitmap? = withContext(Dispatchers.IO) {
+        val bitmap = captureOnce()
+        if (bitmap == null) {
+            // 只有「跑着但拿不到帧」才算失败，没运行的情况不走自愈
+            if (_state.value.running) {
+                consecutiveFrameFailures++
+                if (consecutiveFrameFailures >= 3) selfHeal()
+            }
+        } else {
+            consecutiveFrameFailures = 0
+        }
+        bitmap
+    }
+
+    private suspend fun selfHeal() = withContext(Dispatchers.IO) {
+        val ctx = appContext ?: return@withContext
+        consecutiveFrameFailures = 0
+        val state = _state.value
+        if (!state.running) return@withContext
+        val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val pkg = prefs.getString(KEY_PACKAGE, null)
+        val act = prefs.getString(KEY_ACTIVITY, null)
+        Log.w(TAG, "no frame 3x in a row on display ${state.displayId}, rebuilding")
+        stop(ctx)
+        if (start(ctx, state.width, state.height, mirror = state.mirror) && pkg != null) {
+            val result = launchApp(ctx, pkg, act)
+            Log.i(TAG, "after rebuild, relaunch $pkg -> ${result.ok}")
+        }
+    }
+
+    private suspend fun captureOnce(): Bitmap? = withContext(Dispatchers.IO) {
         val port = _state.value.port
         if (!_state.value.running || port == 0) {
             _state.value = _state.value.copy(error = "虚拟屏没在运行")

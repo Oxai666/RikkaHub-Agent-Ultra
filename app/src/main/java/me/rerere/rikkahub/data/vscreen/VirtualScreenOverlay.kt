@@ -118,6 +118,26 @@ object VirtualScreenOverlay {
         )
         container.addView(dragBar)
 
+        // 关闭按钮：默认藏起来，点一下顶部白条才冒出来，避免误触
+        val closeButton = android.widget.TextView(app).apply {
+            text = "×"
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            gravity = Gravity.CENTER
+            setBackgroundColor(Color.argb(210, 190, 40, 40))
+            layoutParams = FrameLayout.LayoutParams(
+                (28 * density).toInt(),
+                (28 * density).toInt(),
+                Gravity.TOP or Gravity.END,
+            ).apply {
+                topMargin = (2 * density).toInt()
+                rightMargin = (2 * density).toInt()
+            }
+            visibility = View.GONE
+            setOnClickListener { hide() }
+        }
+        container.addView(closeButton)
+
         val lp = WindowManager.LayoutParams(
             widthPx,
             heightPx,
@@ -133,7 +153,7 @@ object VirtualScreenOverlay {
         }
         params = lp
 
-        attachDrag(app, wm, container, dragBar, lp)
+        attachDrag(app, wm, container, dragBar, closeButton, lp)
         attachGestures(context, image)
 
         runCatching { wm.addView(container, lp) }
@@ -192,37 +212,53 @@ object VirtualScreenOverlay {
     }
 
     @SuppressLint("ClickableViewAccessibility")
+    @SuppressLint("ClickableViewAccessibility")
     private fun attachDrag(
         context: Context,
         wm: WindowManager,
         container: FrameLayout,
         dragBar: View,
+        closeButton: View,
         lp: WindowManager.LayoutParams,
     ) {
         var startX = 0
         var startY = 0
         var touchX = 0f
         var touchY = 0f
+        var moved = false
+
         dragBar.setOnTouchListener { _, event ->
-            when (event.action) {
+            when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     startX = lp.x
                     startY = lp.y
                     touchX = event.rawX
                     touchY = event.rawY
+                    moved = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
-                    lp.x = (startX - (event.rawX - touchX)).toInt()
-                    lp.y = (startY + (event.rawY - touchY)).toInt()
+                    val dx = event.rawX - touchX
+                    val dy = event.rawY - touchY
+                    if (abs(dx) + abs(dy) > 12f) moved = true
+                    lp.x = (startX - dx).toInt()
+                    lp.y = (startY + dy).toInt()
                     runCatching { wm.updateViewLayout(container, lp) }
                     true
                 }
                 MotionEvent.ACTION_UP -> {
-                    prefsPut(context, KEY_X, lp.x)
-                    prefsPut(context, KEY_Y, lp.y)
+                    if (moved) {
+                        // 拖过 → 记住位置
+                        prefsPut(context, KEY_X, lp.x)
+                        prefsPut(context, KEY_Y, lp.y)
+                    } else {
+                        // 没拖 → 当成点击：切换关闭按钮的显示
+                        closeButton.visibility =
+                            if (closeButton.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                    }
                     true
                 }
+                MotionEvent.ACTION_CANCEL -> true
                 else -> false
             }
         }
