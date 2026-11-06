@@ -49,6 +49,13 @@ object VscreenCore {
             val dpi = opts["dpi"]?.toIntOrNull() ?: 320
             val port = opts["port"]?.toIntOrNull() ?: 8765
 
+            // 主 Looper 必须先建：ActivityThread 构造时就会创建 Handler，
+            // 没有 Looper 会直接抛 "Can't create handler inside thread that has not
+            // called Looper.prepare()"。
+            if (android.os.Looper.getMainLooper() == null) {
+                android.os.Looper.prepareMainLooper()
+            }
+
             val context = systemContext()
             val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
 
@@ -64,14 +71,26 @@ object VscreenCore {
             ) ?: error("createVirtualDisplay returned null")
 
             val server = ServerSocket(port)
+
+            // socket 服务放后台线程，主线程交给 Looper.loop()：
+            // ActivityThread 的 handler 需要主线程在 loop，否则 DisplayManager
+            // 的回调可能永远不投递。
+            Thread {
+                serve(server, reader, width, height, virtualDisplay)
+                // serve 只在 quit / 连接异常时返回；主线程还卡在 Looper.loop()，
+                // 所以直接结束整个进程，别让僵尸进程留在后台。
+                kotlin.system.exitProcess(0)
+            }.apply { isDaemon = true }.start()
+
             // 父进程靠这一行确认「起来了并且端口是对的」，之后才去连
             println("VSCREEN_READY $port $width $height")
             System.out.flush()
 
-            serve(server, reader, width, height, virtualDisplay)
+            android.os.Looper.loop()
         } catch (t: Throwable) {
-            // 父进程读 stderr 判断失败原因
-            System.err.println("VSCREEN_ERROR ${t.javaClass.simpleName}: ${t.message}")
+            // 父进程读 stderr 判断失败原因；带上堆栈第一层，方便定位
+            val where = t.stackTrace.firstOrNull()?.let { "${it.className}.${it.methodName}:${it.lineNumber}" }
+            System.err.println("VSCREEN_ERROR ${t.javaClass.simpleName}: ${t.message} @ $where")
             System.err.flush()
             kotlin.system.exitProcess(1)
         }
@@ -177,24 +196,45 @@ object VscreenCore {
     /**
      * 在没有 Activity 的进程里拿 Context。
      *
-     * ActivityThread.systemMain() 会复用系统进程的 ActivityThread（app_process 里
-     * 通常已经有一个），拿到的是 system context —— 它带 shell/root 权限，
-     * 能调用 createVirtualDisplay。
+     * 这一段全是照着 DSHA 的 PrivilegedPackageContext 抄的，顺序不能变：
+     *
+     *  1. 主 Looper 必须先建 —— ActivityThread 构造时会创建 Handler
+     *  2. **不能调 ActivityThread.systemMain()**：它会跑 ROM 的 attach 钩子，
+     *     在 app_process 里有副作用；直接 new 一个再自己塞静态字段更轻
+     *  3. mSystemThread = true 必须设，否则 getSystemContext() 返回 null
+     *  4. sCurrentActivityThread 必须设，否则后续拿到的还是 null
      */
     private fun systemContext(): Context {
-        val activityThread = Class.forName("android.app.ActivityThread")
-        val thread = runCatching {
-            val systemMain = activityThread.getDeclaredMethod("systemMain")
-            systemMain.isAccessible = true
-            systemMain.invoke(null)
-        }.getOrNull()
-        val instance = thread ?: runCatching {
-            val current = activityThread.getDeclaredMethod("currentActivityThread")
+        val type = Class.forName("android.app.ActivityThread")
+
+        var thread: Any? = runCatching {
+            val current = type.getDeclaredMethod("currentActivityThread")
             current.isAccessible = true
             current.invoke(null)
-        }.getOrNull() ?: error("no ActivityThread in this process")
-        val getSystemContext = activityThread.getDeclaredMethod("getSystemContext")
+        }.getOrNull()
+
+        if (thread == null) {
+            val ctor = type.getDeclaredConstructor()
+            ctor.isAccessible = true
+            thread = ctor.newInstance()
+        }
+
+        // 无论新建还是已有的，都补上这两个字段：缺一个 getSystemContext 就返回 null
+        runCatching {
+            val systemThread = type.getDeclaredField("mSystemThread")
+            systemThread.isAccessible = true
+            systemThread.setBoolean(thread, true)
+        }
+        runCatching {
+            val current = type.getDeclaredField("sCurrentActivityThread")
+            current.isAccessible = true
+            current.set(null, thread)
+        }
+
+        val getSystemContext = type.getDeclaredMethod("getSystemContext")
         getSystemContext.isAccessible = true
-        return getSystemContext.invoke(instance) as Context
+        val context = getSystemContext.invoke(thread) as? Context
+            ?: error("ActivityThread.getSystemContext() returned null")
+        return context
     }
 }
