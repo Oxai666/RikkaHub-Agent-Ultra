@@ -381,6 +381,11 @@ private val FRESHNESS_TTL_MS_BY_TOOL: Map<String, Long> = mapOf(
     // browser_open 有副作用（会导航），但「重新加载同一 URL」是合法操作：
     // 调试时连续 reload 三次很常见，不该被当成死循环拦下。冷却 5 秒。
     "browser_open" to 5_000L,
+    // virtual_screen 是混合工具：screenshot / status / diagnose 是观察，
+    // start / tap / swipe / launch 是动作。循环守卫只按工具名判重，分不清 action，
+    // 于是「第三次截图」就被当成死循环 —— 实测 AI 连续两次 loop_detected 卡在原地。
+    // 给 2 秒 TTL：2 秒内同参数重调仍然拦（那是空转），超过就放行。
+    "virtual_screen" to 2_000L,
 )
 
 /**
@@ -400,7 +405,7 @@ private val FRESHNESS_TTL_MS_BY_TOOL: Map<String, Long> = mapOf(
  * 有副作用、但同样需要 TTL 冷却的工具：只享受「冷却后放行」，不参与 act-observe 重置
  * （否则它们会被当成观察类，从而绕过「动作之后重新计数」的语义）。
  */
-private val ACTION_TOOLS_WITH_TTL: Set<String> = setOf("browser_open")
+private val ACTION_TOOLS_WITH_TTL: Set<String> = setOf("browser_open", "virtual_screen")
 
 private val READ_ONLY_OBSERVATION_TOOLS: Set<String> =
     (FRESHNESS_TTL_MS_BY_TOOL.keys - ACTION_TOOLS_WITH_TTL) + "find_node"
