@@ -96,15 +96,26 @@ object VirtualScreenOverlay {
         }
         container.addView(image)
 
-        // 顶部拖动条：只有这一条区域负责拖窗，其余区域留给「点屏幕」
-        val dragBar = View(app).apply {
-            setBackgroundColor(Color.argb(120, 0, 0, 0))
+        // 顶部拖动条：只有这一条区域负责拖窗，其余区域留给「点 / 滑屏幕」
+        val dragBar = FrameLayout(app).apply {
+            setBackgroundColor(Color.argb(170, 0, 0, 0))
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                (26 * density).toInt(),
+                (32 * density).toInt(),
                 Gravity.TOP,
             )
         }
+        // 中间那根白色小横杠：告诉用户「这里能拖」
+        dragBar.addView(
+            View(app).apply {
+                setBackgroundColor(Color.argb(210, 255, 255, 255))
+                layoutParams = FrameLayout.LayoutParams(
+                    (56 * density).toInt(),
+                    (4 * density).toInt(),
+                    Gravity.CENTER,
+                )
+            }
+        )
         container.addView(dragBar)
 
         val lp = WindowManager.LayoutParams(
@@ -123,7 +134,7 @@ object VirtualScreenOverlay {
         params = lp
 
         attachDrag(app, wm, container, dragBar, lp)
-        attachTap(context, image)
+        attachGestures(context, image)
 
         runCatching { wm.addView(container, lp) }
         root = container
@@ -218,18 +229,22 @@ object VirtualScreenOverlay {
     }
 
     /**
-     * 画面区域的点击 → 换算成虚拟屏像素 → 发 tap。
+     * 画面区域的点按与滑动。
      *
-     * FIT_CENTER 会在窗口里留黑边，所以要先减掉绘制偏移再除缩放比，
-     * 落在黑边上的触摸直接忽略。
+     * 一次手势结束才发命令（不是实时流式转发）：
+     *  - 按下到抬起位移小于 24px 且不超过 500ms → tap
+     *  - 否则 → swipe（起点、终点、真实耗时）
+     *
+     * 实时转发每个 move 事件也能做，但每次都要起一个 `input` 进程，
+     * 十几毫秒一个根本跟不上，反而更卡。
      */
     @SuppressLint("ClickableViewAccessibility")
-    private fun attachTap(context: Context, image: ImageView) {
+    private fun attachGestures(context: Context, image: ImageView) {
         var downX = 0f
         var downY = 0f
         var downAt = 0L
         image.setOnTouchListener { view, event ->
-            when (event.action) {
+            when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = event.x
                     downY = event.y
@@ -237,24 +252,27 @@ object VirtualScreenOverlay {
                     true
                 }
                 MotionEvent.ACTION_UP -> {
+                    val elapsed = (System.currentTimeMillis() - downAt).toInt()
                     val moved = abs(event.x - downX) + abs(event.y - downY)
-                    val elapsed = System.currentTimeMillis() - downAt
-                    // 只有「几乎没动 + 时间短」才当点击，避免滑动窗口时误触
-                    if (moved < 24f && elapsed < 400) {
-                        forwardTap(context, view, event.x, event.y)
+                    if (moved < 24f && elapsed < 500) {
+                        forwardTap(view, event.x, event.y)
+                    } else {
+                        forwardSwipe(view, downX, downY, event.x, event.y, elapsed)
                     }
                     true
                 }
-                else -> false
+                MotionEvent.ACTION_CANCEL -> true
+                else -> true
             }
         }
     }
 
-    private fun forwardTap(context: Context, view: View, x: Float, y: Float) {
-        if (frameWidth <= 0 || frameHeight <= 0) return
+    /** 视图坐标 → 虚拟屏像素。返回 null 表示落在 FIT_CENTER 的黑边上。 */
+    private fun mapToScreen(view: View, x: Float, y: Float): Pair<Float, Float>? {
+        if (frameWidth <= 0 || frameHeight <= 0) return null
         val iw = view.width
         val ih = view.height
-        if (iw <= 0 || ih <= 0) return
+        if (iw <= 0 || ih <= 0) return null
         val scale = min(iw.toFloat() / frameWidth, ih.toFloat() / frameHeight)
         val drawW = frameWidth * scale
         val drawH = frameHeight * scale
@@ -262,10 +280,25 @@ object VirtualScreenOverlay {
         val offsetY = (ih - drawH) / 2f
         val vx = (x - offsetX) / scale
         val vy = (y - offsetY) / scale
-        if (vx < 0 || vy < 0 || vx > frameWidth || vy > frameHeight) return
+        if (vx < 0 || vy < 0 || vx > frameWidth || vy > frameHeight) return null
+        return vx to vy
+    }
 
+    private fun forwardTap(view: View, x: Float, y: Float) {
+        val mapped = mapToScreen(view, x, y) ?: return
         CoroutineScope(Dispatchers.IO).launch {
-            VirtualScreenManager.tap(vx, vy)
+            VirtualScreenManager.tap(mapped.first, mapped.second)
+        }
+    }
+
+    private fun forwardSwipe(view: View, x1: Float, y1: Float, x2: Float, y2: Float, durationMs: Int) {
+        val from = mapToScreen(view, x1, y1) ?: return
+        val to = mapToScreen(view, x2, y2) ?: return
+        CoroutineScope(Dispatchers.IO).launch {
+            VirtualScreenManager.swipe(
+                from.first, from.second, to.first, to.second,
+                durationMs.coerceIn(80, 2_000).toLong(),
+            )
         }
     }
 

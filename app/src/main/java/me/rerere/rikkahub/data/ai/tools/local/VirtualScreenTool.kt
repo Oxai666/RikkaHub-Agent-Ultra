@@ -37,14 +37,39 @@ fun virtualScreenTool(context: Context): Tool = Tool(
         action=status reports whether it is running and its display id;
         action=stop tears it down.
         This is an EXTRA display, not a mirror of the user's screen (unless started with mirror=true).
-        The virtual screen has no input injection in this version — it is read-only.
+        action=tap and action=swipe inject touch into the virtual display — coordinates are in
+        virtual-screen pixels (720x1280 by default), origin at the top-left. Call action=screenshot
+        first to see the current layout and pick coordinates.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
             properties = buildJsonObject {
                 put("action", buildJsonObject {
                     put("type", "string")
-                    put("description", "One of: start / screenshot / launch / status / stop")
+                    put(
+                        "description",
+                        "One of: start / screenshot / launch / tap / swipe / status / stop"
+                    )
+                })
+                put("x", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "X coordinate in virtual-screen pixels. Used by action=tap as the tap point, and by action=swipe as the start point.")
+                })
+                put("y", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Y coordinate in virtual-screen pixels (tap point / swipe start).")
+                })
+                put("x2", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Swipe end X in virtual-screen pixels. Used by action=swipe.")
+                })
+                put("y2", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Swipe end Y in virtual-screen pixels. Used by action=swipe.")
+                })
+                put("duration_ms", buildJsonObject {
+                    put("type", "integer")
+                    put("description", "Swipe duration in milliseconds, default 250. Used by action=swipe.")
                 })
                 put("package", buildJsonObject {
                     put("type", "string")
@@ -148,6 +173,63 @@ fun virtualScreenTool(context: Context): Tool = Tool(
                             put("note", "这是虚拟屏的当前画面")
                         }.toString()
                     ),
+                )
+            }
+
+            "tap" -> {
+                val x = input.jsonObject["x"]?.jsonPrimitive?.intOrNull
+                val y = input.jsonObject["y"]?.jsonPrimitive?.intOrNull
+                if (x == null || y == null) {
+                    return@Tool listOf(
+                        UIMessagePart.Text(
+                            buildJsonObject { put("error", "action=tap 需要 x 和 y（虚拟屏像素）") }.toString()
+                        )
+                    )
+                }
+                val ok = VirtualScreenManager.tap(x.toFloat(), y.toFloat())
+                listOf(
+                    UIMessagePart.Text(
+                        buildJsonObject {
+                            put("ok", ok)
+                            put("x", x)
+                            put("y", y)
+                            if (!ok) put("error", VirtualScreenManager.state.value.error ?: "点击失败")
+                        }.toString()
+                    )
+                )
+            }
+
+            "swipe" -> {
+                val x1 = input.jsonObject["x"]?.jsonPrimitive?.intOrNull
+                val y1 = input.jsonObject["y"]?.jsonPrimitive?.intOrNull
+                val x2 = input.jsonObject["x2"]?.jsonPrimitive?.intOrNull
+                val y2 = input.jsonObject["y2"]?.jsonPrimitive?.intOrNull
+                if (x1 == null || y1 == null || x2 == null || y2 == null) {
+                    return@Tool listOf(
+                        UIMessagePart.Text(
+                            buildJsonObject {
+                                put("error", "action=swipe 需要 x / y / x2 / y2（虚拟屏像素）")
+                            }.toString()
+                        )
+                    )
+                }
+                val duration = (input.jsonObject["duration_ms"]?.jsonPrimitive?.intOrNull ?: 250)
+                    .coerceIn(80, 3_000).toLong()
+                val ok = VirtualScreenManager.swipe(
+                    x1.toFloat(), y1.toFloat(), x2.toFloat(), y2.toFloat(), duration,
+                )
+                listOf(
+                    UIMessagePart.Text(
+                        buildJsonObject {
+                            put("ok", ok)
+                            put("from_x", x1)
+                            put("from_y", y1)
+                            put("to_x", x2)
+                            put("to_y", y2)
+                            put("duration_ms", duration)
+                            if (!ok) put("error", VirtualScreenManager.state.value.error ?: "滑动失败")
+                        }.toString()
+                    )
                 )
             }
 

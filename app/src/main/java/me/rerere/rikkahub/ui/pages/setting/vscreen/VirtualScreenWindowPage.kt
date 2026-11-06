@@ -2,7 +2,8 @@ package me.rerere.rikkahub.ui.pages.setting.vscreen
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -106,11 +107,35 @@ fun VirtualScreenWindowPage() {
                     .onSizeChanged { viewSize = it }
                     .pointerInput(state.width, state.height, viewSize) {
                         if (viewSize.width == 0 || state.width == 0) return@pointerInput
-                        detectTapGestures { offset ->
+                        awaitEachGesture {
+                            val down = awaitFirstDown()
+                            val start = down.position
+                            var last = start
+                            val startedAt = System.currentTimeMillis()
+                            var dragging = false
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) break
+                                if ((change.position - start).getDistance() > 24f) dragging = true
+                                last = change.position
+                                change.consume()
+                            }
+                            val durationMs = (System.currentTimeMillis() - startedAt).toInt()
                             // 视图坐标 → 虚拟屏像素
-                            val x = offset.x / viewSize.width * state.width
-                            val y = offset.y / viewSize.height * state.height
-                            scope.launch { VirtualScreenManager.tap(x, y) }
+                            fun map(p: androidx.compose.ui.geometry.Offset): Pair<Float, Float> =
+                                (p.x / viewSize.width * state.width) to
+                                    (p.y / viewSize.height * state.height)
+
+                            if (!dragging && durationMs < 500) {
+                                val (x, y) = map(start)
+                                scope.launch { VirtualScreenManager.tap(x, y) }
+                            } else {
+                                val (x1, y1) = map(start)
+                                val (x2, y2) = map(last)
+                                val d = durationMs.coerceIn(80, 2_000).toLong()
+                                scope.launch { VirtualScreenManager.swipe(x1, y1, x2, y2, d) }
+                            }
                         }
                     },
                 contentAlignment = Alignment.Center,
