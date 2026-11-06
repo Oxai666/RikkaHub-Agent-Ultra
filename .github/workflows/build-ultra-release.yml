@@ -140,37 +140,36 @@ jobs:
           pnpm --version
           pnpm run build
 
-      # R8 开关：只改 buildTypes.release 里那一个 optimization 块，
-      # 用 python 做多行精确替换，不按行号切文件。
+      # R8 开关：只改 buildTypes.release 里那一个 optimization 块。
+      #
+      # 这里**不能**用 heredoc：YAML 的 block scalar 会把内容里比块基准更深的缩进原样保留，
+      # 而 shell 要求 heredoc 的结束符必须顶格。写在 YAML 里的 heredoc 结束符总带缩进，
+      # 脚本会以 "unexpected end of file" 直接退出（run #1 就是这么红的）。
+      # 改成 awk 定位行号 + sed 单行替换，不依赖 heredoc，也没有引号嵌套。
       - name: Apply minify preference
         run: |
-          set -e
+          set -euo pipefail
+          GRADLE=app/build.gradle.kts
           if [ "${{ inputs.disable_minify }}" = "true" ]; then
-            python3 - <<'PY'
-            import pathlib, sys
-            p = pathlib.Path("app/build.gradle.kts")
-            text = p.read_text(encoding="utf-8")
-            old = """        release {
-            signingConfig = signingConfigs.getByName("release")
-            optimization {
-                enable = true
-            }"""
-            new = """        release {
-            signingConfig = signingConfigs.getByName("release")
-            optimization {
-                // CI 首次出包时临时关闭（workflow input: disable_minify）
-                enable = false
-            }"""
-            if text.count(old) != 1:
-                print(f"FAIL: expected 1 occurrence, got {text.count(old)}", file=sys.stderr)
-                sys.exit(1)
-            p.write_text(text.replace(old, new), encoding="utf-8")
-            print("OK: release minify disabled")
-            PY
+            LINE=$(awk '/optimization \{/{f=1} f && /enable = true/{print NR; exit}' "$GRADLE")
+            if [ -z "${LINE:-}" ]; then
+              echo "::error::在 $GRADLE 里没找到 optimization { ... enable = true }"
+              grep -n "optimization" "$GRADLE" || true
+              exit 1
+            fi
+            echo "optimization.enable 位于第 $LINE 行，改成 false"
+            sed -i "${LINE}s/enable = true/enable = false/" "$GRADLE"
+            if ! sed -n "${LINE}p" "$GRADLE" | grep -q "enable = false"; then
+              echo "::error::替换后第 $LINE 行不是 enable = false"
+              sed -n "${LINE}p" "$GRADLE"
+              exit 1
+            fi
+            echo "OK: release minify 已关闭"
           else
             echo "minify 保持开启（optimization.enable = true）"
           fi
-          grep -n -A 6 "release {" app/build.gradle.kts | head -20
+          echo "--- 改动结果 ---"
+          grep -n -B 6 -A 1 "enable = " "$GRADLE" | sed -n '1,30p'
 
       - name: Armor unit tests
         run: |
@@ -203,8 +202,19 @@ jobs:
           set -uo pipefail
           LOG=/tmp/release-build.log
           [ -f "$LOG" ] || LOG=/tmp/armor-test.log
-          [ -f "$LOG" ] || { echo "没有日志文件"; exit 0; }
           TITLE="Release CI failure: $(date -u +%Y-%m-%dT%H:%MZ) @ ${GITHUB_SHA:0:7}"
+          # 早退的步骤（比如脚本本身语法错）还没有日志文件。以前这里直接 exit 0，
+          # 结果失败完全静默 —— 现在至少开一条 issue 说明"没有日志 + 是哪个 step"。
+          if [ ! -f "$LOG" ]; then
+            {
+              echo "run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+              echo "commit: $GITHUB_SHA"
+              echo ""
+              echo "没有生成 Gradle 日志文件，失败发生在构建之前，看上面 run 页面的 step 输出。"
+            } > /tmp/issue-body.md
+            gh issue create --title "$TITLE" --body-file /tmp/issue-body.md || true
+            exit 0
+          fi
           {
             echo "run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo "commit: $GITHUB_SHA"
