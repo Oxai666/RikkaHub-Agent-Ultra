@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import me.rerere.ai.ui.UIMessage
 import me.rerere.common.android.Logging
+import me.rerere.rikkahub.data.ai.armor.ArmorRegistry
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.fts.MessageSearchSort
@@ -377,6 +378,12 @@ class ConversationRepository(
         // which already index only after their transaction completes).
         messageFtsManager.deleteConversation(conversation.id.toString())
         filesManager.deleteChatFiles(fullConversation.files)
+        // 破甲状态以 conversationId 为键，只增不减。会话删掉后要把它一起清掉，否则：
+        //  1. corrections 是单会话累计上限（20 次），用完只能靠杀进程恢复；
+        //  2. ArmorWatch 仍持有最多 8000 字的正文与 4000 字的推理副本，白占内存。
+        // 只能挂在删除这种生命周期终点上，不能挂到每轮生成开头——那样会把
+        // ArmorTransformer 下一步要读的 verdict 提前冲掉，破甲直接失效。
+        ArmorRegistry.state.clear(conversation.id)
     }
 
     suspend fun searchMessages(
