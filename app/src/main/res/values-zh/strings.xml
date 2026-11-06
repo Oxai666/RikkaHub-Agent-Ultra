@@ -911,6 +911,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_page_web_server_start">启动</string>
   <string name="setting_page_web_server_stop">停止</string>
   <string name="setting_provider_page_abilities">能力</string>
+  <string name="setting_provider_page_context_length">上下文长度</string>
+  <string name="setting_provider_page_context_length_custom">自定义</string>
   <string name="setting_provider_page_add">添加</string>
   <string name="setting_provider_page_add_model">添加模型</string>
   <string name="setting_provider_page_add_models_hint">点击下方按钮添加模型</string>

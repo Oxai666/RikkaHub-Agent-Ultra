@@ -109,6 +109,8 @@ import me.rerere.rikkahub.ui.components.ai.ModelTypeTag
 import me.rerere.rikkahub.ui.components.ai.ProviderBalanceText
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceButtons
+import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
 import me.rerere.rikkahub.ui.components.ui.ShareSheet
 import me.rerere.rikkahub.ui.components.ui.SiliconFlowPowerByIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
@@ -130,6 +132,7 @@ import me.rerere.rikkahub.ui.pages.setting.components.resetBaseUrlToDefault
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.UiState
+import me.rerere.rikkahub.utils.formatNumber
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -665,6 +668,13 @@ private fun ModelSettingsForm(
                                     onModelChange(model.copy(abilities = it))
                                 }
                             )
+
+                            ModelContextLengthSelector(
+                                contextLength = model.contextLength,
+                                onUpdateContextLength = {
+                                    onModelChange(model.copy(contextLength = it))
+                                }
+                            )
                         }
                     }
                 }
@@ -1175,6 +1185,59 @@ fun ModalAbilitySelector(
                 }
             )
         }
+    }
+}
+
+// 常见的上下文窗口大小，其余的走自定义输入。
+// 这一项同时喂两处：请求侧按它算上下文预算，用量面板的「上下文占用」条按它算分母。
+private val ContextLengthPresets = listOf(128_000, 200_000, 1_000_000)
+
+@Composable
+private fun ModelContextLengthSelector(
+    // 本项目的 Model.contextLength 可空（null = 未知），官方 3.1.1 是非空 Int，这里按可空适配
+    contextLength: Int?,
+    onUpdateContextLength: (Int) -> Unit
+) {
+    var custom by remember {
+        mutableStateOf(contextLength == null || contextLength !in ContextLengthPresets)
+    }
+    // 输入过程中允许为空，只有合法的正整数才写回模型
+    var customText by remember { mutableStateOf(contextLength?.toString().orEmpty()) }
+
+    Text(
+        stringResource(R.string.setting_provider_page_context_length),
+        style = MaterialTheme.typography.titleSmall
+    )
+    // null 表示自定义
+    ConnectedChoiceButtons(
+        options = ContextLengthPresets + null,
+        selected = if (custom) null else contextLength,
+        onSelect = { preset ->
+            custom = preset == null
+            if (preset != null) {
+                customText = preset.toString()
+                onUpdateContextLength(preset)
+            }
+        },
+    ) { preset, selected ->
+        ConnectedChoiceLabel(
+            text = preset?.formatNumber() ?: stringResource(R.string.setting_provider_page_context_length_custom),
+            selected = selected,
+        )
+    }
+    AnimatedVisibility(visible = custom) {
+        OutlinedTextField(
+            value = customText,
+            onValueChange = { value ->
+                customText = value.filter { it.isDigit() }
+                customText.toIntOrNull()?.takeIf { it > 0 }?.let(onUpdateContextLength)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            suffix = { Text("tokens") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            singleLine = true,
+            isError = (customText.toIntOrNull() ?: 0) <= 0,
+        )
     }
 }
 
