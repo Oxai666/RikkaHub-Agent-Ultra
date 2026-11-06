@@ -548,6 +548,10 @@ class RouteActivity : ComponentActivity() {
                                 me.rerere.rikkahub.ui.pages.setting.root.SettingRootPage()
                             }
 
+                            entry<Screen.SettingVirtualScreen> {
+                                me.rerere.rikkahub.ui.pages.setting.vscreen.SettingVirtualScreenPage()
+                            }
+
                             entry<Screen.ScheduledJobDetail> { key ->
                                 me.rerere.rikkahub.ui.pages.setting.scheduledjobs.ScheduledJobDetailScreen(jobId = key.id)
                             }
@@ -818,6 +822,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingRoot : Screen
+
+    @Serializable
+    data object SettingVirtualScreen : Screen
 
     @Serializable
     data class ScheduledJobDetail(val id: String) : Screen

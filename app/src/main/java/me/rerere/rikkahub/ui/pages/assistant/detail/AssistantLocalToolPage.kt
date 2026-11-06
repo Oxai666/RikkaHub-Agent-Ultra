@@ -1141,6 +1141,20 @@ private fun AssistantLocalToolContent(
             )
             item(
                 headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_virtual_screen_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_virtual_screen_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.VirtualScreen),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.VirtualScreen, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_shizuku_title))
                 },
                 supportingContent = {

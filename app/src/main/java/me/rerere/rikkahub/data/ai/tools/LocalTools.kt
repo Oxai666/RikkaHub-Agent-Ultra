@@ -187,6 +187,13 @@ sealed class LocalToolOption {
      * 默认不勾选；即使勾了，每次调用还要单独批准，命令本身也过 HARDLINE 底线。
      */
     @Serializable @SerialName("root")            data object Root           : LocalToolOption()
+    /**
+     * virtual_screen：开一块虚拟显示器。
+     *
+     * 依赖 root（CAPTURE_VIDEO_OUTPUT 是系统权限），所以在 root 不可用的设备上
+     * 这个开关打开也只会拿到一个明确的失败信息。
+     */
+    @Serializable @SerialName("virtual_screen")  data object VirtualScreen  : LocalToolOption()
     @Serializable @SerialName("telegram_bot")    data object TelegramBot    : LocalToolOption()
     @Serializable @SerialName("screen_automation") data object ScreenAutomation : LocalToolOption()
     /**
@@ -866,6 +873,9 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.Root)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.rootShellTool())
+        }
+        if (options.contains(LocalToolOption.VirtualScreen)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.virtualScreenTool(context))
         }
         if (options.contains(LocalToolOption.TelegramBot)) {
             tools.add(telegramSetTokenTool(telegramBotPreferences, telegramBotClient))
