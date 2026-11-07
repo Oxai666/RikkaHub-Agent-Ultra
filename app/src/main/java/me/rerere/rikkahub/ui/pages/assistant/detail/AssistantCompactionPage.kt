@@ -20,6 +20,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -48,6 +50,18 @@ fun AssistantCompactionPage(id: String) {
     val assistant by vm.assistant.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
+    // 三个数字框都用本地缓冲：直接从 assistant 里读值、每次按键回写，
+    // 清空的那一瞬间会被 toString()/?: 0 补成 "0"，再打一位就成了 "05" → 50。
+    var targetInput by remember(assistant.id) {
+        mutableStateOf(assistant.compactionTargetK?.toString().orEmpty())
+    }
+    var thresholdInput by remember(assistant.id) {
+        mutableStateOf(assistant.compactionThresholdK?.toString().orEmpty())
+    }
+    var keepInput by remember(assistant.id) {
+        mutableStateOf(assistant.compactionKeepMessages.toString())
+    }
+
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
@@ -75,11 +89,11 @@ fun AssistantCompactionPage(id: String) {
                 desc = stringResource(R.string.assistant_compaction_target_desc),
             )
             OutlinedTextField(
-                value = assistant.compactionTargetK?.toString().orEmpty(),
+                value = targetInput,
                 onValueChange = { raw ->
-                    val digits = raw.filter { it.isDigit() }
+                    targetInput = raw.filter { it.isDigit() }.take(6)
                     vm.updateAssistant { aid ->
-                        aid.copy(compactionTargetK = digits.toIntOrNull())
+                        aid.copy(compactionTargetK = targetInput.toIntOrNull())
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -95,11 +109,11 @@ fun AssistantCompactionPage(id: String) {
                 desc = stringResource(R.string.assistant_compaction_threshold_desc),
             )
             OutlinedTextField(
-                value = assistant.compactionThresholdK?.toString().orEmpty(),
+                value = thresholdInput,
                 onValueChange = { raw ->
-                    val digits = raw.filter { it.isDigit() }
+                    thresholdInput = raw.filter { it.isDigit() }.take(6)
                     vm.updateAssistant { aid ->
-                        aid.copy(compactionThresholdK = digits.toIntOrNull())
+                        aid.copy(compactionThresholdK = thresholdInput.toIntOrNull())
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -115,11 +129,13 @@ fun AssistantCompactionPage(id: String) {
                 desc = stringResource(R.string.assistant_compaction_keep_desc),
             )
             OutlinedTextField(
-                value = assistant.compactionKeepMessages.toString(),
+                value = keepInput,
                 onValueChange = { raw ->
-                    val digits = raw.filter { it.isDigit() }
-                    vm.updateAssistant { aid ->
-                        aid.copy(compactionKeepMessages = digits.toIntOrNull()?.coerceIn(0, 500) ?: 0)
+                    keepInput = raw.filter { it.isDigit() }.take(3)
+                    keepInput.toIntOrNull()?.let { value ->
+                        vm.updateAssistant { aid ->
+                            aid.copy(compactionKeepMessages = value.coerceIn(0, 500))
+                        }
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
