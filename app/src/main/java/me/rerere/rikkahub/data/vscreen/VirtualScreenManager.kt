@@ -177,9 +177,21 @@ object VirtualScreenManager {
         appContext = context.applicationContext
         _state.value = State(starting = true)
 
+        // 如果配了 ADB 地址，先试着连一次 —— ADB 走真实网络栈，
+        // 不受 per-app network namespace 隔离影响，是 Shizuku 模式下唯一能通的路
         if (PrivilegedShell.backend() == PrivilegedShell.Backend.NONE) {
-            _state.value = State(error = "需要 root 或 Shizuku：虚拟屏要 CAPTURE_VIDEO_OUTPUT 权限，普通进程拿不到。" +
-                "装 Shizuku 并在设置里授权即可，不必 root。")
+            val (adbHost, _) = PrivilegedShell.adbEndpoint(context)
+            if (adbHost.isNotBlank()) {
+                PrivilegedShell.connectAdb(context)
+            }
+        }
+        if (PrivilegedShell.backend() == PrivilegedShell.Backend.NONE) {
+            _state.value = State(
+                error = "没有可用的特权通道。三种任选其一：\n" +
+                    "· root（su）\n" +
+                    "· ADB 直连（开发者选项 → 无线调试，配对后在这里填地址；有 root 的话可以一键把公钥写进 adb_keys）\n" +
+                    "· Shizuku（注意：Shizuku 能启动 helper，但 App 和它不在同一网络命名空间，连不上它的端口）"
+            )
             return@withContext false
         }
 
