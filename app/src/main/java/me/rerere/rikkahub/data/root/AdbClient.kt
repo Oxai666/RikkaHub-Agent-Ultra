@@ -86,29 +86,30 @@ class AdbClient(
         send(CMD_CNXN, A_VERSION, A_MAXDATA, "host::\u0000".toByteArray())
 
         var authorized = false
-        repeat(6) {
+        // 注意不能用 repeat { return@repeat } —— 那只是跳过本次迭代，不会跳出循环，
+        // 认证成功后还会继续读包，在没数据的 socket 上直接卡死。
+        for (attempt in 0 until 8) {
+            if (authorized) break
             val packet = read()
             when (packet.command) {
-                CMD_CNXN -> {
-                    authorized = true
-                    return@repeat
-                }
+                CMD_CNXN -> authorized = true
                 CMD_AUTH -> {
                     if (packet.arg0 == AUTH_TOKEN) {
-                        // 先用私钥签 token
-                        val signature = sign(packet.data)
-                        send(CMD_AUTH, AUTH_SIGNATURE, 0, signature)
+                        // adbd 给了 token：用私钥签了回传
+                        send(CMD_AUTH, AUTH_SIGNATURE, 0, sign(packet.data))
                     } else if (packet.arg0 == AUTH_RSAPUBLICKEY) {
-                        // adbd 要公钥：发过去后手机上会弹授权框
+                        // adbd 要公钥：发过去之后手机上会弹「允许 USB 调试」
                         send(CMD_AUTH, AUTH_RSAPUBLICKEY, 0, publicKeyBlob())
                     }
                 }
                 else -> Unit
             }
-            if (authorized) return@repeat
         }
         if (!authorized) {
-            throw IllegalStateException("ADB 认证未完成（手机上是不是没点「允许」？）")
+            throw IllegalStateException(
+                "ADB 认证未完成。可能原因：\n· 手机上没点「允许 USB 调试」\n" +
+                    "· 公钥格式不被接受（有 root 的话用「写入 adb_keys」跳过这一步）"
+            )
         }
     }
 
