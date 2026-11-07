@@ -71,6 +71,7 @@ import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -669,12 +670,17 @@ private fun ModelSettingsForm(
                                 }
                             )
 
-                            ModelContextLengthSelector(
-                                contextLength = model.contextLength,
-                                onUpdateContextLength = {
-                                    onModelChange(model.copy(contextLength = it))
-                                }
-                            )
+                            // key(model.id)：换一个模型编辑时整块拆了重建，
+                            // 里面的 remember 全部归零。否则输入框会留着
+                            // 上一个模型的数字，新建模型的 1M 也带不进来。
+                            key(model.id) {
+                                ModelContextLengthSelector(
+                                    contextLength = model.contextLength,
+                                    onUpdateContextLength = {
+                                        onModelChange(model.copy(contextLength = it))
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -1200,10 +1206,16 @@ private fun ModelContextLengthSelector(
     contextLength: Int?,
     onUpdateContextLength: (Int) -> Unit
 ) {
-    var custom by remember {
+    // 必须拿 contextLength 当 key。
+    // 原来是无 key 的 remember，只在第一次组合时算一次，之后一直沿用——
+    // 先编辑过别的模型、再点「添加模型」，这里会保留上一个模型的判定结果，
+    // 于是新建模型明明带了 1_000_000，界面上还是停在「自定义」。
+    var custom by remember(contextLength) {
         mutableStateOf(contextLength == null || contextLength !in ContextLengthPresets)
     }
-    // 输入过程中允许为空，只有合法的正整数才写回模型
+    // 这个反过来不能拿 contextLength 当 key：打字过程中每敲一位都会写回模型，
+    // contextLength 一直在变，拿它当 key 会把输入框重置掉，光标直跳。
+    // 换模型的重置交给调用处的 key(model.id)。
     var customText by remember { mutableStateOf(contextLength?.toString().orEmpty()) }
 
     Text(
