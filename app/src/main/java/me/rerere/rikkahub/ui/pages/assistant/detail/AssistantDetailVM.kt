@@ -165,17 +165,36 @@ class AssistantDetailVM(
     fun update(assistant: Assistant) {
         viewModelScope.launch {
             val settings = settings.value
+            // 助手改名要顺带把存档目录也挪过去。注意这条路径和下面的
+            // updateAssistant 是两条独立的写入路径，两边都得挂，漏一个就会出现
+            // 「改了名但文件夹还是旧名字」。
+            var renamedTo: String? = null
             settingsStore.update(
                 settings = settings.copy(
                     assistants = settings.assistants.map {
                         if (it.id == assistant.id) {
                             checkAvatarDelete(old = it, new = assistant) // 删除旧头像
                             checkBackgroundDelete(old = it, new = assistant) // 删除旧背景
+                            if (it.name != assistant.name && assistant.name.isNotBlank()) {
+                                renamedTo = assistant.name
+                            }
                             assistant
                         } else {
                             it
                         }
                     })
+            )
+            renamedTo?.let { name -> syncArchiveDir(assistant.id, name) }
+        }
+    }
+
+    /** 把存档目录名跟助手新名字对齐。文件 IO，别在主线程做。 */
+    private suspend fun syncArchiveDir(assistantId: Uuid, newName: String) {
+        withContext(Dispatchers.IO) {
+            CompactionArchive.onAssistantRenamed(
+                context = null,
+                assistantId = assistantId.toString(),
+                newName = newName,
             )
         }
     }
