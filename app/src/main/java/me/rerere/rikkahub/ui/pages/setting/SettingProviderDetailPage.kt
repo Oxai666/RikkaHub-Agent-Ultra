@@ -1689,8 +1689,8 @@ private fun ProviderOverrideSettings(
  * the static ModelRegistry lookup for providers that return bare model ids. Without this,
  * the registry lookup clobbered OpenRouter's detected image/tool/reasoning capabilities.
  */
-private fun Model.enrichCapabilities(): Model =
-    if (supportedParameters.isNotEmpty()) {
+private fun Model.enrichCapabilities(): Model {
+    val enriched = if (supportedParameters.isNotEmpty()) {
         this
     } else {
         copy(
@@ -1699,3 +1699,13 @@ private fun Model.enrichCapabilities(): Model =
             abilities = ModelRegistry.MODEL_ABILITIES.getData(modelId),
         )
     }
+    // 「自动获取模型」那条路会直接调这里，然后 onAddModel —— 不经过
+    // ModelSettingsForm，所以在表单里做兜底根本轮不到它。
+    // 自动拉取的模型大多没有上下文长度，会是 null，界面上就落成「自定义」。
+    // 统一在这里兜一层 1M：真拿到值的保留，没拿到的给个能用的大值。
+    return if (enriched.contextLength == null) {
+        enriched.copy(contextLength = 1_000_000)
+    } else {
+        enriched
+    }
+}
