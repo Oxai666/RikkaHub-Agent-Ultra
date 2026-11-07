@@ -94,6 +94,7 @@ fun ReasoningButton(
                     heroSize = 32.dp,
                     iconSize = 16.dp,
                     decoration = reasoningLevel.heroDecoration(),
+                    expression = reasoningLevel.heroExpression(),
                 )
             }
             if (!onlyIcon) Text(stringResource(R.string.setting_provider_page_reasoning))
@@ -152,6 +153,7 @@ fun ReasoningPicker(
                     containerColor = previewLevel.badgeContainerColor(),
                     contentColor = previewLevel.badgeContentColor(),
                     decoration = previewLevel.heroDecoration(),
+                    expression = previewLevel.heroExpression(),
                 )
             }
 
@@ -213,13 +215,31 @@ private fun ReasoningLevel.badgeContentColor(): Color = when {
 
 // 高档位给球加装饰，低档位保持干净——一眼就能看出开到多大了。
 //   High   → 头顶天使光环
-//   XHigh  → 右边一只天使翅膀
-//   Max    → 左右各一只恶魔翅膀
+//   XHigh  → 右边一只天使翅膀 + 光环
+//   Max    → 左右各一只恶魔翅膀 + 头顶两只角
 private fun ReasoningLevel.heroDecoration(): HeroDecoration = when (this) {
     ReasoningLevel.HIGH -> HeroDecoration.Halo
-    ReasoningLevel.XHIGH -> HeroDecoration.AngelWing
+    ReasoningLevel.XHIGH -> HeroDecoration.AngelWingHalo
     ReasoningLevel.MAX -> HeroDecoration.DemonWings
     else -> HeroDecoration.None
+}
+
+// 每个档位一张脸：
+//   Off    闭眼打呼噜 + 飘 z
+//   Auto   圆点眼 + 微笑
+//   Low    半睁眼，迷迷糊糊
+//   Medium 微笑 + 系领带
+//   High   微笑（头顶已经有光环了）
+//   XHigh  微笑（翅膀 + 光环）
+//   Max    斜眼 + 咧嘴露尖牙
+private fun ReasoningLevel.heroExpression(): HeroExpression = when (this) {
+    ReasoningLevel.OFF -> HeroExpression.Sleeping
+    ReasoningLevel.AUTO -> HeroExpression.Smile
+    ReasoningLevel.LOW -> HeroExpression.Drowsy
+    ReasoningLevel.MEDIUM -> HeroExpression.Tie
+    ReasoningLevel.HIGH -> HeroExpression.Smile
+    ReasoningLevel.XHIGH -> HeroExpression.Smile
+    ReasoningLevel.MAX -> HeroExpression.Evil
 }
 
 private fun ReasoningLevel.shape(): RoundedPolygon = when (this) {
