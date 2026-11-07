@@ -2313,10 +2313,16 @@ class ChatService(
                     Log.i(TAG, "Auto compaction skipped: no new raw messages after existing summary")
                     view.compaction
                 } else {
-                    val targetTokens = settings.getContextCompactionTargetTokens(
-                        compactionContextLength(settings, model),
-                    )
-                    val triggerTokens = automaticCompactionTriggerTokens(settings, model)
+                    // 助手级覆盖优先：压缩大小（target）和压缩阈值（trigger）分开配。
+                    // 两个都留空时才回落到全局设置。
+                    val compactionAssistant = settings.assistants
+                        .firstOrNull { it.id == conversation.assistantId }
+                    val targetTokens = compactionAssistant?.compactionTargetK?.times(1000)
+                        ?: settings.getContextCompactionTargetTokens(
+                            compactionContextLength(settings, model),
+                        )
+                    val triggerTokens = compactionAssistant?.compactionThresholdK?.times(1000)
+                        ?: automaticCompactionTriggerTokens(settings, model)
                     // Choose the tail boundary so the post-compaction request already lands
                     // comfortably below the trigger, instead of accepting a tail that sits right
                     // at it and re-summarizing on the next turn (see COMPACTION_TAIL_BUDGET_PERCENT).

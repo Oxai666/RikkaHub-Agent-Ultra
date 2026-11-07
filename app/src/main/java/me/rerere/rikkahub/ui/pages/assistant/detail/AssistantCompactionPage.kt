@@ -69,7 +69,27 @@ fun AssistantCompactionPage(id: String) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // ── ① 压缩大小 ──────────────────────────────────────
+            // ── ① 压缩大小（压缩后缩到多少）────────────────────────
+            SectionLabel(
+                title = stringResource(R.string.assistant_compaction_target),
+                desc = stringResource(R.string.assistant_compaction_target_desc),
+            )
+            OutlinedTextField(
+                value = assistant.compactionTargetK?.toString().orEmpty(),
+                onValueChange = { raw ->
+                    val digits = raw.filter { it.isDigit() }
+                    vm.updateAssistant { aid ->
+                        aid.copy(compactionTargetK = digits.toIntOrNull())
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text(stringResource(R.string.assistant_compaction_threshold_unit)) },
+                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                placeholder = { Text("32") },
+            )
+
+            // ── ② 压缩阈值（超过多少才压）────────────────────────
             SectionLabel(
                 title = stringResource(R.string.assistant_compaction_threshold),
                 desc = stringResource(R.string.assistant_compaction_threshold_desc),
@@ -86,7 +106,6 @@ fun AssistantCompactionPage(id: String) {
                 singleLine = true,
                 label = { Text(stringResource(R.string.assistant_compaction_threshold_unit)) },
                 textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 placeholder = { Text("500") },
             )
 

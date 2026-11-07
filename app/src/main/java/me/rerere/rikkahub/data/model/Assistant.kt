@@ -75,11 +75,14 @@ data class Assistant(
     /**
      * 压缩对话。
      *
-     * 超过 [compactionThresholdK]（千 tokens）时把旧消息摘要掉，
-     * 同时把**完整对话**按项目导出格式写进 App 私有目录，
-     * 供 AI 用 search_history 工具回查（压缩后它就不记得细节了）。
+     * 两个数分开：
+     *  - [compactionThresholdK]：**触发阈值**，上下文超过这个量才开始压
+     *  - [compactionTargetK]：**压缩大小**，压缩后把上下文缩到多少
+     * 两个都留空时沿用全局设置。
      */
     val compactionThresholdK: Int? = null,
+    /** 压缩后上下文的目标大小（千 tokens）。 */
+    val compactionTargetK: Int? = null,
     /** 压缩后保留最近多少条消息不动。 */
     val compactionKeepMessages: Int = 20,
     /** 附加说明：追加到摘要提示词后面，比如「重点保留代码和命令」。 */
