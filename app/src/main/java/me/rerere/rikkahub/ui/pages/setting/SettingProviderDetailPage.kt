@@ -70,6 +70,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -548,6 +549,16 @@ private fun ModelSettingsForm(
 ) {
     val pagerState = rememberPagerState { 3 }
     val scope = rememberCoroutineScope()
+
+    // 兜底：新建模型时 contextLength 还是空的话，自动补 1M。
+    // AddModelButton 那边已经塞了 1_000_000，这里再兜一层——
+    // 列表批量添加、导入这些入口都不会经过那个按钮，
+    // 与其在每处都记得塞一次，不如在这里统一收口。
+    LaunchedEffect(isEdit, model.id) {
+        if (!isEdit && model.contextLength == null) {
+            onModelChange(model.copy(contextLength = 1_000_000))
+        }
+    }
 
     fun setModelId(id: String) {
         val inputModality = ModelRegistry.MODEL_INPUT_MODALITIES.getData(id)
