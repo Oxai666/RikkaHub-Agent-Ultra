@@ -9,6 +9,11 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.requiredSize
@@ -53,6 +58,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -506,6 +512,30 @@ private fun SearchProviderPicker(
 private fun FocusOnServiceLogo(serviceName: String) {
     val beamColor = MaterialTheme.colorScheme.primary
 
+    val transition = rememberInfiniteTransition(label = "focus")
+
+    // 光圈呼吸：0.35 亮到 0.85 再退回来
+    val glowAlpha by transition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 0.85f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "glow",
+    )
+
+    // 闪光点：0 → 1 走一圈，边扩散边淡掉，然后重来
+    val spark by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1700, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "spark",
+    )
+
     Box(
         modifier = Modifier.requiredSize(34.dp),
         contentAlignment = Alignment.Center,
@@ -534,22 +564,54 @@ private fun FocusOnServiceLogo(serviceName: String) {
             )
         }
 
-        // 搜索方 logo：24dp 原尺寸，往左下靠，给右上角的放大镜让位
-        AnimatedContent(
-            targetState = serviceName,
+        // logo 那一格：光圈、logo、闪光点三层叠在一起居中，
+        // 光圈必须挂在这一格里而不是整个容器上，不然会浮在格子正中央，
+        // 跟落在左下的 logo 对不上。
+        Box(
             modifier = Modifier
                 .size(24.dp)
                 .align(Alignment.BottomStart),
-            transitionSpec = {
-                (fadeIn(tween(200)) + scaleIn(tween(240), initialScale = 0.5f)) togetherWith
-                    (fadeOut(tween(120)) + scaleOut(tween(160), targetScale = 0.7f))
-            },
-            label = "focus-logo",
-        ) { name ->
-            AutoAIIcon(
-                name = name,
-                color = Color.Transparent,
+            contentAlignment = Alignment.Center,
+        ) {
+            // 光圈：呼吸的径向渐变，铺在 logo 背后
+            Box(
+                modifier = Modifier
+                    .requiredSize(30.dp)
+                    .graphicsLayer { alpha = glowAlpha }
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                beamColor.copy(alpha = 0.60f),
+                                beamColor.copy(alpha = 0.18f),
+                                Color.Transparent,
+                            ),
+                        ),
+                        shape = CircleShape,
+                    ),
+            )
+
+            AnimatedContent(
+                targetState = serviceName,
                 modifier = Modifier.fillMaxSize(),
+                transitionSpec = {
+                    (fadeIn(tween(200)) + scaleIn(tween(240), initialScale = 0.5f)) togetherWith
+                        (fadeOut(tween(120)) + scaleOut(tween(160), targetScale = 0.7f))
+                },
+                label = "focus-logo",
+            ) { name ->
+                AutoAIIcon(
+                    name = name,
+                    color = Color.Transparent,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+
+            // 闪光点：在 logo 中心起一个白点，边放大边淡掉，模拟光点打上去
+            Box(
+                modifier = Modifier
+                    .size((2f + spark * 5f).dp)
+                    .graphicsLayer { alpha = (1f - spark) * 0.95f }
+                    .background(Color.White, CircleShape),
             )
         }
 
