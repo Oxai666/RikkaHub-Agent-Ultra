@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.data.root.PrivilegedShell
 import me.rerere.rikkahub.data.root.RootShell
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -143,9 +144,19 @@ object VirtualScreenManager {
         Log.i(TAG, "relaunch last app $packageName -> ${result.ok} ${result.message}")
     }
 
+    /**
+     * 统一的特权执行：root 优先，没 root 就用 Shizuku（ADB shell 身份）。
+     * 虚拟屏需要的 CAPTURE_VIDEO_OUTPUT / INJECT_EVENTS 两种身份都有。
+     */
+    private suspend fun exec(command: String, timeoutMs: Long): PrivilegedShell.Result {
+        val ctx = appContext
+            ?: return PrivilegedShell.Result(-1, "", "context 未初始化", false)
+        return PrivilegedShell.exec(ctx, command, timeoutMs)
+    }
+
     /** helper 进程还活着吗（跟 socket 是否可用分开看）。 */
     suspend fun isProcessAlive(): Boolean = withContext(Dispatchers.IO) {
-        val result = RootShell.exec("pidof $CORE_CLASS || pgrep -f $CORE_CLASS", 5_000)
+        val result = exec("pidof $CORE_CLASS || pgrep -f $CORE_CLASS", 5_000)
         result.stdout.isNotBlank()
     }
 
@@ -166,8 +177,9 @@ object VirtualScreenManager {
         appContext = context.applicationContext
         _state.value = State(starting = true)
 
-        if (!RootShell.isAvailable()) {
-            _state.value = State(error = "需要 root：虚拟屏要 CAPTURE_VIDEO_OUTPUT 权限，普通进程拿不到")
+        if (PrivilegedShell.backend() == PrivilegedShell.Backend.NONE) {
+            _state.value = State(error = "需要 root 或 Shizuku：虚拟屏要 CAPTURE_VIDEO_OUTPUT 权限，普通进程拿不到。" +
+                "装 Shizuku 并在设置里授权即可，不必 root。")
             return@withContext false
         }
 
@@ -195,7 +207,7 @@ object VirtualScreenManager {
             append(" < /dev/null > /data/local/tmp/rikkahub-vscreen.log 2>&1 &")
         }
 
-        val launched = RootShell.exec(command, timeoutMs = 15_000)
+        val launched = exec(command, timeoutMs = 15_000)
         if (!launched.ok) {
             // su 本身失败（没授权），这时候连 ping 都不用试
             _state.value = State(
@@ -237,7 +249,7 @@ object VirtualScreenManager {
         }
 
         val log = runCatching {
-            RootShell.exec("tail -n 20 /data/local/tmp/rikkahub-vscreen.log", 8_000).stdout.trim()
+            exec("tail -n 20 /data/local/tmp/rikkahub-vscreen.log", 8_000).stdout.trim()
         }.getOrDefault("")
         _state.value = State(error = "helper 起来了但没响应。日志：\n${log.ifBlank { "（空）" }}")
         false
@@ -264,7 +276,7 @@ object VirtualScreenManager {
             val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val pkg = prefs.getString(KEY_PACKAGE, null)
             if (!pkg.isNullOrBlank()) {
-                runCatching { RootShell.exec("am force-stop $pkg", 10_000) }
+                runCatching { exec("am force-stop $pkg", 10_000) }
             }
         }
         if (displayId >= 0) {
@@ -274,14 +286,14 @@ object VirtualScreenManager {
                     "/system/bin/awk '/\\* Task\\{/ { match(\$0, /#[0-9]+/); " +
                     "tid=substr(\$0, RSTART+1, RLENGTH-1) } " +
                     "/mDisplayId=$displayId/ { if (tid) print tid }'"
-                val listing = RootShell.exec(script, 20_000)
+                val listing = exec(script, 20_000)
                 listing.stdout.lines()
                     .map { it.trim() }
                     .filter { it.isNotEmpty() && it.all { c -> c.isDigit() } }
                     .distinct()
                     .take(8)
                     .forEach { taskId ->
-                        RootShell.exec("am task remove $taskId", 8_000)
+                        exec("am task remove $taskId", 8_000)
                     }
             }
         }
@@ -294,7 +306,7 @@ object VirtualScreenManager {
             runCatching { send(port, "quit", timeoutMs = 1_500) }
         }
         // 兜底：按命令行特征杀掉 helper。quit 走不通时（比如服务端被占住）靠这个收尾
-        runCatching { RootShell.exec("pkill -f $CORE_CLASS", 8_000) }
+        runCatching { exec("pkill -f $CORE_CLASS", 8_000) }
     }
 
     /**
@@ -391,7 +403,7 @@ object VirtualScreenManager {
         val state = _state.value
         if (!state.running || state.displayId < 0) return@withContext false
 
-        val shell = RootShell.exec(
+        val shell = exec(
             "input -d ${state.displayId} tap ${x.toInt()} ${y.toInt()}",
             10_000,
         )
@@ -421,7 +433,7 @@ object VirtualScreenManager {
         val state = _state.value
         if (!state.running || state.displayId < 0) return@withContext false
 
-        val shell = RootShell.exec(
+        val shell = exec(
             "input -d ${state.displayId} swipe " +
                 "${x1.toInt()} ${y1.toInt()} ${x2.toInt()} ${y2.toInt()} $durationMs",
             10_000,
@@ -526,7 +538,7 @@ object VirtualScreenManager {
                     "找不到 $packageName 的启动 Activity。确认包名正确，或者显式传 activity。",
                 )
 
-            val result = RootShell.exec("am start --display ${state.displayId} -n $component", 20_000)
+            val result = exec("am start --display ${state.displayId} -n $component", 20_000)
             if (result.ok) {
                 persistLaunch(context, packageName, activity)
                 LaunchResult(true, component)
@@ -541,7 +553,7 @@ object VirtualScreenManager {
 
     /** 用命令行问系统要这个包的启动 Activity，例如 `com.android.settings/.Settings`。 */
     private suspend fun resolveLauncherActivity(packageName: String): String? {
-        val result = RootShell.exec("cmd package resolve-activity --brief $packageName", 15_000)
+        val result = exec("cmd package resolve-activity --brief $packageName", 15_000)
         if (!result.ok) return null
         return result.stdout.trim()
             .lines()

@@ -1645,8 +1645,8 @@
   <string name="setting_virtual_screen_starting">Starting…</string>
   <string name="setting_virtual_screen_running">Running</string>
   <string name="setting_virtual_screen_stopped">Not running</string>
-  <string name="setting_virtual_screen_idle_hint">Needs root. The display is created in a separate app_process.</string>
-  <string name="setting_virtual_screen_explain">This is an EXTRA display, not a mirror of your phone screen — it starts empty. To put something on it, launch an activity onto its display id via root_shell (am start --display &lt;id&gt;). No input injection in this version; capture only.</string>
+  <string name="setting_virtual_screen_idle_hint">Needs root or Shizuku. The display is created in a separate app_process.</string>
+  <string name="setting_virtual_screen_explain">Needs root or Shizuku (ADB privileges). This is an EXTRA display, not a mirror of your phone screen — it starts empty. To put something on it, launch an activity onto its display id via root_shell (am start --display &lt;id&gt;). Live preview plus tap/swipe forwarding are supported.</string>
   <string name="setting_virtual_screen_start">Start</string>
   <string name="setting_virtual_screen_stop">Stop</string>
   <string name="setting_virtual_screen_capture">Capture</string>

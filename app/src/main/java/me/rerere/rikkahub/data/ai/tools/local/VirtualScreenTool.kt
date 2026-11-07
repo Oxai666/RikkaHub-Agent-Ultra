@@ -29,7 +29,7 @@ import java.io.ByteArrayOutputStream
 fun virtualScreenTool(context: Context): Tool = Tool(
     name = "virtual_screen",
     description = """
-        Drive a virtual display (VirtualDisplay) on the device. Requires root.
+        Drive a virtual display (VirtualDisplay) on the device. Needs a privileged shell: root (su) or Shizuku (ADB shell, uid 2000) — either works.
         action=start creates a 720x1280 (default) virtual screen in a separate app_process;
         action=screenshot captures the current frame and returns it as an image;
         action=launch sends an installed app onto that display (pass package, optionally activity),

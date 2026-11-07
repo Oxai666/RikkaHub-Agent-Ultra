@@ -1945,8 +1945,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_virtual_screen_starting">启动中…</string>
   <string name="setting_virtual_screen_running">运行中</string>
   <string name="setting_virtual_screen_stopped">未运行</string>
-  <string name="setting_virtual_screen_idle_hint">需要 root。显示器在一个独立的 app_process 里创建。</string>
-  <string name="setting_virtual_screen_explain">这是额外挂出来的一块屏，不是你手机屏幕的镜像，启动时是空的。要往上面放东西，用 root_shell 把 Activity 投到它的 display id（am start --display &lt;id&gt;）。当前版本只能看，不能点。</string>
+  <string name="setting_virtual_screen_idle_hint">需要 root 或 Shizuku。显示器在一个独立的 app_process 里创建。</string>
+  <string name="setting_virtual_screen_explain">需要 root 或 Shizuku（ADB 权限）。这是额外挂出来的一块屏，不是你手机屏幕的镜像，启动时是空的。要往上面放东西，用 root_shell 把 Activity 投到它的 display id（am start --display &lt;id&gt;）。画面可以实时看，点击和滑动也能透传。</string>
   <string name="setting_virtual_screen_start">启动</string>
   <string name="setting_virtual_screen_stop">停止</string>
   <string name="setting_virtual_screen_capture">截图</string>
