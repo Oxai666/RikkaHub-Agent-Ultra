@@ -776,7 +776,9 @@ private fun AddModelButton(
 
         Button(
             onClick = {
-                dialogState.open(Model())
+                // 新建模型默认 1M 上下文，不要一上来就落在「自定义」上——
+                // 绝大多数模型现在都支持 1M，先给个能用的大值，不够再改。
+                dialogState.open(Model(contextLength = 1_000_000))
             }
         ) {
             Row(

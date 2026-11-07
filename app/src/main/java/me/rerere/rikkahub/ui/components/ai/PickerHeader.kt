@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -130,6 +131,10 @@ internal fun PickerHero(
     containerColor: Color,
     contentColor: Color,
     modifier: Modifier = Modifier,
+    // 默认是选择器里的大号；输入框里的小图标也用同一套形状，
+    // 只是尺寸缩到二十几 dp，所以尺寸要能传进来。
+    heroSize: Dp = 72.dp,
+    iconSize: Dp = 32.dp,
 ) {
     val morphs = remember(shapes) { shapes.zipWithNext { from, to -> Morph(from, to) } }
     val path = remember { Path() }
@@ -150,7 +155,7 @@ internal fun PickerHero(
 
     Box(
         modifier = modifier
-            .size(72.dp)
+            .size(heroSize)
             .drawBehind {
                 // 弹簧会过冲，position 可能略微越界
                 val segment = position.toInt().coerceIn(0, morphs.lastIndex)
@@ -178,7 +183,7 @@ internal fun PickerHero(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(iconSize),
                 tint = animatedContentColor,
             )
         }

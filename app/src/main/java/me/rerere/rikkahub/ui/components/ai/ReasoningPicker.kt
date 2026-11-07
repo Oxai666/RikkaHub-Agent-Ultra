@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -28,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -80,10 +80,20 @@ fun ReasoningButton(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Box(
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(28.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(reasoningLevel.icon(), null)
+                // 和选择器里那个大刺球同一套形状，只是缩到输入框的尺寸。
+                // 之前这里是个光秃秃的灯泡线条，跟选择器里的样子完全对不上。
+                PickerHero(
+                    shapes = levelShapes,
+                    index = levels.indexOf(reasoningLevel).coerceAtLeast(0),
+                    icon = reasoningLevel.icon(),
+                    containerColor = reasoningLevel.badgeContainerColor(),
+                    contentColor = reasoningLevel.badgeContentColor(),
+                    heroSize = 28.dp,
+                    iconSize = 15.dp,
+                )
             }
             if (!onlyIcon) Text(stringResource(R.string.setting_provider_page_reasoning))
         }
@@ -138,16 +148,8 @@ fun ReasoningPicker(
                     shapes = levelShapes,
                     index = levels.indexOf(previewLevel),
                     icon = previewLevel.icon(),
-                    containerColor = when {
-                        !previewLevel.isEnabled -> MaterialTheme.colorScheme.surfaceContainerHighest
-                        previewLevel >= ReasoningLevel.HIGH -> MaterialTheme.colorScheme.primary
-                        else -> MaterialTheme.colorScheme.primaryContainer
-                    },
-                    contentColor = when {
-                        !previewLevel.isEnabled -> MaterialTheme.colorScheme.onSurfaceVariant
-                        previewLevel >= ReasoningLevel.HIGH -> MaterialTheme.colorScheme.onPrimary
-                        else -> MaterialTheme.colorScheme.onPrimaryContainer
-                    },
+                    containerColor = previewLevel.badgeContainerColor(),
+                    contentColor = previewLevel.badgeContentColor(),
                 )
             }
 
@@ -191,6 +193,22 @@ private fun ReasoningLevel.icon(): ImageVector = when (this) {
     ReasoningLevel.MAX -> ReasoningHigh
 }
 
+// 刺球的底色：关闭时灰掉，高档位上主色，中间用浅一层的容器色。
+// 输入框里的小徽章和选择器里的大刺球共用这一套，保证两处长得一样。
+@Composable
+private fun ReasoningLevel.badgeContainerColor(): Color = when {
+    !isEnabled -> MaterialTheme.colorScheme.surfaceContainerHighest
+    this >= ReasoningLevel.HIGH -> MaterialTheme.colorScheme.primary
+    else -> MaterialTheme.colorScheme.primaryContainer
+}
+
+@Composable
+private fun ReasoningLevel.badgeContentColor(): Color = when {
+    !isEnabled -> MaterialTheme.colorScheme.onSurfaceVariant
+    this >= ReasoningLevel.HIGH -> MaterialTheme.colorScheme.onPrimary
+    else -> MaterialTheme.colorScheme.onPrimaryContainer
+}
+
 private fun ReasoningLevel.shape(): RoundedPolygon = when (this) {
     ReasoningLevel.OFF -> MaterialShapes.Circle
     ReasoningLevel.AUTO -> MaterialShapes.Cookie4Sided
@@ -201,15 +219,17 @@ private fun ReasoningLevel.shape(): RoundedPolygon = when (this) {
     ReasoningLevel.MAX -> MaterialShapes.SoftBurst
 }
 
+// 显示值直接用传给 API 的那个参数名，不再翻译成「关闭/自动/低/中/高」。
+// 用的人多半是照着文档核对参数，看到 Off / Low / High 比看到中文更好对。
 @Composable
 private fun ReasoningLevel.label(): String = when (this) {
-    ReasoningLevel.OFF -> stringResource(R.string.reasoning_off)
-    ReasoningLevel.AUTO -> stringResource(R.string.reasoning_auto)
-    ReasoningLevel.LOW -> stringResource(R.string.reasoning_light)
-    ReasoningLevel.MEDIUM -> stringResource(R.string.reasoning_medium)
-    ReasoningLevel.HIGH -> stringResource(R.string.reasoning_heavy)
-    ReasoningLevel.XHIGH -> stringResource(R.string.reasoning_xhigh)
-    ReasoningLevel.MAX -> stringResource(R.string.reasoning_max)
+    ReasoningLevel.OFF -> "Off"
+    ReasoningLevel.AUTO -> "Auto"
+    ReasoningLevel.LOW -> "Low"
+    ReasoningLevel.MEDIUM -> "Medium"
+    ReasoningLevel.HIGH -> "High"
+    ReasoningLevel.XHIGH -> "XHigh"
+    ReasoningLevel.MAX -> "Max"
 }
 
 @Composable
