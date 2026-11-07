@@ -206,17 +206,12 @@ object CompactionArchive {
             for (line in text.lineSequence()) {
                 if (perFile >= 5 || hits.size >= limit) break
                 if (line.contains(keyword, ignoreCase = true) && line.isNotBlank()) {
-                    hits += Hit(entry, line.trim().take(300))
+                    hits += Hit(entry, line.trim().take(200))
                     perFile++
                 }
             }
         }
         return hits
-    }
-
-    /** 删除某个会话的全部存档。 */
-    fun deleteConversation(context: Context?, assistantName: String, conversationTitle: String) {
-        runCatching { conversationDir(context, assistantName, conversationTitle).deleteRecursively() }
     }
 
     /** 按会话 id 精确删除存档（目录名以 __<id8> 结尾）。 */

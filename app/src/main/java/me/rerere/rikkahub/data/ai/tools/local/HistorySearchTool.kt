@@ -34,8 +34,11 @@ fun historySearchTool(context: Context, conversationId: String?): Tool = Tool(
         contains just the new turns, not 1 + 2 again), so read several archives if the user asks
         about a long history. You can never see other conversations' archives — that is by design.
         Workflow is mandatory: call action=list first, then ASK THE USER which archive to search
-        (压缩会话1 / 压缩会话2 / ...), and only then call read or search with that index.
+        (压缩会话1 / 压缩会话2 / ...), and only then call search with that index.
         A search without index is rejected on purpose — never scan every archive at once.
+        PREFER action=search over action=read. Archives hold whole transcripts and dumping one
+        into the context will blow the window up. Read only when the user explicitly asks for
+        the full transcript, and even then it comes back truncated.
         When reading results, focus on the reasoning and the answers; images and attachments
         appear as [图片] / [文件] placeholders and carry no information.
     """.trimIndent().replace("\n", " "),
@@ -133,8 +136,13 @@ fun historySearchTool(context: Context, conversationId: String?): Tool = Tool(
                             put("index", entry.index)
                             put("assistant", entry.assistantName)
                             put("conversation", entry.conversationTitle)
-                            put("truncated", text.length > 60_000)
-                            put("content", text.take(60_000))
+                            put("truncated", text.length > 12_000)
+                            put(
+                                "warning",
+                                "整篇读很占上下文。下次优先用 action=search 按关键词定位，" +
+                                    "只有用户明确要看全文时才用 read。"
+                            )
+                            put("content", text.take(12_000))
                         }.toString()
                     )
                 )
@@ -173,7 +181,7 @@ fun historySearchTool(context: Context, conversationId: String?): Tool = Tool(
                 val hits = CompactionArchive.search(
                     context = context,
                     keyword = keyword,
-                    limit = 20,
+                    limit = 12,
                     conversationId = conversationId,
                 ).filter { it.entry.index == index }
 
