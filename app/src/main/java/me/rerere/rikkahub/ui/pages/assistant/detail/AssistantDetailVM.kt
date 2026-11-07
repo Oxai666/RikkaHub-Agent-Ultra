@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import me.rerere.rikkahub.data.compaction.CompactionArchive
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
@@ -190,17 +192,33 @@ class AssistantDetailVM(
      */
     fun updateAssistant(transform: (Assistant) -> Assistant) {
         viewModelScope.launch {
+            // 助手改名要通知存档层把目录也挪过去，否则文件管理器里永远是旧名字。
+            // 但文件 IO 不能塞进 update 的 lambda：那玩意跑在 transformLock 里，
+            // 被磁盘拖一下会把所有设置写入一起堵住。所以先记下新名字，出了锁再挪。
+            var renamedTo: String? = null
             settingsStore.update { current ->
                 val prior = current.assistants.firstOrNull { it.id == assistantId }
                     ?: return@update current
                 val next = transform(prior)
                 checkAvatarDelete(old = prior, new = next)
                 checkBackgroundDelete(old = prior, new = next)
+                if (prior.name != next.name && next.name.isNotBlank()) {
+                    renamedTo = next.name
+                }
                 current.copy(
                     assistants = current.assistants.map {
                         if (it.id == assistantId) next else it
                     }
                 )
+            }
+            renamedTo?.let { name ->
+                withContext(Dispatchers.IO) {
+                    CompactionArchive.onAssistantRenamed(
+                        context = null,
+                        assistantId = assistantId.toString(),
+                        newName = name,
+                    )
+                }
             }
         }
     }

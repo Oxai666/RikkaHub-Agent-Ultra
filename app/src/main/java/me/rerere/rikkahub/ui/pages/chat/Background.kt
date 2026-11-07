@@ -26,6 +26,8 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import coil3.compose.AsyncImage
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.data.model.BACKGROUND_SCALE_FIT
+import me.rerere.rikkahub.data.model.BACKGROUND_SCALE_STRETCH
 
 /** 背景既可以是图片也可以是视频，按扩展名分流。 */
 private val VIDEO_EXTENSIONS = setOf("mp4", "webm", "mkv", "mov", "m4v", "3gp", "avi", "ts")
@@ -51,18 +53,24 @@ fun AssistantBackground(setting: Settings, modifier: Modifier) {
     val background = assistant.background ?: return
     val backgroundColor = MaterialTheme.colorScheme.background
     val backgroundOpacity = assistant.backgroundOpacity.coerceIn(0f, 1f)
+    val scaleMode = assistant.backgroundScale
     Box(modifier = modifier) {
         if (isVideoBackground(background)) {
             VideoBackground(
                 url = background,
                 opacity = backgroundOpacity,
+                scaleMode = scaleMode,
                 modifier = Modifier.fillMaxSize(),
             )
         } else {
             AsyncImage(
                 model = background,
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                contentScale = when (scaleMode) {
+                    BACKGROUND_SCALE_FIT -> ContentScale.Fit
+                    BACKGROUND_SCALE_STRETCH -> ContentScale.FillBounds
+                    else -> ContentScale.Crop
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .alpha(backgroundOpacity)
@@ -99,10 +107,18 @@ fun AssistantBackground(setting: Settings, modifier: Modifier) {
 private fun VideoBackground(
     url: String,
     opacity: Float,
+    scaleMode: String,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    // 变量名不能叫 resizeMode：下面 apply { } 块里的裸 resizeMode 会优先解析成
+    // AspectRatioFrameLayout 自己的属性，赋值就成了 this.x = this.x，缩放永远不生效。
+    val frameResizeMode = when (scaleMode) {
+        BACKGROUND_SCALE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+        BACKGROUND_SCALE_STRETCH -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+        else -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+    }
 
     val player = remember(url) {
         ExoPlayer.Builder(context).build().apply {
@@ -136,7 +152,7 @@ private fun VideoBackground(
         modifier = modifier.alpha(opacity),
         factory = { ctx ->
             AspectRatioFrameLayout(ctx).apply {
-                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                this.resizeMode = frameResizeMode
                 val textureView = TextureView(ctx)
                 addView(
                     textureView,
@@ -156,5 +172,7 @@ private fun VideoBackground(
                 })
             }
         },
+        // factory 只在首次组合时跑一次，之后换缩放方式就靠 update 把新值推进去。
+        update = { view -> view.resizeMode = frameResizeMode },
     )
 }

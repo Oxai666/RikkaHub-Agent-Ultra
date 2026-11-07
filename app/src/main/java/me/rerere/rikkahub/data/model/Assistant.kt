@@ -13,6 +13,11 @@ import me.rerere.rikkahub.utils.SimpleCache
 import java.util.concurrent.TimeUnit
 import kotlin.uuid.Uuid
 
+/** 背景铺法：铺满裁剪、完整显示、拉伸填满。图片和视频共用同一套取值。 */
+const val BACKGROUND_SCALE_CROP = "crop"
+const val BACKGROUND_SCALE_FIT = "fit"
+const val BACKGROUND_SCALE_STRETCH = "stretch"
+
 @Serializable
 data class Assistant(
     val id: Uuid = Uuid.random(),
@@ -45,6 +50,7 @@ data class Assistant(
     val workspaceId: Uuid? = null,
     val background: String? = null, // 聊天页背景图地址(本地文件 URI 或网络 URL), 为 null 时无背景
     val backgroundOpacity: Float = 1.0f, // 背景图不透明度(0~1)
+    val backgroundScale: String = BACKGROUND_SCALE_CROP, // 背景铺法: crop / fit / stretch
     val useGradientBackground: Boolean = false, // 开启后聊天页使用动态渐变背景
     val modeInjectionIds: Set<Uuid> = emptySet(),      // 关联的模式注入 ID
     val lorebookIds: Set<Uuid> = emptySet(),            // 关联的 Lorebook ID

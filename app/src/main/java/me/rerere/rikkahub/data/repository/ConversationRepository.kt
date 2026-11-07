@@ -8,12 +8,15 @@ import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.paging.map
 import androidx.room.withTransaction
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
 import me.rerere.common.android.Logging
 import me.rerere.rikkahub.data.ai.armor.ArmorRegistry
+import me.rerere.rikkahub.data.compaction.CompactionArchive
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.fts.MessageSearchSort
@@ -346,6 +349,13 @@ class ConversationRepository(
         conversation: Conversation,
         updateSearchIndex: Boolean = true,
     ) {
+        // 标题可能被上层改掉（自动摘要、手动编辑），存档目录名里带着标题，
+        // 所以先读一眼旧标题；事务提交后如果变了就把目录挪过去。
+        // 主键查询，比事务本身便宜得多。
+        val priorTitle = runCatching {
+            conversationDAO.getConversationById(conversation.id.toString())?.title
+        }.getOrNull()
+
         database.withTransaction {
             conversationDAO.update(
                 conversationToConversationEntity(conversation)
@@ -356,6 +366,19 @@ class ConversationRepository(
         }
         if (updateSearchIndex) {
             messageFtsManager.indexConversation(conversation)
+        }
+
+        if (priorTitle != null &&
+            priorTitle != conversation.title &&
+            conversation.title.isNotBlank()
+        ) {
+            withContext(Dispatchers.IO) {
+                CompactionArchive.onConversationRenamed(
+                    context = null,
+                    conversationId = conversation.id.toString(),
+                    newTitle = conversation.title,
+                )
+            }
         }
     }
 
@@ -512,6 +535,15 @@ class ConversationRepository(
     suspend fun renameConversation(conversationId: Uuid, title: String) {
         conversationDAO.updateTitle(conversationId.toString(), title)
         messageFtsManager.updateConversationTitle(conversationId.toString(), title)
+        // 存档目录名是 "<会话标题>__<id8>"，标题改了目录也得跟着挪，
+        // 否则 history_search 和文件管理器里看到的永远是旧名字。
+        withContext(Dispatchers.IO) {
+            CompactionArchive.onConversationRenamed(
+                context = null,
+                conversationId = conversationId.toString(),
+                newTitle = title,
+            )
+        }
     }
 
     private fun conversationSummaryToConversation(entity: LightConversationEntity): Conversation {

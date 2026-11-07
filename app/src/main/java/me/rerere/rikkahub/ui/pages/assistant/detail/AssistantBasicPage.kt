@@ -572,10 +572,18 @@ internal fun AssistantBasicContent(
                     modifier = Modifier.padding(8.dp),
                     background = assistant.background,
                     backgroundOpacity = assistant.backgroundOpacity,
+                    backgroundScale = assistant.backgroundScale,
                     onUpdate = { background ->
                         onUpdate(
                             assistant.copy(
                                 background = background
+                            )
+                        )
+                    },
+                    onScaleChange = { scale ->
+                        onUpdate(
+                            assistant.copy(
+                                backgroundScale = scale
                             )
                         )
                     }

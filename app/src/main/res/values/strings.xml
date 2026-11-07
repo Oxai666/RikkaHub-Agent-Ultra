@@ -61,6 +61,11 @@
   <string name="assistant_page_chaotic">Chaotic (Dangerous)</string>
   <string name="assistant_page_chat_background">Chat Background</string>
   <string name="assistant_page_chat_background_desc">Set background image for assistant chat page</string>
+  <string name="assistant_page_background_scale">Scale</string>
+  <string name="assistant_page_background_scale_crop">Crop to fill</string>
+  <string name="assistant_page_background_scale_fit">Fit whole frame</string>
+  <string name="assistant_page_background_scale_stretch">Stretch to fill</string>
+  <string name="assistant_page_loading_preview">Loading preview…</string>
   <string name="assistant_page_chat_model">Chat Model</string>
   <string name="assistant_page_chat_model_desc">Set the default chat model for the assistant. If not set, the global default chat model will be used</string>
   <string name="assistant_page_clone">Clone</string>

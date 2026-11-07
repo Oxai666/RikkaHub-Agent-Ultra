@@ -230,6 +230,59 @@ object CompactionArchive {
         return hits
     }
 
+    /**
+     * 助手改名后同步目录名。
+     *
+     * 目录名是 "<名字>__<id8>"，改名时只换前半段，id 后缀原地不动——
+     * 目录和助手是靠这 8 位关联的，不能跟着名字变。
+     *
+     * 找不到目录就直接返回：这个助手可能一次都没压缩过，没目录很正常。
+     */
+    fun onAssistantRenamed(context: Context?, assistantId: String, newName: String) {
+        if (newName.isBlank()) return
+        val root = rootDir(context)
+        if (!root.exists()) return
+        val suffix = "__${assistantId.take(8)}"
+        val dir = root.listFiles().orEmpty()
+            .firstOrNull { it.isDirectory && it.name.endsWith(suffix) }
+            ?: return
+        renameDir(dir, "${sanitize(newName)}$suffix")
+    }
+
+    /**
+     * 会话改名后同步目录名。
+     *
+     * 会话目录埋在助手目录下面，这里不要求调用方知道是哪个助手：
+     * 直接在整棵树里找以 "__<会话id8>" 结尾的那一个。
+     */
+    fun onConversationRenamed(context: Context?, conversationId: String, newTitle: String) {
+        if (newTitle.isBlank()) return
+        val root = rootDir(context)
+        if (!root.exists()) return
+        val suffix = "__${conversationId.take(8)}"
+        val dir = root.walkTopDown()
+            .firstOrNull { it.isDirectory && it.name.endsWith(suffix) }
+            ?: return
+        renameDir(dir, "${sanitize(newTitle)}$suffix")
+    }
+
+    /**
+     * 目录改名。撞名时宁可保持旧名字也不覆盖——丢存档比显示旧名字严重得多。
+     * 跨挂载点 renameTo 会返回 false，退化成复制 + 删除。
+     */
+    private fun renameDir(dir: File, newName: String) {
+        if (dir.name == newName) return
+        val parent = dir.parentFile ?: return
+        val target = File(parent, newName)
+        if (target.exists()) return
+        runCatching {
+            if (!dir.renameTo(target)) {
+                dir.copyRecursively(target, overwrite = false)
+                dir.deleteRecursively()
+            }
+        }
+    }
+
     /** 按会话 id 精确删除存档（目录名以 __<id8> 结尾）。 */
     fun deleteByConversationId(context: Context?, conversationId: String) {
         val root = rootDir(context)
