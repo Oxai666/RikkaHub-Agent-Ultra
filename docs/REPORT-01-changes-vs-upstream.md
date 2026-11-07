@@ -360,3 +360,23 @@ files/compaction/<助手名>__<id8>/<会话名>__<id8>/压缩会话<N> <时间>.
 | 上下文长度 | 移植官方 3.1.1 的 128K/200K/1M/自定义 |
 | 聊天背景 | 支持视频（ExoPlayer + TextureView） |
 | 图标/关于页 | 自有图标；关于页指向自己的仓库 |
+
+---
+
+## 补记：2026-11-07 的回退
+
+曾在 `3d62bc48` ~ `20851589` 之间尝试过两条「降低权限门槛」的路线：
+
+| 尝试 | 内容 | 结果 |
+|---|---|---|
+| Shizuku 兜底 | 让没 root 的设备用 Shizuku 起虚拟屏 | ❌ 能启动，但 App 与 helper 不在同一 network namespace，连不上端口 |
+| ADB 直连 | 自实现 ADB 协议 + 密钥写入 adb_keys | ❌ 协议层做完了，但无线调试的 SPAKE2 配对成本过高，未继续 |
+
+两条都已回退，当前 main 停在 `bbd9b8fb`。备份保留在：
+
+```
+分支 backup/adb-attempt  → 20851589（含 ADB 全套）
+tag   backup-shizuku     → 3d62bc48（含 Shizuku 兜底）
+```
+
+**回退后的权限模型**：虚拟屏幕只走 root（su）。没有 root 时报明确错误，不再尝试降级。
