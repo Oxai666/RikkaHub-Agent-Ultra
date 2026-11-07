@@ -225,8 +225,10 @@ internal fun PickerHero(
 
                 // 翅膀先画，球会压住它们的根部，看起来像从球侧面长出来
                 when (decoration) {
-                    HeroDecoration.AngelWing, HeroDecoration.AngelWingHalo ->
+                    HeroDecoration.AngelWing, HeroDecoration.AngelWingHalo -> {
                         drawAngelWing(cx, cy, w, h, animatedContainerColor, mirror = false)
+                        drawAngelWing(cx, cy, w, h, animatedContainerColor, mirror = true)
+                    }
 
                     HeroDecoration.DemonWings -> {
                         drawDemonWing(cx, cy, w, h, animatedContainerColor, mirror = false)

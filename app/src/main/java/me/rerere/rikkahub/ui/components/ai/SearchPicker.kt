@@ -4,9 +4,12 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -106,21 +109,39 @@ fun SearchPickerButton(
                 modifier = Modifier.size(24.dp),
                 contentAlignment = Alignment.Center
             ) {
-                if (model?.tools?.contains(BuiltInTools.Search) == true) {
-                    Icon(
-                        imageVector = HugeIcons.AiSearch02,
-                        contentDescription = stringResource(R.string.use_web_search),
-                    )
-                } else if (enableSearch && currentService != null) {
-                    AutoAIIcon(
-                        name = currentService.displayName,
-                        color = Color.Transparent
-                    )
-                } else {
-                    Icon(
-                        imageVector = HugeIcons.Search01,
-                        contentDescription = stringResource(R.string.use_web_search),
-                    )
+                // 三种状态：模型自带搜索 / 本地搜索开着 / 没开。
+                // 用 AnimatedContent 做「聚焦」过渡——旧图标放大淡出、新图标
+                // 从 0.5 缩到 1 淡入，像放大镜自己对上了焦。
+                val iconKey = when {
+                    model?.tools?.contains(BuiltInTools.Search) == true -> "model"
+                    enableSearch && currentService != null ->
+                        "service:${currentService.displayName}"
+                    else -> "off"
+                }
+                AnimatedContent(
+                    targetState = iconKey,
+                    transitionSpec = {
+                        (fadeIn(tween(200)) + scaleIn(tween(240), initialScale = 0.5f)) togetherWith
+                            (fadeOut(tween(120)) + scaleOut(tween(160), targetScale = 1.4f))
+                    },
+                    label = "search-icon",
+                ) { key ->
+                    when {
+                        key == "model" -> Icon(
+                            imageVector = HugeIcons.AiSearch02,
+                            contentDescription = stringResource(R.string.use_web_search),
+                        )
+
+                        key.startsWith("service:") -> AutoAIIcon(
+                            name = key.removePrefix("service:"),
+                            color = Color.Transparent,
+                        )
+
+                        else -> Icon(
+                            imageVector = HugeIcons.Search01,
+                            contentDescription = stringResource(R.string.use_web_search),
+                        )
+                    }
                 }
             }
         }
