@@ -72,6 +72,20 @@ data class Assistant(
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
     /** 辅助破甲：本轮被判定为拒答/截断时注入纠正与续写指令。默认关闭。 */
     val armorEnabled: Boolean = false,
+    /**
+     * 压缩对话。
+     *
+     * 超过 [compactionThresholdK]（千 tokens）时把旧消息摘要掉，
+     * 同时把**完整对话**按项目导出格式写进 App 私有目录，
+     * 供 AI 用 search_history 工具回查（压缩后它就不记得细节了）。
+     */
+    val compactionThresholdK: Int? = null,
+    /** 压缩后保留最近多少条消息不动。 */
+    val compactionKeepMessages: Int = 20,
+    /** 附加说明：追加到摘要提示词后面，比如「重点保留代码和命令」。 */
+    val compactionExtraInstruction: String = "",
+    /** 自动压缩：超过阈值自动触发，不用手点。 */
+    val compactionAutoEnabled: Boolean = false,
 )
 
 @Serializable

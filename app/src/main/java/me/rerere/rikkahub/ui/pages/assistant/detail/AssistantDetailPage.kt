@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.DatabaseRestore
 import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.hugeicons.stroke.Brain02
 import me.rerere.hugeicons.stroke.ArrowRight01
@@ -119,6 +120,13 @@ fun AssistantDetailPage(id: String) {
                         leadingContent = { Icon(HugeIcons.Brain02, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_memory_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_memory)) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantCompaction(id)) },
+                        leadingContent = { Icon(HugeIcons.DatabaseRestore, null) },
+                        supportingContent = { Text(stringResource(R.string.assistant_detail_compaction_desc)) },
+                        headlineContent = { Text(stringResource(R.string.assistant_compaction_title)) },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(
