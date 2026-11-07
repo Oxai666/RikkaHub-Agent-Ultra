@@ -1956,6 +1956,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_virtual_screen_overlay_short">悬浮</string>
   <string name="setting_virtual_screen_launch_label">投送应用</string>
   <string name="setting_virtual_screen_no_preview">画面未就绪</string>
+  <string name="setting_virtual_screen_adb_title">ADB 直连（可选，用于没有 root 的情况）</string>
+  <string name="setting_virtual_screen_adb_host">地址</string>
+  <string name="setting_virtual_screen_adb_port">端口</string>
+  <string name="setting_virtual_screen_adb_test">测试连接</string>
+  <string name="setting_virtual_screen_adb_install">写入 adb_keys（需 root）</string>
   <string name="setting_virtual_screen_open_window">打开实时小窗</string>
   <string name="setting_virtual_screen_open_overlay">悬浮小窗</string>
   <string name="setting_virtual_screen_close_overlay">关闭悬浮窗</string>

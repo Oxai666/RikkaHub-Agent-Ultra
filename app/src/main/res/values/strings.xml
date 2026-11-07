@@ -1656,6 +1656,11 @@
   <string name="setting_virtual_screen_overlay_short">Float</string>
   <string name="setting_virtual_screen_launch_label">Launch an app</string>
   <string name="setting_virtual_screen_no_preview">No preview yet</string>
+  <string name="setting_virtual_screen_adb_title">Direct ADB (optional, for devices without root)</string>
+  <string name="setting_virtual_screen_adb_host">Host</string>
+  <string name="setting_virtual_screen_adb_port">Port</string>
+  <string name="setting_virtual_screen_adb_test">Test connection</string>
+  <string name="setting_virtual_screen_adb_install">Install adb_keys (root)</string>
   <string name="setting_virtual_screen_open_window">Open live window</string>
   <string name="setting_virtual_screen_open_overlay">Floating window</string>
   <string name="setting_virtual_screen_close_overlay">Close floating window</string>

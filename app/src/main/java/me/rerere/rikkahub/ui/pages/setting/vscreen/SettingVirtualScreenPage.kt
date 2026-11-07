@@ -56,6 +56,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.root.PrivilegedShell
+import me.rerere.rikkahub.data.root.AdbKeys
 import me.rerere.rikkahub.data.vscreen.VirtualScreenManager
 import me.rerere.rikkahub.data.vscreen.VirtualScreenOverlay
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -87,9 +89,20 @@ fun SettingVirtualScreenPage() {
     var overlayShowing by remember { mutableStateOf(VirtualScreenOverlay.isShowing()) }
     var overlayHint by remember { mutableStateOf<String?>(null) }
 
+    // ADB 直连：绕过 per-app netns 隔离，Shizuku 模式下唯一能通的路
+    var adbHost by rememberSaveable { mutableStateOf("") }
+    var adbPort by rememberSaveable { mutableStateOf("5555") }
+    var adbStatus by remember { mutableStateOf<String?>(null) }
+    var adbBusy by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         if (!VirtualScreenManager.state.value.running) {
             VirtualScreenManager.restore(context)
+        }
+        val (host, port) = PrivilegedShell.adbEndpoint(context)
+        if (host.isNotBlank()) {
+            adbHost = host
+            adbPort = port.toString()
         }
     }
 
@@ -293,6 +306,75 @@ fun SettingVirtualScreenPage() {
                 launchMessage?.let {
                     Text(text = it, style = MaterialTheme.typography.bodySmall)
                 }
+            }
+
+            // ── ADB 直连 ──────────────────────────────────────────
+            Text(
+                text = stringResource(R.string.setting_virtual_screen_adb_title),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = adbHost,
+                    onValueChange = { adbHost = it.trim() },
+                    label = { Text(stringResource(R.string.setting_virtual_screen_adb_host)) },
+                    singleLine = true,
+                    modifier = Modifier.weight(2f),
+                )
+                OutlinedTextField(
+                    value = adbPort,
+                    onValueChange = { raw -> adbPort = raw.filter { it.isDigit() }.take(5) },
+                    label = { Text(stringResource(R.string.setting_virtual_screen_adb_port)) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        val port = adbPort.toIntOrNull() ?: 5555
+                        PrivilegedShell.configureAdb(context, adbHost, port)
+                        scope.launch {
+                            adbBusy = true
+                            adbStatus = PrivilegedShell.connectAdb(context)
+                                .fold(
+                                    onSuccess = { it },
+                                    onFailure = { "连接失败：${it.message}" },
+                                )
+                            adbBusy = false
+                        }
+                    },
+                    enabled = !adbBusy && adbHost.isNotBlank(),
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                ) { Text(stringResource(R.string.setting_virtual_screen_adb_test)) }
+
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            adbBusy = true
+                            adbStatus = AdbKeys.installToSystem(context).fold(
+                                onSuccess = { it },
+                                onFailure = { "写入失败：${it.message}" },
+                            )
+                            adbBusy = false
+                        }
+                    },
+                    enabled = !adbBusy,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(14.dp),
+                ) { Text(stringResource(R.string.setting_virtual_screen_adb_install)) }
+            }
+            adbStatus?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             Text(
