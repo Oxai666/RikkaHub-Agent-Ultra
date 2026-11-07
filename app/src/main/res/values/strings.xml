@@ -1661,7 +1661,10 @@
   <string name="setting_virtual_screen_window_not_running">Virtual screen is not running</string>
   <string name="setting_virtual_screen_mirror">Mirror this screen</string>
   <string name="setting_virtual_screen_mirror_desc">Off creates a separate, empty display. On mirrors what your phone currently shows (read-only).</string>
+  <string name="tool_name_history_search">History archive search</string>
   <string name="tool_name_virtual_screen">Virtual Screen</string>
+  <string name="assistant_page_local_tools_history_search_title">History archive search</string>
+  <string name="assistant_page_local_tools_history_search_desc">Look back into pre-compaction transcripts by keyword. The model asks which archive to unlock (1 / 2 / …) before reading.</string>
   <string name="assistant_page_local_tools_virtual_screen_title">Virtual Screen</string>
   <string name="assistant_page_local_tools_virtual_screen_desc">Create and capture an extra VirtualDisplay. Requires root. The display stays empty until you launch something onto it.</string>
   <string name="setting_root_title">Root</string>

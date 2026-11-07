@@ -1960,7 +1960,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_virtual_screen_window_not_running">虚拟屏没在运行</string>
   <string name="setting_virtual_screen_mirror">镜像当前屏幕</string>
   <string name="setting_virtual_screen_mirror_desc">关掉时是一块独立的空屏；打开后显示你手机屏幕的内容（只读镜像）。</string>
+  <string name="tool_name_history_search">历史存档检索</string>
   <string name="tool_name_virtual_screen">虚拟屏幕</string>
+  <string name="assistant_page_local_tools_history_search_title">历史存档检索</string>
+  <string name="assistant_page_local_tools_history_search_desc">压缩对话之后，按关键词回查压缩前的完整记录。模型会先问你解锁哪一份（压缩会话1 / 2 / …）。</string>
   <string name="assistant_page_local_tools_virtual_screen_title">虚拟屏幕</string>
   <string name="assistant_page_local_tools_virtual_screen_desc">开一块额外的虚拟显示器并截图。需要 root。屏上是空的，得先往里投应用。</string>
   <string name="setting_root_title">Root</string>

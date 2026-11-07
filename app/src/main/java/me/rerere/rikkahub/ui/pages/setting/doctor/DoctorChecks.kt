@@ -139,6 +139,7 @@ private fun LocalToolOption.shortName(ctx: Context): String = when (this) {
     LocalToolOption.Shizuku -> ctx.getString(R.string.tool_name_shizuku)
     LocalToolOption.Root -> ctx.getString(R.string.tool_name_root)
     LocalToolOption.VirtualScreen -> ctx.getString(R.string.tool_name_virtual_screen)
+    LocalToolOption.HistorySearch -> ctx.getString(R.string.tool_name_history_search)
     LocalToolOption.AppLauncher -> ctx.getString(R.string.tool_name_app_launcher)
     LocalToolOption.KeyboardControl -> ctx.getString(R.string.tool_name_keyboard)
     else -> this::class.simpleName ?: "?"

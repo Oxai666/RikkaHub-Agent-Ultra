@@ -194,6 +194,13 @@ sealed class LocalToolOption {
      * 这个开关打开也只会拿到一个明确的失败信息。
      */
     @Serializable @SerialName("virtual_screen")  data object VirtualScreen  : LocalToolOption()
+    /**
+     * history_search：查压缩前的完整对话存档。
+     *
+     * 压缩摘要会丢细节，存档留着原文；模型必须先问用户要解锁哪一份
+     * （压缩会话1 / 2 / …），工具里对缺 index 的检索直接拒绝。
+     */
+    @Serializable @SerialName("history_search")  data object HistorySearch  : LocalToolOption()
     @Serializable @SerialName("telegram_bot")    data object TelegramBot    : LocalToolOption()
     @Serializable @SerialName("screen_automation") data object ScreenAutomation : LocalToolOption()
     /**
@@ -876,6 +883,9 @@ class LocalTools(
         }
         if (options.contains(LocalToolOption.VirtualScreen)) {
             tools.add(me.rerere.rikkahub.data.ai.tools.local.virtualScreenTool(context))
+        }
+        if (options.contains(LocalToolOption.HistorySearch)) {
+            tools.add(me.rerere.rikkahub.data.ai.tools.local.historySearchTool(context))
         }
         if (options.contains(LocalToolOption.TelegramBot)) {
             tools.add(telegramSetTokenTool(telegramBotPreferences, telegramBotClient))

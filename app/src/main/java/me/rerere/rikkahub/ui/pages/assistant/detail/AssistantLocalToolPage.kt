@@ -1155,6 +1155,20 @@ private fun AssistantLocalToolContent(
             )
             item(
                 headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_history_search_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_history_search_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.HistorySearch),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.HistorySearch, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_shizuku_title))
                 },
                 supportingContent = {
