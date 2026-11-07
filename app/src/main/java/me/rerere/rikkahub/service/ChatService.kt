@@ -2639,6 +2639,22 @@ class ChatService(
             "Invalid compaction boundary"
         }
 
+        // 压缩前先把这一次要压的完整对话存一份（只存增量，见 CompactionArchive）。
+        // 存不下来也继续压 —— 摘要是主路径，存档只是给模型留条回头路。
+        runCatching {
+            val assistantName = settings.assistants
+                .firstOrNull { it.id == conversation.assistantId }
+                ?.name
+                ?.ifBlank { null }
+                ?: "默认助手"
+            me.rerere.rikkahub.data.compaction.CompactionArchive.save(
+                context = context,
+                assistantName = assistantName,
+                conversationTitle = conversation.title.ifBlank { conversation.id.toString() },
+                messages = messagesToCompress,
+            )
+        }.onFailure { Log.w(TAG, "compaction archive failed", it) }
+
         val model = resolveCompressionModel(settings)
             ?: throw IllegalStateException(compressionModelUnavailableMessage())
         val provider = model.findProvider(settings.providers)

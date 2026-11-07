@@ -27,6 +27,17 @@ object CompactionArchive {
 
     private val STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss")
 
+    /** 兜底用的 Application context：Repository 层拿不到 Context 时靠它。 */
+    @Volatile
+    private var appContext: Context? = null
+
+    fun init(context: Context) {
+        appContext = context.applicationContext
+    }
+
+    private fun ctx(context: Context?): Context =
+        context ?: appContext ?: error("CompactionArchive 未初始化（App 启动时要调 init）")
+
     /** 文件名里不能出现的字符，统一换成下划线。 */
     private fun sanitize(name: String): String {
         val cleaned = name.trim()
@@ -35,9 +46,9 @@ object CompactionArchive {
         return cleaned.ifBlank { "untitled" }.take(80)
     }
 
-    fun rootDir(context: Context): File = File(context.filesDir, "compaction")
+    fun rootDir(context: Context? = null): File = File(ctx(context).filesDir, "compaction")
 
-    fun conversationDir(context: Context, assistantName: String, conversationTitle: String): File =
+    fun conversationDir(context: Context? = null, assistantName: String, conversationTitle: String): File =
         File(File(rootDir(context), sanitize(assistantName)), sanitize(conversationTitle))
 
     /** 记录「上一份存档存到哪条消息」，用来算增量。 */
@@ -67,7 +78,7 @@ object CompactionArchive {
      * 这时直接返回 null，不产生空文件。
      */
     fun save(
-        context: Context,
+        context: Context?,
         assistantName: String,
         conversationTitle: String,
         messages: List<UIMessage>,
@@ -107,7 +118,7 @@ object CompactionArchive {
     )
 
     fun list(
-        context: Context,
+        context: Context?,
         assistantName: String? = null,
         conversationTitle: String? = null,
     ): List<Entry> {
@@ -141,7 +152,7 @@ object CompactionArchive {
 
     /** 关键词检索，返回命中的行（每份最多 5 条，总共不超过 limit）。 */
     fun search(
-        context: Context,
+        context: Context?,
         keyword: String,
         limit: Int = 20,
         assistantName: String? = null,
@@ -165,12 +176,31 @@ object CompactionArchive {
     }
 
     /** 删除某个会话的全部存档。 */
-    fun deleteConversation(context: Context, assistantName: String, conversationTitle: String) {
+    fun deleteConversation(context: Context?, assistantName: String, conversationTitle: String) {
         runCatching { conversationDir(context, assistantName, conversationTitle).deleteRecursively() }
     }
 
+    /**
+     * 按会话标题删除存档，不限助手。
+     *
+     * Repository 删会话时只知道标题和 id，拿不到助手名；同名会话在不同助手下
+     * 都会一并删掉。会话标题重复的概率远低于「漏删」，这个取舍可以接受。
+     */
+    fun deleteByTitle(context: Context?, conversationTitle: String) {
+        val root = rootDir(context)
+        if (!root.exists()) return
+        val target = sanitize(conversationTitle)
+        root.listFiles().orEmpty()
+            .filter { it.isDirectory }
+            .forEach { assistantDir ->
+                runCatching {
+                    File(assistantDir, target).takeIf { it.exists() }?.deleteRecursively()
+                }
+            }
+    }
+
     /** 删除某个助手的全部存档。 */
-    fun deleteAssistant(context: Context, assistantName: String) {
+    fun deleteAssistant(context: Context?, assistantName: String) {
         runCatching { File(rootDir(context), sanitize(assistantName)).deleteRecursively() }
     }
 

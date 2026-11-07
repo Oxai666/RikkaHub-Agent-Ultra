@@ -103,6 +103,9 @@ class RikkaHubApp : Application() {
         // Root 设置（自定义 su 命令）。只有一个字符串，放 SharedPreferences。
         me.rerere.rikkahub.data.root.RootPreferences.init(this)
 
+        // 压缩存档：Repository 层没有 Context，让它自己留一份 Application
+        me.rerere.rikkahub.data.compaction.CompactionArchive.init(this)
+
         // 把上次开着的虚拟屏认回来：App 进程被系统回收后 helper 还活着，
         // 不 restore 的话界面会显示「未运行」，但 display 其实还在占用。
         get<AppScope>().launch(Dispatchers.IO) {

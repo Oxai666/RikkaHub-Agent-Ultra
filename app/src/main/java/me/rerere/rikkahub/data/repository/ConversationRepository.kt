@@ -384,6 +384,10 @@ class ConversationRepository(
         // 只能挂在删除这种生命周期终点上，不能挂到每轮生成开头——那样会把
         // ArmorTransformer 下一步要读的 verdict 提前冲掉，破甲直接失效。
         ArmorRegistry.state.clear(conversation.id)
+        // 压缩存档也一起删：会话没了，存档留着只会变成孤儿文件
+        runCatching {
+            me.rerere.rikkahub.data.compaction.CompactionArchive.deleteByTitle(null, conversation.title)
+        }
     }
 
     suspend fun searchMessages(
