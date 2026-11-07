@@ -264,3 +264,99 @@ web/ web-ui/  网页端
 llama-cpp/ local-llm/   本地推理
 material3/ highlight/ oauth/ videogen/ locale-tui/ trace-cli/
 ```
+
+---
+
+# 追加：2026-11-07 的第二批改动
+
+> 第一版报告写完后，又陆续加了四块新能力。这一节按提交顺序汇总，作为正文的补篇。
+
+## A. Root 权限（`data/root/`）
+
+| 文件 | 作用 |
+|---|---|
+| `RootShell.kt` | 探测 su（含 `/data/adb/ksu/bin/su`、`/data/adb/magisk/su`）、执行命令、8 秒探测超时、256K 输出上限 |
+| `RootPreferences.kt` | 自定义 su 命令，存 SharedPreferences |
+| `RootTool.kt` | `root_shell` 工具 |
+
+**两种 su 写法**：
+
+```
+前缀模式（默认）  su / su -mm        → 解析成绝对路径 + ["-c", 命令]
+模板模式          su -mm -c {command} → 整条交给 sh，{command} 做 shell 转义
+```
+
+**安全**：进 `ToolApprovalDefaults.ALWAYS_ASK`（每次批准）+ 过 `HardlineCommandGuard`（`rm -rf /` 无条件拦）。
+
+**UI**：设置页「Root」，终端风格——大号状态圆点、等宽 su 路径、黑底绿字测试输出。
+
+## B. 虚拟屏幕（`data/vscreen/`）
+
+在手机里额外挂一块 VirtualDisplay，能投应用、能实时看、能点。
+
+| 文件 | 作用 |
+|---|---|
+| `VscreenCore.kt` | app_process 入口：反射拿 system Context → createVirtualDisplay + ImageReader → TCP 服务 |
+| `VirtualScreenManager.kt` | 启动/停止/截图/推流/投应用/触摸，状态持久化与自愈 |
+| `VirtualScreenOverlay.kt` | 悬浮小窗（TYPE_APPLICATION_OVERLAY） |
+| `VirtualScreenTool.kt` | `virtual_screen` 工具（start / launch / screenshot / tap / swipe / diagnose / status / stop） |
+| `SettingVirtualScreenPage.kt` | 主控制台：实时画面舞台 + 状态点 + 操作条 + 投送区 |
+| `VirtualScreenWindowPage.kt` | 全屏大窗：实时画面 + 点击/滑动转发 |
+
+**关键技术点**：
+
+- **必须另起进程**：`createVirtualDisplay` 要 `CAPTURE_VIDEO_OUTPUT`（system 级），普通应用拿不到，只能借 su 身份；`nohup setsid` + `oom_score_adj=-1000` 保活
+- **flags**：`PUBLIC | OWN_CONTENT_ONLY | SUPPORTS_TOUCH | OWN_FOCUS`，`OWN_CONTENT_ONLY` 决定是独立空屏还是主屏镜像
+- **触摸注入**：走 `input -d <displayId> tap/swipe` 命令，不走 `InputManager.injectInputEvent`（Android 15 对 latter 的反射拦截很严，抛 InvocationTargetException）
+- **系统 Context**：`Looper.prepareMainLooper()` + 手动构造 `ActivityThread` + 设 `mSystemThread`/`sCurrentActivityThread`，**不能调 `systemMain()`**
+- **帧缓存**：静态页面只产生一帧，stream 消费掉后 screenshot 就永远拿不到，所以 helper 里留一份 `lastFrameJpeg`
+- **停止顺序**：先 `am force-stop` 投送的包 + 扫 `mDisplayId` 摘 task，再销毁 display——否则 Activity 会被迁回主屏，用户被"跳"到那个页面
+- **看门狗**：helper 每 20 秒 `pidof` 宿主包名，App 被划掉就自杀
+
+## C. 压缩对话 + 历史检索（`data/compaction/`）
+
+| 文件 | 作用 |
+|---|---|
+| `CompactionArchive.kt` | 存档：压缩前把完整对话写成 Markdown，只存增量 |
+| `HistorySearchTool.kt` | `history_search` 工具（list / read / search） |
+| `AssistantCompactionPage.kt` | 助手级配置页 |
+
+**配置（Assistant 字段）**：
+
+```
+compactionTargetK       压缩后缩到多少（千 tokens）
+compactionThresholdK    超过多少才触发（千 tokens）
+compactionKeepMessages  保留最近多少条
+compactionExtraInstruction 附加说明
+compactionAutoEnabled   自动压缩开关
+```
+
+**存档结构**：
+
+```
+files/compaction/<助手名>__<id8>/<会话名>__<id8>/压缩会话<N> <时间>.md
+```
+
+**增量规则**：`_state.txt` 记住上次存到哪条消息，下次只存新的——压缩②只记录上次之后的消息，不重复 1、2。
+
+**隔离**：目录名带 id 后缀，`history_search` 由 `invocationContext.callerConversationId` 强制限定当前会话，**模型看不到别的会话的存档**。
+
+**上下文保护**：`search` 优先于 `read`（后者截断 12K 字符并带 warning），缺 `index` 的检索直接拒绝，要求先问用户检索哪一份。
+
+## D. 文件上传多样化
+
+- `isAllowedFileType` 全放行（原来白名单挡掉 .log / .zip / .bin）
+- `isInlineReadableFile` 区分可读/不可读
+- 读不了的（压缩包 / 二进制）额外写进 Linux 沙箱 `/workspace/upload/`，并挂一条 `metadata={"hidden":true}` 的提示给模型，界面上不渲染
+- 提示里写明沙箱绝对路径，并要求「用沙箱工具读，别用 content:// URI」
+
+## E. 其它
+
+| 项 | 内容 |
+|---|---|
+| 循环守卫 | `virtual_screen` 的 screenshot/status/diagnose 按 action 豁免，不再误判死循环 |
+| 用量面板 | 真正填充 `stepCount` / `lastUsage` / `generationTimeMs` 三个字段 |
+| 思考深度 | 移植官方 3.1.1 的 MaterialShapes 变形选择器 |
+| 上下文长度 | 移植官方 3.1.1 的 128K/200K/1M/自定义 |
+| 聊天背景 | 支持视频（ExoPlayer + TextureView） |
+| 图标/关于页 | 自有图标；关于页指向自己的仓库 |
