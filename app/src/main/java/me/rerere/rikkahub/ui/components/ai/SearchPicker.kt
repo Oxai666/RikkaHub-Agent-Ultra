@@ -10,6 +10,8 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +49,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -114,42 +120,15 @@ fun SearchPickerButton(
                 val modelTool = model?.tools?.contains(BuiltInTools.Search) == true
 
                 when {
-                    // 模型自带搜索：用 AI 搜索图标，不做放大镜
+                    // 模型自带搜索：用 AI 搜索图标
                     modelTool -> Icon(
                         imageVector = HugeIcons.AiSearch02,
                         contentDescription = stringResource(R.string.use_web_search),
                     )
 
-                    // 本地搜索开着：放大镜留着，镜片里装着当前搜索方的 logo。
-                    // 放大镜本身的斜角（手柄在右下）就是「斜对着照」的角度，
-                    // 镜片换成 logo 才有「聚焦到它身上」的意思。
-                    searchOn -> {
-                        Icon(
-                            imageVector = HugeIcons.Search01,
-                            contentDescription = stringResource(R.string.use_web_search),
-                        )
-                        // 镜片中心在 24dp 方框的 (10, 10) 附近，
-                        // 相对居中位置偏左上，所以 offset 是负的。
-                        // 位置和尺寸挂在 AnimatedContent 上：它内部会包一层
-                        // 容器，挂在子元素身上会相对那层容器偏移，位置就跑了。
-                        AnimatedContent(
-                            targetState = currentService!!.displayName,
-                            modifier = Modifier
-                                .size(10.dp)
-                                .offset(x = (-2.5).dp, y = (-2.5).dp),
-                            transitionSpec = {
-                                (fadeIn(tween(180)) + scaleIn(tween(220), initialScale = 0.4f)) togetherWith
-                                    (fadeOut(tween(100)) + scaleOut(tween(140), targetScale = 0.6f))
-                            },
-                            label = "focus-logo",
-                        ) { serviceName ->
-                            AutoAIIcon(
-                                name = serviceName,
-                                color = Color.Transparent,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
-                    }
+                    // 本地搜索开着：搜索方 logo 保持原尺寸，右上角另外挂一个
+                    // 小放大镜，中间一道锥形光束打过去。
+                    searchOn -> FocusOnServiceLogo(currentService!!.displayName)
 
                     // 没开：普通放大镜
                     else -> Icon(
@@ -511,3 +490,78 @@ private fun SearchProviderPicker(
     }
 }
 
+
+/**
+ * 搜索开着的时候，按钮里画的是这样子：
+ *
+ *        🔍        ← 右上角的小放大镜，轻微斜着
+ *       ╱ ╲
+ *      ╱   ╲       ← 锥形光束，越靠近 logo 越淡
+ *     [LOGO]       ← 搜索方 logo，保持 24dp 原尺寸
+ *
+ * 外层格子只有 24dp，这里用 requiredSize 撑到 34dp 溢出去——
+ * Compose 默认不裁子元素，画得比格子大不会出问题，也不会把 Row 撑高。
+ */
+@Composable
+private fun FocusOnServiceLogo(serviceName: String) {
+    val beamColor = MaterialTheme.colorScheme.primary
+
+    Box(
+        modifier = Modifier.requiredSize(34.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        // 锥形光束：从放大镜底部扩散下来，落在 logo 身上
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val cone = Path().apply {
+                moveTo(w * 0.62f, h * 0.29f)   // 放大镜左下
+                lineTo(w * 0.82f, h * 0.38f)   // 放大镜右下
+                lineTo(w * 0.76f, h * 0.76f)   // 锥底右
+                lineTo(w * 0.12f, h * 0.59f)   // 锥底左
+                close()
+            }
+            drawPath(
+                path = cone,
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        beamColor.copy(alpha = 0.40f),
+                        beamColor.copy(alpha = 0.04f),
+                    ),
+                    start = Offset(w * 0.72f, h * 0.33f),
+                    end = Offset(w * 0.42f, h * 0.66f),
+                ),
+            )
+        }
+
+        // 搜索方 logo：24dp 原尺寸，往左下靠，给右上角的放大镜让位
+        AnimatedContent(
+            targetState = serviceName,
+            modifier = Modifier
+                .size(24.dp)
+                .align(Alignment.BottomStart),
+            transitionSpec = {
+                (fadeIn(tween(200)) + scaleIn(tween(240), initialScale = 0.5f)) togetherWith
+                    (fadeOut(tween(120)) + scaleOut(tween(160), targetScale = 0.7f))
+            },
+            label = "focus-logo",
+        ) { name ->
+            AutoAIIcon(
+                name = name,
+                color = Color.Transparent,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        // 右上角的小放大镜，斜一点指向 logo
+        Icon(
+            imageVector = HugeIcons.Search01,
+            contentDescription = stringResource(R.string.use_web_search),
+            modifier = Modifier
+                .size(13.dp)
+                .align(Alignment.TopEnd)
+                .rotate(-22f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
