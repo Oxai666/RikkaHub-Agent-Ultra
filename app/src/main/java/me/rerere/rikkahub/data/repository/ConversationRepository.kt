@@ -386,7 +386,8 @@ class ConversationRepository(
         ArmorRegistry.state.clear(conversation.id)
         // 压缩存档也一起删：会话没了，存档留着只会变成孤儿文件
         runCatching {
-            me.rerere.rikkahub.data.compaction.CompactionArchive.deleteByTitle(null, conversation.title)
+            me.rerere.rikkahub.data.compaction.CompactionArchive
+                .deleteByConversationId(null, conversation.id.toString())
         }
     }
 

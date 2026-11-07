@@ -2650,7 +2650,9 @@ class ChatService(
             me.rerere.rikkahub.data.compaction.CompactionArchive.save(
                 context = context,
                 assistantName = assistantName,
+                assistantId = conversation.assistantId.toString(),
                 conversationTitle = conversation.title.ifBlank { conversation.id.toString() },
+                conversationId = conversation.id.toString(),
                 messages = messagesToCompress,
             )
         }.onFailure { Log.w(TAG, "compaction archive failed", it) }

@@ -48,8 +48,30 @@ object CompactionArchive {
 
     fun rootDir(context: Context? = null): File = File(ctx(context).filesDir, "compaction")
 
-    fun conversationDir(context: Context? = null, assistantName: String, conversationTitle: String): File =
-        File(File(rootDir(context), sanitize(assistantName)), sanitize(conversationTitle))
+    /**
+     * 助手目录 / 会话目录都带上 id 后缀。
+     *
+     * 只用名字会出两个问题：
+     *  - 两个会话同名（比如都叫「新对话」）→ 存档混在一起
+     *  - 会话 A 的模型能翻到会话 B 的历史
+     * 带上前 8 位 id 之后目录既好认又唯一。
+     */
+    fun assistantDir(
+        context: Context?,
+        assistantName: String,
+        assistantId: String,
+    ): File = File(rootDir(context), "${sanitize(assistantName)}__${assistantId.take(8)}")
+
+    fun conversationDir(
+        context: Context?,
+        assistantName: String,
+        assistantId: String,
+        conversationTitle: String,
+        conversationId: String,
+    ): File = File(
+        assistantDir(context, assistantName, assistantId),
+        "${sanitize(conversationTitle)}__${conversationId.take(8)}",
+    )
 
     /** 记录「上一份存档存到哪条消息」，用来算增量。 */
     private const val STATE_FILE = "_state.txt"
@@ -80,12 +102,14 @@ object CompactionArchive {
     fun save(
         context: Context?,
         assistantName: String,
+        assistantId: String,
         conversationTitle: String,
+        conversationId: String,
         messages: List<UIMessage>,
         now: LocalDateTime = LocalDateTime.now(),
     ): File? {
         if (messages.isEmpty()) return null
-        val dir = conversationDir(context, assistantName, conversationTitle)
+        val dir = conversationDir(context, assistantName, assistantId, conversationTitle, conversationId)
         if (!dir.exists() && !dir.mkdirs()) return null
 
         // 增量：只取上次存档之后的新消息
@@ -119,15 +143,30 @@ object CompactionArchive {
 
     fun list(
         context: Context?,
-        assistantName: String? = null,
-        conversationTitle: String? = null,
+        assistantId: String? = null,
+        conversationId: String? = null,
     ): List<Entry> {
-        val base = when {
-            assistantName != null && conversationTitle != null ->
-                conversationDir(context, assistantName, conversationTitle)
-            assistantName != null -> File(rootDir(context), sanitize(assistantName))
-            else -> rootDir(context)
+        val all = rootDir(context)
+        val base = all
+        // 带 conversationId 时，只留目录名以该 id 结尾的那一个（精确到会话）
+        if (conversationId != null) {
+            val suffix = "__${conversationId.take(8)}"
+            val target = all.walkTopDown()
+                .firstOrNull { it.isDirectory && it.name.endsWith(suffix) }
+            if (target == null) return emptyList()
+            return collectEntries(target)
         }
+        if (assistantId != null) {
+            val suffix = "__${assistantId.take(8)}"
+            val target = all.listFiles().orEmpty()
+                .firstOrNull { it.isDirectory && it.name.endsWith(suffix) }
+            if (target == null) return emptyList()
+            return collectEntries(target)
+        }
+        return collectEntries(base)
+    }
+
+    private fun collectEntries(base: File): List<Entry> {
         if (!base.exists()) return emptyList()
         return base.walkTopDown()
             .filter { it.isFile && it.name.startsWith("压缩会话") && it.name.endsWith(".md") }
@@ -155,12 +194,12 @@ object CompactionArchive {
         context: Context?,
         keyword: String,
         limit: Int = 20,
-        assistantName: String? = null,
-        conversationTitle: String? = null,
+        assistantId: String? = null,
+        conversationId: String? = null,
     ): List<Hit> {
         if (keyword.isBlank()) return emptyList()
         val hits = mutableListOf<Hit>()
-        for (entry in list(context, assistantName, conversationTitle)) {
+        for (entry in list(context, assistantId, conversationId)) {
             if (hits.size >= limit) break
             val text = runCatching { entry.file.readText(Charsets.UTF_8) }.getOrNull() ?: continue
             var perFile = 0
@@ -180,28 +219,25 @@ object CompactionArchive {
         runCatching { conversationDir(context, assistantName, conversationTitle).deleteRecursively() }
     }
 
-    /**
-     * 按会话标题删除存档，不限助手。
-     *
-     * Repository 删会话时只知道标题和 id，拿不到助手名；同名会话在不同助手下
-     * 都会一并删掉。会话标题重复的概率远低于「漏删」，这个取舍可以接受。
-     */
-    fun deleteByTitle(context: Context?, conversationTitle: String) {
+    /** 按会话 id 精确删除存档（目录名以 __<id8> 结尾）。 */
+    fun deleteByConversationId(context: Context?, conversationId: String) {
         val root = rootDir(context)
         if (!root.exists()) return
-        val target = sanitize(conversationTitle)
-        root.listFiles().orEmpty()
-            .filter { it.isDirectory }
-            .forEach { assistantDir ->
-                runCatching {
-                    File(assistantDir, target).takeIf { it.exists() }?.deleteRecursively()
-                }
-            }
+        val suffix = "__${conversationId.take(8)}"
+        root.walkTopDown()
+            .filter { it.isDirectory && it.name.endsWith(suffix) }
+            .toList()
+            .forEach { runCatching { it.deleteRecursively() } }
     }
 
     /** 删除某个助手的全部存档。 */
-    fun deleteAssistant(context: Context?, assistantName: String) {
-        runCatching { File(rootDir(context), sanitize(assistantName)).deleteRecursively() }
+    fun deleteAssistant(context: Context?, assistantId: String) {
+        val root = rootDir(context)
+        if (!root.exists()) return
+        val suffix = "__${assistantId.take(8)}"
+        root.listFiles().orEmpty()
+            .filter { it.isDirectory && it.name.endsWith(suffix) }
+            .forEach { runCatching { it.deleteRecursively() } }
     }
 
     // ---- Markdown 生成 ----------------------------------------------------

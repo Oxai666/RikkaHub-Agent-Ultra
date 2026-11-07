@@ -26,12 +26,13 @@ import me.rerere.rikkahub.data.compaction.CompactionArchive
  *   3. action=read 或 action=search 并带上 index
  * 没带 index 的 search 会被直接拒绝，把这句话原样回给模型。
  */
-fun historySearchTool(context: Context): Tool = Tool(
+fun historySearchTool(context: Context, conversationId: String?): Tool = Tool(
     name = "history_search",
     description = """
-        Search archived transcripts saved before context compaction. Each archive holds ONLY
-        the messages added since the previous compaction (压缩会话2 contains just the new turns,
-        not 1 + 2 again), so read several archives if the user asks about a long history.
+        Search archived transcripts of THIS conversation that were saved before context compaction.
+        Each archive holds ONLY the messages added since the previous compaction (压缩会话2
+        contains just the new turns, not 1 + 2 again), so read several archives if the user asks
+        about a long history. You can never see other conversations' archives — that is by design.
         Workflow is mandatory: call action=list first, then ASK THE USER which archive to unlock
         (压缩会话1 / 压缩会话2 / ...), and only then call read or search with that index.
         A search without index is rejected on purpose — never scan every archive at once.
@@ -53,14 +54,7 @@ fun historySearchTool(context: Context): Tool = Tool(
                     put("type", "string")
                     put("description", "Keyword to look for. Required for search.")
                 })
-                put("assistant", buildJsonObject {
-                    put("type", "string")
-                    put("description", "Optional: limit to one assistant name.")
-                })
-                put("conversation", buildJsonObject {
-                    put("type", "string")
-                    put("description", "Optional: limit to one conversation title.")
-                })
+
             },
             required = listOf("action")
         )
@@ -69,12 +63,10 @@ fun historySearchTool(context: Context): Tool = Tool(
         val action = input.jsonObject["action"]?.jsonPrimitive?.contentOrNull.orEmpty()
         val index = input.jsonObject["index"]?.jsonPrimitive?.intOrNull
         val keyword = input.jsonObject["keyword"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        val assistant = input.jsonObject["assistant"]?.jsonPrimitive?.contentOrNull
-        val conversation = input.jsonObject["conversation"]?.jsonPrimitive?.contentOrNull
 
         when (action) {
             "list" -> {
-                val entries = CompactionArchive.list(context, assistant, conversation)
+                val entries = CompactionArchive.list(context, conversationId = conversationId)
                 val payload = buildJsonObject {
                     put("count", entries.size)
                     put("archives", buildJsonArray {
@@ -117,7 +109,7 @@ fun historySearchTool(context: Context): Tool = Tool(
                         )
                     )
                 }
-                val entries = CompactionArchive.list(context, assistant, conversation)
+                val entries = CompactionArchive.list(context, conversationId = conversationId)
                 val entry = entries.firstOrNull { it.index == index }
                 if (entry == null) {
                     return@Tool listOf(
@@ -169,7 +161,7 @@ fun historySearchTool(context: Context): Tool = Tool(
                         )
                     )
                 }
-                val entries = CompactionArchive.list(context, assistant, conversation)
+                val entries = CompactionArchive.list(context, conversationId = conversationId)
                     .filter { it.index == index }
                 if (entries.isEmpty()) {
                     return@Tool listOf(
@@ -182,8 +174,7 @@ fun historySearchTool(context: Context): Tool = Tool(
                     context = context,
                     keyword = keyword,
                     limit = 20,
-                    assistantName = assistant,
-                    conversationTitle = conversation,
+                    conversationId = conversationId,
                 ).filter { it.entry.index == index }
 
                 val payload = buildJsonObject {

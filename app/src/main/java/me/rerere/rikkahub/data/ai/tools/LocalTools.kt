@@ -885,7 +885,12 @@ class LocalTools(
             tools.add(me.rerere.rikkahub.data.ai.tools.local.virtualScreenTool(context))
         }
         if (options.contains(LocalToolOption.HistorySearch)) {
-            tools.add(me.rerere.rikkahub.data.ai.tools.local.historySearchTool(context))
+            tools.add(
+                me.rerere.rikkahub.data.ai.tools.local.historySearchTool(
+                    context,
+                    invocationContext.callerConversationId,
+                )
+            )
         }
         if (options.contains(LocalToolOption.TelegramBot)) {
             tools.add(telegramSetTokenTool(telegramBotPreferences, telegramBotClient))

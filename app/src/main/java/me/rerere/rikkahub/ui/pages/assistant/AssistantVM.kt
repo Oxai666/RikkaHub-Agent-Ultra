@@ -56,7 +56,7 @@ class AssistantVM(
             // 助手删了，它的压缩存档目录也一起清掉
             runCatching {
                 me.rerere.rikkahub.data.compaction.CompactionArchive
-                    .deleteAssistant(null, assistant.name.ifBlank { "默认助手" })
+                    .deleteAssistant(null, assistant.id.toString())
             }
         }
     }
