@@ -29,7 +29,9 @@ import me.rerere.rikkahub.data.compaction.CompactionArchive
 fun historySearchTool(context: Context): Tool = Tool(
     name = "history_search",
     description = """
-        Search archived transcripts that were saved before context compaction.
+        Search archived transcripts saved before context compaction. Each archive holds ONLY
+        the messages added since the previous compaction (压缩会话2 contains just the new turns,
+        not 1 + 2 again), so read several archives if the user asks about a long history.
         Workflow is mandatory: call action=list first, then ASK THE USER which archive to unlock
         (压缩会话1 / 压缩会话2 / ...), and only then call read or search with that index.
         A search without index is rejected on purpose — never scan every archive at once.

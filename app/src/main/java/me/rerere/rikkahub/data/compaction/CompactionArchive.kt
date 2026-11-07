@@ -40,10 +40,31 @@ object CompactionArchive {
     fun conversationDir(context: Context, assistantName: String, conversationTitle: String): File =
         File(File(rootDir(context), sanitize(assistantName)), sanitize(conversationTitle))
 
+    /** 记录「上一份存档存到哪条消息」，用来算增量。 */
+    private const val STATE_FILE = "_state.txt"
+
+    private fun readLastStamp(dir: File): String? {
+        val file = File(dir, STATE_FILE)
+        if (!file.isFile) return null
+        return runCatching { file.readText(Charsets.UTF_8).trim() }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    private fun writeLastStamp(dir: File, stamp: String) {
+        runCatching { File(dir, STATE_FILE).writeText(stamp, Charsets.UTF_8) }
+    }
+
     /**
-     * 存一份快照，返回落盘文件。
+     * 存一份快照，返回落盘文件。**只存增量**。
      *
-     * 序号取目录里已有的「压缩会话N」最大值 + 1，所以删掉中间某份也不会串号。
+     * 用户定的规则：
+     *   消息 1、2 → 压缩① → 压缩会话1 记录 1、2
+     *   输入 3    → 压缩② → 压缩会话2 只记录 3（1、2 已经在上一份里了）
+     *
+     * 实现上靠目录里的 _state.txt 记住上一份存到哪条消息的 createdAt，
+     * 下次只取这之后的消息。同一份内容重复触发压缩时，增量可能为空，
+     * 这时直接返回 null，不产生空文件。
      */
     fun save(
         context: Context,
@@ -52,17 +73,28 @@ object CompactionArchive {
         messages: List<UIMessage>,
         now: LocalDateTime = LocalDateTime.now(),
     ): File? {
+        if (messages.isEmpty()) return null
         val dir = conversationDir(context, assistantName, conversationTitle)
         if (!dir.exists() && !dir.mkdirs()) return null
+
+        // 增量：只取上次存档之后的新消息
+        val lastStamp = readLastStamp(dir)
+        val increment = if (lastStamp == null) {
+            messages
+        } else {
+            messages.filter { it.createdAt.toString() > lastStamp }
+        }
+        if (increment.isEmpty()) return null
 
         val nextIndex = (dir.listFiles().orEmpty()
             .mapNotNull { Regex("""压缩会话(\d+)""").find(it.name)?.groupValues?.get(1)?.toIntOrNull() }
             .maxOrNull() ?: 0) + 1
 
         val file = File(dir, "压缩会话$nextIndex ${now.format(STAMP)}.md")
-        val body = buildMarkdown(assistantName, conversationTitle, messages, now)
+        val body = buildMarkdown(assistantName, conversationTitle, increment, now)
         return runCatching {
             file.writeText(body, Charsets.UTF_8)
+            writeLastStamp(dir, messages.last().createdAt.toString())
             file
         }.getOrNull()
     }
