@@ -9,6 +9,11 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -23,7 +28,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -47,7 +54,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -109,13 +118,21 @@ fun SearchPickerButton(
                 modifier = Modifier.size(24.dp),
                 contentAlignment = Alignment.Center
             ) {
+                val searchOn = enableSearch && currentService != null
+                val modelTool = model?.tools?.contains(BuiltInTools.Search) == true
+
+                // 搜索开着的时候，图标底下压一圈呼吸中的琥珀色光晕，
+                // 加一颗往上飘的火星——放大镜在太阳底下把光聚成一点的样子。
+                if (searchOn || modelTool) {
+                    FocusGlow()
+                }
+
                 // 三种状态：模型自带搜索 / 本地搜索开着 / 没开。
-                // 用 AnimatedContent 做「聚焦」过渡——旧图标放大淡出、新图标
-                // 从 0.5 缩到 1 淡入，像放大镜自己对上了焦。
+                // AnimatedContent 让切换有过程：旧图标放大淡出、新图标
+                // 从 0.5 缩到 1 淡入，像对上焦。
                 val iconKey = when {
-                    model?.tools?.contains(BuiltInTools.Search) == true -> "model"
-                    enableSearch && currentService != null ->
-                        "service:${currentService.displayName}"
+                    modelTool -> "model"
+                    enableSearch && currentService != null -> "service:${currentService.displayName}"
                     else -> "off"
                 }
                 AnimatedContent(
@@ -494,5 +511,72 @@ private fun SearchProviderPicker(
                 }
             }
         }
+    }
+}
+
+/**
+ * 放大镜聚焦的光晕。
+ *
+ * 搜索开着的时候压在图标底下：一圈琥珀色径向渐变呼吸式明灭，
+ * 外加一颗从中心往上飘的火星——就是放大镜把阳光聚成一点、
+ * 在火柴头上烧起来的那个瞬间。
+ *
+ * 尺寸比外面的 24dp 图标大一圈。Compose 默认不裁子元素，
+ * 超出的部分会照常画出来，看起来像从图标里溢出来的光。
+ */
+@Composable
+private fun FocusGlow(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "focus-glow")
+
+    // 光晕呼吸：0.45 亮到 0.95 再退回来
+    val glow by transition.animateFloat(
+        initialValue = 0.45f,
+        targetValue = 0.95f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "glow",
+    )
+
+    // 火星：从中心往上飘 13dp，边飘边淡掉，然后重来
+    val spark by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1700, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart,
+        ),
+        label = "spark",
+    )
+
+    Box(
+        // requiredSize 而不是 size：外面那个 Box 只有 24dp，用 size 会被
+        // 父约束夹回 24dp，光晕就溢不出来了。
+        modifier = modifier.requiredSize(36.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { alpha = glow }
+                .background(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color(0x88FFC107),
+                            Color(0x33FF9800),
+                            Color.Transparent,
+                        ),
+                    ),
+                    shape = CircleShape,
+                ),
+        )
+        Box(
+            modifier = Modifier
+                .size(3.dp)
+                .offset(y = (-(spark * 13f)).dp)
+                .graphicsLayer { alpha = (1f - spark).coerceIn(0f, 1f) }
+                .background(Color(0xFFFFE082), CircleShape),
+        )
     }
 }
