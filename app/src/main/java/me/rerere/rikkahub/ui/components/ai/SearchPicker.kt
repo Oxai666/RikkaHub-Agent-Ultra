@@ -540,15 +540,16 @@ private fun FocusOnServiceLogo(serviceName: String) {
         modifier = Modifier.requiredSize(34.dp),
         contentAlignment = Alignment.Center,
     ) {
-        // 锥形光束：从放大镜底部扩散下来，落在 logo 身上
+        // 锥形光束：从放大镜底部扩散下来，落在 logo 身上。
+        // 放大镜在左上，logo 在右下，所以整条光路是从左上斜向右下。
         Canvas(modifier = Modifier.fillMaxSize()) {
             val w = size.width
             val h = size.height
             val cone = Path().apply {
-                moveTo(w * 0.62f, h * 0.29f)   // 放大镜左下
-                lineTo(w * 0.82f, h * 0.38f)   // 放大镜右下
-                lineTo(w * 0.76f, h * 0.76f)   // 锥底右
-                lineTo(w * 0.12f, h * 0.59f)   // 锥底左
+                moveTo(w * 0.38f, h * 0.29f)   // 放大镜右下
+                lineTo(w * 0.18f, h * 0.38f)   // 放大镜左下
+                lineTo(w * 0.24f, h * 0.76f)   // 锥底左
+                lineTo(w * 0.88f, h * 0.59f)   // 锥底右
                 close()
             }
             drawPath(
@@ -558,19 +559,19 @@ private fun FocusOnServiceLogo(serviceName: String) {
                         beamColor.copy(alpha = 0.40f),
                         beamColor.copy(alpha = 0.04f),
                     ),
-                    start = Offset(w * 0.72f, h * 0.33f),
-                    end = Offset(w * 0.42f, h * 0.66f),
+                    start = Offset(w * 0.28f, h * 0.33f),
+                    end = Offset(w * 0.58f, h * 0.66f),
                 ),
             )
         }
 
         // logo 那一格：光圈、logo、闪光点三层叠在一起居中，
         // 光圈必须挂在这一格里而不是整个容器上，不然会浮在格子正中央，
-        // 跟落在左下的 logo 对不上。
+        // 跟落在右下的 logo 对不上。
         Box(
             modifier = Modifier
                 .size(24.dp)
-                .align(Alignment.BottomStart),
+                .align(Alignment.BottomEnd),
             contentAlignment = Alignment.Center,
         ) {
             // 光圈：呼吸的径向渐变，铺在 logo 背后
@@ -615,14 +616,14 @@ private fun FocusOnServiceLogo(serviceName: String) {
             )
         }
 
-        // 右上角的小放大镜，斜一点指向 logo
+        // 左上角的小放大镜，斜一点指向右下的 logo
         Icon(
             imageVector = HugeIcons.Search01,
             contentDescription = stringResource(R.string.use_web_search),
             modifier = Modifier
                 .size(13.dp)
-                .align(Alignment.TopEnd)
-                .rotate(-22f),
+                .align(Alignment.TopStart)
+                .rotate(22f),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
