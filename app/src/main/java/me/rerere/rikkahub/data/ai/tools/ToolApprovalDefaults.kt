@@ -40,6 +40,13 @@ object ToolApprovalDefaults {
         // every time and its command still goes through the HARDLINE floor.
         "root_shell",
 
+        // Virtual display. Same trust bucket as launch_app + tap, but none of the
+        // accessibility-service auditing that those two carry: start() spins up a whole
+        // extra display, launch() pushes an arbitrary package onto it, and tap/swipe then
+        // drive that package's UI. Left out of this set, the model could open a banking
+        // app on a hidden display and click through it without a single prompt.
+        "virtual_screen",
+
         // Remote shell (SSH)
         "ssh_exec",
         "ssh_exec_saved",

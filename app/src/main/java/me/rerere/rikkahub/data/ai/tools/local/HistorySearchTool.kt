@@ -181,9 +181,10 @@ fun historySearchTool(context: Context, conversationId: String?): Tool = Tool(
                 val hits = CompactionArchive.search(
                     context = context,
                     keyword = keyword,
-                    limit = 12,
+                    limit = 20,
                     conversationId = conversationId,
-                ).filter { it.entry.index == index }
+                    index = index,
+                )
 
                 val payload = buildJsonObject {
                     put("index", index)

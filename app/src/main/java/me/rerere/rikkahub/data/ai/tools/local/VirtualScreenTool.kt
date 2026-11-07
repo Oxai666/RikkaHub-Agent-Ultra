@@ -43,6 +43,10 @@ fun virtualScreenTool(context: Context): Tool = Tool(
         If a screenshot comes back almost entirely black, the display may simply not have finished
         rendering yet — wait a second and take another screenshot before concluding the app crashed
         or exited. A genuinely closed app also renders as a black frame, which is normal.
+        action=diagnose dumps the helper's internal state (surface size, age of the last captured
+        frame, injected-touch counter, recent errors). Use it when status says running but
+        screenshots stay black or taps have no visible effect — it tells you whether the problem
+        is the helper, the display, or the app on it.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(
@@ -105,7 +109,6 @@ fun virtualScreenTool(context: Context): Tool = Tool(
         val mirror = input.jsonObject["mirror"]?.jsonPrimitive?.booleanOrNull ?: false
         val packageName = input.jsonObject["package"]?.jsonPrimitive?.contentOrNull
         val activity = input.jsonObject["activity"]?.jsonPrimitive?.contentOrNull
-        val state = VirtualScreenManager.state.value
 
         when (action) {
             "start" -> {
@@ -246,17 +249,20 @@ fun virtualScreenTool(context: Context): Tool = Tool(
             }
 
             "status" -> {
+                // 现取，不要用函数开头那份快照：start 是异步的，模型常常在 start 之后
+                // 立刻 status，拿开头的 state 会报一个「没在运行」的假结果。
+                val now = VirtualScreenManager.state.value
                 listOf(
                     UIMessagePart.Text(
                         buildJsonObject {
-                            put("running", state.running)
-                            put("starting", state.starting)
-                            put("display_id", state.displayId)
-                            put("port", state.port)
-                            put("width", state.width)
-                            put("height", state.height)
-                            put("mirror", state.mirror)
-                            state.error?.let { put("error", it) }
+                            put("running", now.running)
+                            put("starting", now.starting)
+                            put("display_id", now.displayId)
+                            put("port", now.port)
+                            put("width", now.width)
+                            put("height", now.height)
+                            put("mirror", now.mirror)
+                            now.error?.let { put("error", it) }
                         }.toString()
                     )
                 )
@@ -269,7 +275,12 @@ fun virtualScreenTool(context: Context): Tool = Tool(
 
             else -> listOf(
                 UIMessagePart.Text(
-                    buildJsonObject { put("error", "action 必须是 start / screenshot / status / stop") }.toString()
+                    buildJsonObject {
+                        put(
+                            "error",
+                            "action must be one of: start / screenshot / launch / tap / swipe / status / diagnose / stop"
+                        )
+                    }.toString()
                 )
             )
         }

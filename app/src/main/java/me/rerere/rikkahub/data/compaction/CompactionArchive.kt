@@ -46,6 +46,12 @@ object CompactionArchive {
         return cleaned.ifBlank { "untitled" }.take(80)
     }
 
+    /** 目录名末尾的 "__<id8>"，剥掉还原成人能看懂的名字。 */
+    private val ID_SUFFIX = Regex("""__[0-9a-zA-Z]{8}$""")
+
+    private fun stripIdSuffix(dirName: String): String =
+        dirName.replace(ID_SUFFIX, "").ifBlank { dirName }
+
     fun rootDir(context: Context? = null): File = File(ctx(context).filesDir, "compaction")
 
     /**
@@ -175,8 +181,12 @@ object CompactionArchive {
                     ?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
                 Entry(
                     file = file,
-                    assistantName = file.parentFile?.parentFile?.name.orEmpty(),
-                    conversationTitle = file.parentFile?.name.orEmpty(),
+                    // 目录名形如 "<助手名>__<id8>"，把唯一标识后缀剥掉再给上层。
+                    // 不剥的话，模型和用户在 history_search 的结果里看到的是
+                    // "我的助手__a1b2c3d4" 这种既不像名字也不像 ID 的东西。
+                    // 只剥末尾 8 位 id，用户名字里自带 "__" 的情况不受影响。
+                    assistantName = stripIdSuffix(file.parentFile?.parentFile?.name.orEmpty()),
+                    conversationTitle = stripIdSuffix(file.parentFile?.name.orEmpty()),
                     index = index,
                 )
             }
@@ -196,10 +206,16 @@ object CompactionArchive {
         limit: Int = 20,
         assistantId: String? = null,
         conversationId: String? = null,
+        index: Int? = null,
     ): List<Hit> {
         if (keyword.isBlank()) return emptyList()
         val hits = mutableListOf<Hit>()
         for (entry in list(context, assistantId, conversationId)) {
+            // 必须先按序号过滤，再花 IO 读文件。
+            // 反过来会出事：limit 是全局配额，前面的存档（压缩会话1、2…）按名字排序
+            // 永远排在前面，关键词一旦在它们里面也出现，配额就被吃满了，
+            // 目标那份一条都分不到 —— 用户要查 3，返回的却是 1 和 2。
+            if (index != null && entry.index != index) continue
             if (hits.size >= limit) break
             val text = runCatching { entry.file.readText(Charsets.UTF_8) }.getOrNull() ?: continue
             var perFile = 0
