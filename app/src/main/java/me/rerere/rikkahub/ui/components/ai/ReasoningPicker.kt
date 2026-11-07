@@ -91,8 +91,9 @@ fun ReasoningButton(
                     icon = reasoningLevel.icon(),
                     containerColor = reasoningLevel.badgeContainerColor(),
                     contentColor = reasoningLevel.badgeContentColor(),
-                    heroSize = 28.dp,
-                    iconSize = 15.dp,
+                    heroSize = 32.dp,
+                    iconSize = 16.dp,
+                    decoration = reasoningLevel.heroDecoration(),
                 )
             }
             if (!onlyIcon) Text(stringResource(R.string.setting_provider_page_reasoning))
@@ -150,6 +151,7 @@ fun ReasoningPicker(
                     icon = previewLevel.icon(),
                     containerColor = previewLevel.badgeContainerColor(),
                     contentColor = previewLevel.badgeContentColor(),
+                    decoration = previewLevel.heroDecoration(),
                 )
             }
 
@@ -207,6 +209,17 @@ private fun ReasoningLevel.badgeContentColor(): Color = when {
     !isEnabled -> MaterialTheme.colorScheme.onSurfaceVariant
     this >= ReasoningLevel.HIGH -> MaterialTheme.colorScheme.onPrimary
     else -> MaterialTheme.colorScheme.onPrimaryContainer
+}
+
+// 高档位给球加装饰，低档位保持干净——一眼就能看出开到多大了。
+//   High   → 头顶天使光环
+//   XHigh  → 右边一只天使翅膀
+//   Max    → 左右各一只恶魔翅膀
+private fun ReasoningLevel.heroDecoration(): HeroDecoration = when (this) {
+    ReasoningLevel.HIGH -> HeroDecoration.Halo
+    ReasoningLevel.XHIGH -> HeroDecoration.AngelWing
+    ReasoningLevel.MAX -> HeroDecoration.DemonWings
+    else -> HeroDecoration.None
 }
 
 private fun ReasoningLevel.shape(): RoundedPolygon = when (this) {
