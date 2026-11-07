@@ -246,15 +246,43 @@ object VirtualScreenManager {
     suspend fun stop(context: Context? = null) = withContext(Dispatchers.IO) {
         val state = _state.value
         val port = state.port
+        val displayId = state.displayId
 
-        // 先把投到虚拟屏上的应用停掉，再销毁 display。
+        // 悬浮窗是 App 自己的 View，跟虚拟屏进程没关系，得单独关，
+        // 否则点完「停止」那个小窗还赖在屏幕上。
+        runCatching { VirtualScreenOverlay.hide() }
+
+        // 结束投到虚拟屏上的应用，再销毁 display。
         // 顺序不能反：display 一没，Android 会把这个 display 上的 Activity 迁移回主屏，
-        // 用户会莫名其妙被跳到那个页面（比如停在 VPN 页，一点停止就跳到自己手机的 VPN）。
+        // 用户会莫名其妙被跳到那个页面。
+        //
+        // 两条路都要走：
+        //  1. 自己记录的包（通过 action=launch 投的）
+        //  2. 扫 dumpsys 里挂在这个 display 上的 task —— AI 有时用
+        //     `root_shell am start --display N` 直接投，那种情况没记录
         context?.let { ctx ->
             val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val pkg = prefs.getString(KEY_PACKAGE, null)
             if (!pkg.isNullOrBlank()) {
                 runCatching { RootShell.exec("am force-stop $pkg", 10_000) }
+            }
+        }
+        if (displayId >= 0) {
+            runCatching {
+                // awk: 记住最近的 `* Task{... #123 ...}` 的 id，遇到 mDisplayId=N 就输出它
+                val script = "/system/bin/dumpsys activity activities 2>/dev/null | " +
+                    "/system/bin/awk '/\\* Task\\{/ { match(\$0, /#[0-9]+/); " +
+                    "tid=substr(\$0, RSTART+1, RLENGTH-1) } " +
+                    "/mDisplayId=$displayId/ { if (tid) print tid }'"
+                val listing = RootShell.exec(script, 20_000)
+                listing.stdout.lines()
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() && it.all { c -> c.isDigit() } }
+                    .distinct()
+                    .take(8)
+                    .forEach { taskId ->
+                        RootShell.exec("am task remove $taskId", 8_000)
+                    }
             }
         }
 
