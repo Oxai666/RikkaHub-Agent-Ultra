@@ -22,7 +22,7 @@ import me.rerere.rikkahub.data.compaction.CompactionArchive
  * **必须先问用户**：同一会话可能有压缩会话1、压缩会话2、压缩会话3……
  * 直接全量翻等于把一堆旧上下文重新灌回来。所以流程固定是：
  *   1. action=list 看清有哪些存档
- *   2. 问用户要解锁哪一份
+ *   2. 问用户要检索哪一份
  *   3. action=read 或 action=search 并带上 index
  * 没带 index 的 search 会被直接拒绝，把这句话原样回给模型。
  */
@@ -33,7 +33,7 @@ fun historySearchTool(context: Context, conversationId: String?): Tool = Tool(
         Each archive holds ONLY the messages added since the previous compaction (压缩会话2
         contains just the new turns, not 1 + 2 again), so read several archives if the user asks
         about a long history. You can never see other conversations' archives — that is by design.
-        Workflow is mandatory: call action=list first, then ASK THE USER which archive to unlock
+        Workflow is mandatory: call action=list first, then ASK THE USER which archive to search
         (压缩会话1 / 压缩会话2 / ...), and only then call read or search with that index.
         A search without index is rejected on purpose — never scan every archive at once.
         When reading results, focus on the reasoning and the answers; images and attachments
@@ -48,7 +48,7 @@ fun historySearchTool(context: Context, conversationId: String?): Tool = Tool(
                 })
                 put("index", buildJsonObject {
                     put("type", "integer")
-                    put("description", "Which archive to unlock (1 = 压缩会话1, 2 = 压缩会话2, …). Required for read and search.")
+                    put("description", "Which archive to search (1 = 压缩会话1, 2 = 压缩会话2, …). Required for read and search.")
                 })
                 put("keyword", buildJsonObject {
                     put("type", "string")
@@ -87,7 +87,7 @@ fun historySearchTool(context: Context, conversationId: String?): Tool = Tool(
                     } else {
                         put(
                             "next_step",
-                            "把上面的清单给用户看，问清楚要解锁哪一份（压缩会话1 / 压缩会话2 …），" +
+                            "把上面的清单给用户看，问清楚要检索哪一份（压缩会话1 / 压缩会话2 …），" +
                                 "拿到明确答复后再用 action=read 或 action=search 并带上 index。"
                         )
                     }
@@ -103,7 +103,7 @@ fun historySearchTool(context: Context, conversationId: String?): Tool = Tool(
                                 put("error", "missing_index")
                                 put(
                                     "recovery",
-                                    "先用 action=list 列出存档，然后问用户要解锁哪一份，再带上 index 重试。"
+                                    "先用 action=list 列出存档，然后问用户要检索哪一份，再带上 index 重试。"
                                 )
                             }.toString()
                         )
@@ -148,7 +148,7 @@ fun historySearchTool(context: Context, conversationId: String?): Tool = Tool(
                                 put("error", "missing_index")
                                 put(
                                     "recovery",
-                                    "检索必须指定要解锁哪一份存档。先 action=list，然后问用户要 压缩会话1 还是 压缩会话2，再带上 index 重试。"
+                                    "检索必须指定要检索哪一份存档。先 action=list，然后问用户要 压缩会话1 还是 压缩会话2，再带上 index 重试。"
                                 )
                             }.toString()
                         )

@@ -197,7 +197,7 @@ sealed class LocalToolOption {
     /**
      * history_search：查压缩前的完整对话存档。
      *
-     * 压缩摘要会丢细节，存档留着原文；模型必须先问用户要解锁哪一份
+     * 压缩摘要会丢细节，存档留着原文；模型必须先问用户要检索哪一份
      * （压缩会话1 / 2 / …），工具里对缺 index 的检索直接拒绝。
      */
     @Serializable @SerialName("history_search")  data object HistorySearch  : LocalToolOption()
