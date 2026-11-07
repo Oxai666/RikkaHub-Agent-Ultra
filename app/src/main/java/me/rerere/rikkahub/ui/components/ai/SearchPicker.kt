@@ -9,11 +9,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -30,7 +25,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -54,9 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -121,44 +113,49 @@ fun SearchPickerButton(
                 val searchOn = enableSearch && currentService != null
                 val modelTool = model?.tools?.contains(BuiltInTools.Search) == true
 
-                // 搜索开着的时候，图标底下压一圈呼吸中的琥珀色光晕，
-                // 加一颗往上飘的火星——放大镜在太阳底下把光聚成一点的样子。
-                if (searchOn || modelTool) {
-                    FocusGlow()
-                }
+                when {
+                    // 模型自带搜索：用 AI 搜索图标，不做放大镜
+                    modelTool -> Icon(
+                        imageVector = HugeIcons.AiSearch02,
+                        contentDescription = stringResource(R.string.use_web_search),
+                    )
 
-                // 三种状态：模型自带搜索 / 本地搜索开着 / 没开。
-                // AnimatedContent 让切换有过程：旧图标放大淡出、新图标
-                // 从 0.5 缩到 1 淡入，像对上焦。
-                val iconKey = when {
-                    modelTool -> "model"
-                    enableSearch && currentService != null -> "service:${currentService.displayName}"
-                    else -> "off"
-                }
-                AnimatedContent(
-                    targetState = iconKey,
-                    transitionSpec = {
-                        (fadeIn(tween(200)) + scaleIn(tween(240), initialScale = 0.5f)) togetherWith
-                            (fadeOut(tween(120)) + scaleOut(tween(160), targetScale = 1.4f))
-                    },
-                    label = "search-icon",
-                ) { key ->
-                    when {
-                        key == "model" -> Icon(
-                            imageVector = HugeIcons.AiSearch02,
-                            contentDescription = stringResource(R.string.use_web_search),
-                        )
-
-                        key.startsWith("service:") -> AutoAIIcon(
-                            name = key.removePrefix("service:"),
-                            color = Color.Transparent,
-                        )
-
-                        else -> Icon(
+                    // 本地搜索开着：放大镜留着，镜片里装着当前搜索方的 logo。
+                    // 放大镜本身的斜角（手柄在右下）就是「斜对着照」的角度，
+                    // 镜片换成 logo 才有「聚焦到它身上」的意思。
+                    searchOn -> {
+                        Icon(
                             imageVector = HugeIcons.Search01,
                             contentDescription = stringResource(R.string.use_web_search),
                         )
+                        // 镜片中心在 24dp 方框的 (10, 10) 附近，
+                        // 相对居中位置偏左上，所以 offset 是负的。
+                        // 位置和尺寸挂在 AnimatedContent 上：它内部会包一层
+                        // 容器，挂在子元素身上会相对那层容器偏移，位置就跑了。
+                        AnimatedContent(
+                            targetState = currentService!!.displayName,
+                            modifier = Modifier
+                                .size(10.dp)
+                                .offset(x = (-2.5).dp, y = (-2.5).dp),
+                            transitionSpec = {
+                                (fadeIn(tween(180)) + scaleIn(tween(220), initialScale = 0.4f)) togetherWith
+                                    (fadeOut(tween(100)) + scaleOut(tween(140), targetScale = 0.6f))
+                            },
+                            label = "focus-logo",
+                        ) { serviceName ->
+                            AutoAIIcon(
+                                name = serviceName,
+                                color = Color.Transparent,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
                     }
+
+                    // 没开：普通放大镜
+                    else -> Icon(
+                        imageVector = HugeIcons.Search01,
+                        contentDescription = stringResource(R.string.use_web_search),
+                    )
                 }
             }
         }
@@ -514,69 +511,3 @@ private fun SearchProviderPicker(
     }
 }
 
-/**
- * 放大镜聚焦的光晕。
- *
- * 搜索开着的时候压在图标底下：一圈琥珀色径向渐变呼吸式明灭，
- * 外加一颗从中心往上飘的火星——就是放大镜把阳光聚成一点、
- * 在火柴头上烧起来的那个瞬间。
- *
- * 尺寸比外面的 24dp 图标大一圈。Compose 默认不裁子元素，
- * 超出的部分会照常画出来，看起来像从图标里溢出来的光。
- */
-@Composable
-private fun FocusGlow(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "focus-glow")
-
-    // 光晕呼吸：0.45 亮到 0.95 再退回来
-    val glow by transition.animateFloat(
-        initialValue = 0.45f,
-        targetValue = 0.95f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1100, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "glow",
-    )
-
-    // 火星：从中心往上飘 13dp，边飘边淡掉，然后重来
-    val spark by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1700, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "spark",
-    )
-
-    Box(
-        // requiredSize 而不是 size：外面那个 Box 只有 24dp，用 size 会被
-        // 父约束夹回 24dp，光晕就溢不出来了。
-        modifier = modifier.requiredSize(36.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer { alpha = glow }
-                .background(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Color(0x88FFC107),
-                            Color(0x33FF9800),
-                            Color.Transparent,
-                        ),
-                    ),
-                    shape = CircleShape,
-                ),
-        )
-        Box(
-            modifier = Modifier
-                .size(3.dp)
-                .offset(y = (-(spark * 13f)).dp)
-                .graphicsLayer { alpha = (1f - spark).coerceIn(0f, 1f) }
-                .background(Color(0xFFFFE082), CircleShape),
-        )
-    }
-}
