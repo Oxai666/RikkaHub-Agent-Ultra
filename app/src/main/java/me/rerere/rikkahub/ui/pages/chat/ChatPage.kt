@@ -61,6 +61,7 @@ import me.rerere.hugeicons.stroke.Menu03
 import me.rerere.hugeicons.stroke.MessageAdd01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.goal.GoalStore
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -72,6 +73,7 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ai.ChatAttachmentPickerActions
 import me.rerere.rikkahub.ui.components.ai.ChatInput
+import me.rerere.rikkahub.ui.components.ai.GoalSheet
 import me.rerere.rikkahub.ui.components.ai.FilesPicker
 import me.rerere.rikkahub.ui.components.ai.SearchMode
 import me.rerere.rikkahub.ui.components.ai.completion.WorkspaceCompletionProvider
@@ -306,6 +308,18 @@ private fun ChatPageContent(
 
     TTSAutoPlay(vm = vm, setting = setting, conversation = conversation)
 
+    // 目标面板：旗帜按钮点开。状态存在 GoalStore，这里只是开关。
+    val goalKey = conversation.id.toString()
+    var showGoalSheet by remember { mutableStateOf(false) }
+    if (showGoalSheet) {
+        val currentGoal by GoalStore.observe(goalKey).collectAsStateWithLifecycle()
+        GoalSheet(
+            goalKey = goalKey,
+            goal = currentGoal,
+            onDismiss = { showGoalSheet = false },
+        )
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.background,
         modifier = Modifier.fillMaxSize()
@@ -334,6 +348,8 @@ private fun ChatPageContent(
                     onStartVoiceMode = onStartVoiceMode,
                     voiceState = voiceState,
                     onStopVoiceMode = vm.voiceSession::stop,
+                    conversationId = conversation.id.toString(),
+                    onOpenGoal = { showGoalSheet = true },
                     state = inputState,
                     messageQueue = messageQueue,
                     onRemoveQueuedMessage = vm::removeQueuedMessage,
