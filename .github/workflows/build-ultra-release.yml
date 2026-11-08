@@ -111,20 +111,32 @@ jobs:
           cat local.properties
           keytool -list -keystore "$KS" -storepass selfuse | tail -3
 
-      - name: Set up bun
-        uses: oven-sh/setup-bun@v2
+      - name: Set up Node
+        uses: actions/setup-node@v5
         with:
-          bun-version: latest
+          node-version: 22
+
+      # bun 改成从 npm 装，不再走 GitHub releases。
+      # 原来用 oven-sh/setup-bun@v2，它要下 bun-linux-x64.zip，
+      # GitHub 抽风返 504 就把整个构建干掉——那个下载跟代码一点关系没有。
+      # npm registry 稳得多，而且这里带三次重试。
+      - name: Set up bun
+        run: |
+          set -e
+          for i in 1 2 3; do
+            if npm install -g bun; then
+              echo "bun installed on attempt $i"
+              break
+            fi
+            echo "attempt $i failed, sleeping $((i*10))s"
+            sleep $((i*10))
+          done
+          bun --version
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v5
         with:
           version: 11
-
-      - name: Set up Node
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22
 
       - name: web-ui dependencies (bun)
         working-directory: web-ui
