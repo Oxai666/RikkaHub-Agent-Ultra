@@ -333,13 +333,16 @@ object ShellCommandRiskAnalyzer {
     /**
      * 这个路径在不在工作区外。
      *
-     * 这里的判定标准分两种场景，不能混：
+     * 判定分两种场景：
      *
      * **沙箱内**（[workspaceRoot] 是 `/workspace`）：proot 本身就是隔离的，
      * 写坏 `/usr/local` 重建 rootfs 就行，没必要按真机的标准拦。
-     * 只有真正会把设备搞死的路径才拦。
      *
      * **真机**（`root_shell` 这类，root 是 App 侧路径）：按工作区边界严格判。
+     *
+     * **符号链接会被解析**：`ln -s /etc /workspace/etc` 之后再写
+     * `/workspace/etc/passwd`，字面看在工作区内，实际落到 `/etc/passwd`。
+     * 所以先 `canonicalPath` 拿到真实路径再判。
      */
     fun isOutside(path: String, workspaceRoot: String?): Boolean {
         if (path.isBlank()) return false
@@ -359,13 +362,20 @@ object ShellCommandRiskAnalyzer {
             ) return false
         }
 
+        // 解析符号链接。canonicalPath 对不存在的文件会尽力解析已有的前缀，
+        // 失败就退回字面路径——不能因为解析不了就放行。
+        val resolved = runCatching { java.io.File(path).canonicalPath }.getOrDefault(path)
+
         // 这几个无论什么场景都算危险：动它们等于动设备
-        if (path == "/" || path.startsWith("/system") || path.startsWith("/data/adb")) return true
+        if (resolved == "/" ||
+            resolved.startsWith("/system") ||
+            resolved.startsWith("/data/adb")
+        ) return true
 
         // 沙箱场景：除了上面那几条，写哪都放行
         if (workspaceRoot == null || workspaceRoot.trimEnd('/') == "/workspace") return false
 
         val root = workspaceRoot.trimEnd('/')
-        return !(path == root || path.startsWith("$root/"))
+        return !(resolved == root || resolved.startsWith("$root/"))
     }
 }

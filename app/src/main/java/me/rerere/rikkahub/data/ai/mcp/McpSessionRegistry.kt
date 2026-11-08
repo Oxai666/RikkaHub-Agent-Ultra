@@ -533,17 +533,36 @@ private fun McpServerConfig.resolvedHeaders(): List<Pair<String, String>> {
 private fun mergeTools(storedTools: List<McpTool>, serverTools: List<Tool>): List<McpTool> {
     val toolsByName = storedTools.associateBy { it.name }
     return serverTools.map { serverTool ->
+        val readOnly = hintOf(serverTool, "getReadOnlyHint")
+        val destructive = hintOf(serverTool, "getDestructiveHint")
         toolsByName[serverTool.name]?.copy(
             description = serverTool.description,
             inputSchema = serverTool.inputSchema.toSchema(),
+            readOnlyHint = readOnly,
+            destructiveHint = destructive,
         ) ?: McpTool(
             name = serverTool.name,
             description = serverTool.description,
             enable = true,
             inputSchema = serverTool.inputSchema.toSchema(),
+            readOnlyHint = readOnly,
+            destructiveHint = destructive,
         )
     }
 }
+
+/**
+ * 读 MCP 工具声明的安全提示（`annotations.readOnlyHint` 之类）。
+ *
+ * 用反射而不是直接访问字段：SDK 在 0.x 阶段 annotations 的结构改过几次，
+ * 硬编码字段名，一次升版本就编译不过。反射拿不到就返回 null——
+ * 未知按「需要审批」处理，不会因为读不到就放行。
+ */
+private fun hintOf(serverTool: Tool, getter: String): Boolean? = runCatching {
+    val annotations = serverTool.javaClass.getMethod("getAnnotations")
+        .invoke(serverTool) ?: return null
+    annotations.javaClass.getMethod(getter).invoke(annotations) as? Boolean
+}.getOrNull()
 
 private fun ToolSchema.toSchema(): InputSchema =
     InputSchema.Obj(properties = properties ?: JsonObject(emptyMap()), required = required)

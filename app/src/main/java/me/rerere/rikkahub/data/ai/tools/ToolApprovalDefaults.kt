@@ -321,3 +321,27 @@ object ToolApprovalDefaults {
     fun requiresApproval(toolName: String): Boolean =
         toolName in ALWAYS_ASK || toolName.startsWith("mcp__")
 }
+
+/**
+ * MCP 工具的审批判定。
+ *
+ * 老规矩是 `mcp__*` 一律要审批——因为 MCP 服务器的工具面对我们是黑盒，
+ * 不知道哪个调用是破坏性的。但 MCP 协议里工具可以自带安全声明
+ * （`annotations.readOnlyHint` / `destructiveHint`），有的话就该用上：
+ * 一个声明只读的「查天气」，跟「删数据库」不该一样每次都点确认。
+ *
+ * 判定顺序：
+ *   1. 用户手动勾了「需要审批」→ 审批
+ *   2. 声明只读且没声明破坏性 → 免审批
+ *   3. 其余按老规矩（`requiresApproval` 对 `mcp__*` 返回 true）
+ *
+ * 声明缺失（null）一律按「需要审批」处理——读不到不等于安全。
+ */
+fun MCP_ToolApproval_Decide(
+    tool: me.rerere.rikkahub.data.ai.mcp.McpTool,
+    mcpToolName: String,
+): Boolean {
+    if (tool.needsApproval) return true
+    if (tool.readOnlyHint == true && tool.destructiveHint != true) return false
+    return ToolApprovalDefaults.requiresApproval(mcpToolName)
+}

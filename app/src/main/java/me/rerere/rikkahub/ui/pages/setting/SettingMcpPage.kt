@@ -84,6 +84,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.InputSchema
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Search01
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.AlertCircle
 import me.rerere.hugeicons.stroke.ArrowDown01
@@ -152,6 +153,18 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                     BackButton()
                 },
                 actions = {
+                    // 一键添加 jadx MCP。
+                    // 用户装了工具链之后还得手动去填 URL，一步没对上就连不上；
+                    // 这个按钮把 name 和 URL 都预填好，只需要起服务。
+                    IconButton(
+                        onClick = {
+                            creationState.open(
+                                me.rerere.rikkahub.data.ai.mcp.buildJadxMcpConfig()
+                            )
+                        }
+                    ) {
+                        Icon(HugeIcons.Search01, "添加 jadx MCP")
+                    }
                     IconButton(
                         onClick = {
                             showImportDialog = true

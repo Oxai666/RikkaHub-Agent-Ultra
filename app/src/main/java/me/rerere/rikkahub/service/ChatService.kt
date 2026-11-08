@@ -1563,7 +1563,7 @@ class ChatService(
                     parameters = { mcpTool.inputSchema },
                     needsApproval = {
                         me.rerere.rikkahub.data.ai.tools
-                            .ToolApprovalDefaults.requiresApproval(mcpToolName) || mcpTool.needsApproval
+                            .MCP_ToolApproval_Decide(mcpTool, mcpToolName)
                     },
                     execute = { mcpManager.callTool(serverId, mcpTool.name, it.jsonObject) },
                 )
@@ -1885,8 +1885,7 @@ class ChatService(
                                 // patterns (rm -rf /, mkfs, shutdown, encoded payloads).
                                 needsApproval = {
                                     me.rerere.rikkahub.data.ai.tools
-                                        .ToolApprovalDefaults.requiresApproval(mcpToolName) ||
-                                        tool.needsApproval
+                                        .MCP_ToolApproval_Decide(tool, mcpToolName)
                                 },
                                 execute = {
                                     mcpManager.callTool(serverId, tool.name, it.jsonObject)

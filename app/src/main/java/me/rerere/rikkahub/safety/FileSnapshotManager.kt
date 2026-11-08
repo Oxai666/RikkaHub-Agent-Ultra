@@ -89,9 +89,16 @@ object FileSnapshotManager {
         var totalBytes = 0L
         var captured = 0
         val entries = mutableListOf<Entry>()
+        // 同一个路径在一次操作里出现两次时只备份第一次。
+        // 之前的 copyTo(overwrite = true) 会让后一次覆盖前一次的副本，
+        // 回滚拿到的是「第二次」的状态，不是操作前的状态。
+        // 这就是原实现里 SnapshotConflictPolicy 要处理的情况，
+        // 这里选了固定的「先到先得」——比隐式覆盖清楚。
+        val seen = mutableSetOf<String>()
 
         for (target in plan.targets) {
             val path = target.path
+            if (!seen.add(path)) continue
             val file = File(path)
 
             // 目录不备份：递归复制一整棵树代价太大，而且删除目录时

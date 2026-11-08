@@ -56,7 +56,17 @@ data class McpTool(
     val name: String = "",
     val description: String? = null,
     val inputSchema: InputSchema? = null,
-    val needsApproval: Boolean = false
+    val needsApproval: Boolean = false,
+    /**
+     * MCP 协议里工具可以声明自己是只读的（`annotations.readOnlyHint`）。
+     *
+     * 有这个标记且不是 destructive 时免审批——不然一个「查天气」的
+     * MCP 工具跟「删数据库」一样每次都要点确认。
+     *
+     * 默认 null（未知），未知按需要审批处理。
+     */
+    val readOnlyHint: Boolean? = null,
+    val destructiveHint: Boolean? = null,
 )
 
 @Serializable
@@ -100,3 +110,21 @@ val McpServerConfig.serverUrl: String
         is McpServerConfig.SseTransportServer -> url
         is McpServerConfig.StreamableHTTPServer -> url
     }
+
+/**
+ * jadx-headless-mcp 的预置配置。
+ *
+ * 用户装了工具链之后还要手动去 MCP 页填 URL，一步都不能少才用得上。
+ * 这个工厂让「添加 jadx」变成点一下的事。
+ *
+ * 端口 8123 跟 re-toolchain / mcp-jadx 技能里的一致；
+ * 类型必须是 Streamable HTTP，jadx-mcp 的 `--transport http`
+ * 实现的是单端点协议，选 SSE 连不上。
+ */
+fun buildJadxMcpConfig(
+    name: String = "jadx",
+    port: Int = 8123,
+): McpServerConfig.StreamableHTTPServer = McpServerConfig.StreamableHTTPServer(
+    commonOptions = McpCommonOptions(name = name),
+    url = "http://127.0.0.1:$port/mcp",
+)
