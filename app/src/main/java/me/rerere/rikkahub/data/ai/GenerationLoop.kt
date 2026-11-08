@@ -831,7 +831,13 @@ class GenerationLoop(
                         if (safetyVerdict.snapshotPlan.required) {
                             withContext(Dispatchers.IO) {
                                 me.rerere.rikkahub.safety.FileSnapshotManager.capture(
-                                    context = context,
+                                    // 快照放工作区里（/workspace/.snapshots/），
+                                    // 这样 AI 的沙箱 shell 和用户的文件管理器都看得到。
+                                    // 放 App 私有目录的话两头都是瞎的。
+                                    root = me.rerere.rikkahub.safety.SnapshotRoots.of(
+                                        context = context,
+                                        workspaceId = assistant.workspaceId?.toString(),
+                                    ),
                                     plan = safetyVerdict.snapshotPlan,
                                     toolName = tool.toolName,
                                 )

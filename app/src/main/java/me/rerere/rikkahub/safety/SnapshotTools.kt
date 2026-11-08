@@ -21,12 +21,12 @@ import me.rerere.ai.ui.UIMessagePart
  * 有了工具之后，跟模型说一句「列一下最近的快照」就能确认，
  * 而且真删错了也能让它恢复。
  */
-fun createSnapshotTools(context: Context): List<Tool> = listOf(
-    snapshotListTool(context),
-    snapshotRestoreTool(context),
+fun createSnapshotTools(context: Context, workspaceId: String?): List<Tool> = listOf(
+    snapshotListTool(context, workspaceId),
+    snapshotRestoreTool(context, workspaceId),
 )
 
-private fun snapshotListTool(context: Context): Tool = Tool(
+private fun snapshotListTool(context: Context, workspaceId: String?): Tool = Tool(
     name = "snapshot_list",
     description = """
         List file snapshots taken before irreversible operations. Use this to verify
@@ -37,7 +37,8 @@ private fun snapshotListTool(context: Context): Tool = Tool(
     """.trimIndent().replace("\n", " "),
     parameters = { InputSchema.Obj(properties = buildJsonObject { }, required = emptyList()) },
     execute = { _ ->
-        val records = FileSnapshotManager.list(context)
+        val root = SnapshotRoots.of(context, workspaceId)
+        val records = FileSnapshotManager.list(root)
         val payload = buildJsonObject {
             put("ok", true)
             put("count", records.size)
@@ -61,7 +62,8 @@ private fun snapshotListTool(context: Context): Tool = Tool(
                 put(
                     "note",
                     "还没有任何快照。快照只在「不可逆操作」通过审批时才会拍——" +
-                        "普通的写文件不触发。"
+                        "普通的写文件不触发。快照目录在 /workspace/.snapshots/，" +
+                        "也可以用 workspace_shell 直接 ls 它。"
                 )
             }
         }
@@ -69,7 +71,7 @@ private fun snapshotListTool(context: Context): Tool = Tool(
     },
 )
 
-private fun snapshotRestoreTool(context: Context): Tool = Tool(
+private fun snapshotRestoreTool(context: Context, workspaceId: String?): Tool = Tool(
     name = "snapshot_restore",
     description = """
         Restore files from a snapshot. Files that existed when the snapshot was taken are
@@ -98,7 +100,8 @@ private fun snapshotRestoreTool(context: Context): Tool = Tool(
                 )
             )
         }
-        val record = FileSnapshotManager.recordById(context, id)
+        val root = SnapshotRoots.of(context, workspaceId)
+        val record = FileSnapshotManager.recordById(root, id)
             ?: return@Tool listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
@@ -108,7 +111,7 @@ private fun snapshotRestoreTool(context: Context): Tool = Tool(
                     }.toString()
                 )
             )
-        val result = FileSnapshotManager.restore(context, record)
+        val result = FileSnapshotManager.restore(root, record)
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {

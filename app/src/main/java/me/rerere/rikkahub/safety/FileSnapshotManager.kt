@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.safety
 
-import android.content.Context
 import android.util.Log
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -62,8 +61,13 @@ object FileSnapshotManager {
         val ok: Boolean get() = failed.isEmpty()
     }
 
-    fun rootDir(context: Context): File =
-        File(context.filesDir, DIR_NAME).apply { if (!exists()) mkdirs() }
+    /**
+     * 快照根目录。
+     *
+     * 由调用方传进来（见 [SnapshotRoots.of]），因为根目录跟工作区绑定——
+     * 放 App 私有目录的话，AI 的沙箱 shell 和文件管理器都看不到。
+     */
+    fun rootDir(root: File): File = root.apply { if (!exists()) mkdirs() }
 
     /**
      * 按计划拍快照。
@@ -72,14 +76,14 @@ object FileSnapshotManager {
      * 当成拒绝执行的理由，而不是「备份失败但继续跑」。
      */
     fun capture(
-        context: Context,
+        root: File,
         plan: SnapshotPlan,
         toolName: String,
     ): Record? {
         if (plan.scope == SnapshotScope.NONE || plan.targets.isEmpty()) return null
 
         val id = System.currentTimeMillis().toString()
-        val snapshotDir = File(rootDir(context), id)
+        val snapshotDir = File(rootDir(root), id)
         val filesDir = File(snapshotDir, "files")
         if (!filesDir.mkdirs()) {
             Log.w(TAG, "capture: cannot create $filesDir")
@@ -177,7 +181,7 @@ object FileSnapshotManager {
             return null
         }
 
-        prune(context)
+        prune(root)
         return record
     }
 
@@ -188,8 +192,8 @@ object FileSnapshotManager {
      *  - 当时**有**这个文件 → 复制回去，覆盖现在的版本
      *  - 当时**没有**这个文件 → 把现在存在的删掉，回到「那时候还没有」的状态
      */
-    fun restore(context: Context, record: Record): RestoreResult {
-        val snapshotDir = File(rootDir(context), record.id)
+    fun restore(root: File, record: Record): RestoreResult {
+        val snapshotDir = File(rootDir(root), record.id)
         var restored = 0
         var deleted = 0
         val failed = mutableListOf<String>()
@@ -223,9 +227,9 @@ object FileSnapshotManager {
         return RestoreResult(restored = restored, deleted = deleted, failed = failed)
     }
 
-    fun list(context: Context): List<Record> {
-        val root = rootDir(context)
-        return root.listFiles().orEmpty()
+    fun list(root: File): List<Record> {
+        val dir = rootDir(root)
+        return dir.listFiles().orEmpty()
             .filter { it.isDirectory }
             .mapNotNull { dir ->
                 val manifest = File(dir, MANIFEST_NAME)
@@ -237,27 +241,27 @@ object FileSnapshotManager {
             .sortedByDescending { it.createdAtMs }
     }
 
-    fun recordById(context: Context, id: String): Record? =
-        list(context).firstOrNull { it.id == id }
+    fun recordById(root: File, id: String): Record? =
+        list(root).firstOrNull { it.id == id }
 
     /** 只保留最近 [keep] 份，其余删掉。 */
-    fun prune(context: Context, keep: Int = MAX_SNAPSHOTS) {
-        val all = list(context)
+    fun prune(root: File, keep: Int = MAX_SNAPSHOTS) {
+        val all = list(root)
         if (all.size <= keep) return
-        val root = rootDir(context)
+        val dir = rootDir(root)
         all.drop(keep).forEach { record ->
-            runCatching { File(root, record.id).deleteRecursively() }
+            runCatching { File(dir, record.id).deleteRecursively() }
         }
     }
 
     /** 删掉某一份快照（回滚成功后调用）。 */
-    fun discard(context: Context, record: Record) {
-        runCatching { File(rootDir(context), record.id).deleteRecursively() }
+    fun discard(root: File, record: Record) {
+        runCatching { File(rootDir(root), record.id).deleteRecursively() }
     }
 
     /** 清空全部。设置页里给它一个入口。 */
-    fun clearAll(context: Context) {
-        runCatching { rootDir(context).deleteRecursively() }
-        rootDir(context)
+    fun clearAll(root: File) {
+        runCatching { rootDir(root).deleteRecursively() }
+        rootDir(root)
     }
 }

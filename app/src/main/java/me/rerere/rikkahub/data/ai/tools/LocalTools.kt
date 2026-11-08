@@ -1152,9 +1152,17 @@ class LocalTools(
         tools.addAll(me.rerere.rikkahub.data.goal.goalTools(planningKey))
 
         // 快照查看与恢复。
-        // 快照存在 App 私有目录，用户从文件管理器看不到，
-        // 没有这两个工具就没法验证「到底备份没」。
-        tools.addAll(me.rerere.rikkahub.safety.createSnapshotTools(context))
+        // 快照放工作区里（/workspace/.snapshots/），AI 用 workspace_shell 能看到，
+        // 用户也能在「文件」页看到。所以这里要把 workspaceId 传给工具，
+        // 让它们算对快照根目录。
+        val snapshotWorkspaceId = runCatching {
+            settingsStore.settingsFlow.value.assistants
+                .firstOrNull { it.id.toString() == invocationContext.callerAssistantId }
+                ?.workspaceId?.toString()
+        }.getOrNull()
+        tools.addAll(
+            me.rerere.rikkahub.safety.createSnapshotTools(context, snapshotWorkspaceId)
+        )
 
         // ── 技能创作：同样常驻 ──
         // 但只有「列出来」是常驻的——模型得先能看见有哪些技能和分类。
