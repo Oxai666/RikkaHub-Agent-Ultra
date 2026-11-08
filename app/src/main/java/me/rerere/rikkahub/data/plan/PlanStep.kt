@@ -39,6 +39,7 @@ data class PlanStep(
 )
 
 /** 一次 `update_plan` 的结果快照。 */
+@Serializable
 data class PlanSnapshot(
     val steps: List<PlanStep> = emptyList(),
     val explanation: String? = null,

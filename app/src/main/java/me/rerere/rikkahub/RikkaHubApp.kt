@@ -79,6 +79,19 @@ class RikkaHubApp : Application() {
             Toast.makeText(this, "备份恢复失败，已保留原数据。请重新导入备份。", Toast.LENGTH_LONG).show()
         }
 
+        // 目标和计划要在这里读回来：它们的存储是 JSON 文件，
+        // 晚于第一次 gen 就读不到上次的目标了。放在备份恢复之后，
+        // 免得刚恢复完的旧数据被内存里的空集合覆盖。
+        runCatching {
+            me.rerere.rikkahub.data.goal.GoalStore.init(this)
+            me.rerere.rikkahub.data.plan.PlanStore.init(this)
+            // 上次进程被杀时卡在 in_progress 的步骤退回 pending，
+            // 否则界面会一直显示「第 3 步执行中」而实际上没人在跑
+            me.rerere.rikkahub.data.plan.PlanStore.resetAllInProgress()
+        }.onFailure {
+            Log.w(TAG, "goal/plan store init failed", it)
+        }
+
         // :ai (and other sub-:app modules) have no BuildConfig of their own, so this is
         // how their provider code learns whether it's running a debug build — needed to
         // gate full request/response body logging the same way HttpLoggingInterceptor
