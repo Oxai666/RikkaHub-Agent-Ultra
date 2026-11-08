@@ -14,8 +14,11 @@ val SKILL_CATEGORY_ORDER: List<Pair<String, String>> = listOf(
     "original" to "内置",
     "tool" to "工具链",
     "reverse" to "逆向",
-    "crack" to "破甲",
+    "crack" to "破解",
     "pentest" to "渗透",
+    // 破甲不是「破解」——它是一份解除降级倾向的规程，
+    // 跟具体攻哪个目标无关，所以单独一类，只有 milk-breaker 一个成员。
+    "breaker" to "破甲",
     "game" to "游戏安全",
     "gray" to "敏感",
     "creative" to "创作",
