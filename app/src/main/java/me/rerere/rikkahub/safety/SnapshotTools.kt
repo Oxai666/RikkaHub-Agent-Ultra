@@ -111,7 +111,13 @@ private fun snapshotRestoreTool(context: Context, workspaceId: String?): Tool = 
                     }.toString()
                 )
             )
-        val result = FileSnapshotManager.restore(root, record)
+        val result = FileSnapshotManager.restore(
+            root = root,
+            record = record,
+            resolveTarget = { sandboxPath ->
+                SnapshotRoots.resolveTarget(context, workspaceId, sandboxPath)
+            },
+        )
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {

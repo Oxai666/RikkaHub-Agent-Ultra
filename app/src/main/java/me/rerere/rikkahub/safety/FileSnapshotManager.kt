@@ -79,6 +79,14 @@ object FileSnapshotManager {
         root: File,
         plan: SnapshotPlan,
         toolName: String,
+        /**
+         * 把计划里的**沙箱路径**翻译成 App 进程能访问的路径。
+         *
+         * 默认原样返回，那是给「路径本来就是 App 侧」的场景用的。
+         * 从 shell 命令分析出来的目标全是沙箱视角的 `/workspace/...`，
+         * 必须由调用方传映射函数，否则一个文件都找不到、一个都备份不上。
+         */
+        resolveTarget: (String) -> File = { File(it) },
     ): Record? {
         if (plan.scope == SnapshotScope.NONE || plan.targets.isEmpty()) return null
 
@@ -103,7 +111,7 @@ object FileSnapshotManager {
         for (target in plan.targets) {
             val path = target.path
             if (!seen.add(path)) continue
-            val file = File(path)
+            val file = resolveTarget(path)
 
             // 目录不备份：递归复制一整棵树代价太大，而且删除目录时
             // 真正有价值的是里面的文件，调用方应该把文件列出来而不是给目录。
@@ -192,14 +200,19 @@ object FileSnapshotManager {
      *  - 当时**有**这个文件 → 复制回去，覆盖现在的版本
      *  - 当时**没有**这个文件 → 把现在存在的删掉，回到「那时候还没有」的状态
      */
-    fun restore(root: File, record: Record): RestoreResult {
+    fun restore(
+        root: File,
+        record: Record,
+        /** 跟 [capture] 的同一个映射，恢复时也要用它把沙箱路径翻回 App 路径。 */
+        resolveTarget: (String) -> File = { File(it) },
+    ): RestoreResult {
         val snapshotDir = File(rootDir(root), record.id)
         var restored = 0
         var deleted = 0
         val failed = mutableListOf<String>()
 
         for (entry in record.entries) {
-            val target = File(entry.originalPath)
+            val target = resolveTarget(entry.originalPath)
             if (!entry.existed) {
                 // 拍的时候没有，现在有 → 删掉
                 if (target.exists() && target.isFile) {

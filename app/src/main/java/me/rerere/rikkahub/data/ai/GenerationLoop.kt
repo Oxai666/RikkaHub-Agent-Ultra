@@ -840,6 +840,16 @@ class GenerationLoop(
                                     ),
                                     plan = safetyVerdict.snapshotPlan,
                                     toolName = tool.toolName,
+                                    // 目标路径是**沙箱视角**的 /workspace/...，
+                                    // 拍快照的代码跑在 App 进程里，必须翻译成
+                                    // filesDir/workspaces/<id>/files/... 才找得到文件
+                                    resolveTarget = { sandboxPath ->
+                                        me.rerere.rikkahub.safety.SnapshotRoots.resolveTarget(
+                                            context = context,
+                                            workspaceId = assistant.workspaceId?.toString(),
+                                            sandboxPath = sandboxPath,
+                                        )
+                                    },
                                 )
                             }
                         } else {

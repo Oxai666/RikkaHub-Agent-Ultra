@@ -279,6 +279,15 @@ object ShellCommandRiskAnalyzer {
             }
         }
 
+        // 输出重定向是写操作，不管前面那个命令本身是不是只读。
+        // `echo x > file` 会覆盖文件内容，但 echo 在只读名单里——
+        // 不单独判的话这类命令会一路 A 档过去，既不审批也不备份。
+        val hasRedirect = args.any { it == ">" || it == ">>" }
+        if (hasRedirect && tier == RiskTier.A_READ) {
+            tier = RiskTier.B_REVERSIBLE
+            reasons += "命令带输出重定向，会写入文件"
+        }
+
         val targets = extractTargets(name, args)
         // 只有写操作才关心目标在不在工作区外
         if (tier != RiskTier.A_READ && targets.any { isOutside(it, workspaceRoot) }) {

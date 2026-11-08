@@ -39,4 +39,36 @@ object SnapshotRoots {
         if (!dir.exists()) dir.mkdirs()
         return dir
     }
+
+    /** 沙箱里 `/workspace` 对应的 App 侧真实目录。 */
+    fun workspaceFilesRoot(context: Context, workspaceId: String?): File? {
+        if (workspaceId.isNullOrBlank()) return null
+        return File(context.filesDir, "workspaces/$workspaceId/files")
+    }
+
+    /**
+     * 把**沙箱路径**翻译成 **App 进程能访问的路径**。
+     *
+     * 为什么必须有这个：安全层分析 shell 命令时拿到的目标是沙箱视角的
+     * `/workspace/test.txt`，而拍快照的代码跑在 App 进程里——
+     * `File("/workspace/test.txt")` 在 App 这边是 Android 根目录下，
+     * 根本不存在。不做映射的话每个文件都会被判成 existed=false，
+     * 一个都备份不上。
+     *
+     * 沙箱里 `/workspace` 之外的东西（`/etc`、`/opt`）App 进程访问不到，
+     * 原样返回——后面 exists 检查会把它当成「不存在」，也就不会误备份。
+     */
+    fun resolveTarget(
+        context: Context,
+        workspaceId: String?,
+        sandboxPath: String,
+    ): File {
+        val filesRoot = workspaceFilesRoot(context, workspaceId) ?: return File(sandboxPath)
+        return when {
+            sandboxPath == "/workspace" -> filesRoot
+            sandboxPath.startsWith("/workspace/") ->
+                File(filesRoot, sandboxPath.removePrefix("/workspace/"))
+            else -> File(sandboxPath)
+        }
+    }
 }
