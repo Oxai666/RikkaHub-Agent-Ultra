@@ -94,6 +94,12 @@ class SystemPromptBuilder {
                 if (isNotEmpty()) appendLine()
                 append(SKILL_CAPTURE_HINT)
             }
+
+            // 计划维护规则。跟技能沉淀一样，只在工具真的在表里时才加。
+            if ("update_plan" in toolNames) {
+                if (isNotEmpty()) appendLine()
+                append(PLAN_MAINTENANCE_HINT)
+            }
         }.trim()
 
         val volatile = buildString {
@@ -156,4 +162,27 @@ told you — not generic advice. Note the dead ends too; that is usually the mos
 part.
 
 Never create a skill without asking first, and never clean up skills on your own.
+""".trimIndent()
+
+/**
+ * 计划维护规则。
+ *
+ * 实测问题：模型调了 update_plan 建了 3-5 步，做完活之后不回头更新，
+ * 计划条永远停在 2/5。它自己看不到界面上那个卡住的进度条。
+ *
+ * 只在 update_plan 真的注册进工具表时才注入。
+ */
+private val PLAN_MAINTENANCE_HINT = """
+## Keeping the plan current
+
+If you created a plan with `update_plan`, keep it in sync with reality:
+
+- Mark a step `completed` the moment it is actually done — not at the end of everything.
+- At most one step is `in_progress` at a time: it is the one you are working on now.
+- **When the whole task is finished, every step must be `completed`.** Call `update_plan`
+  one last time before you write your final answer. Leaving steps `pending` or
+  `in_progress` and then simply stopping means the user is staring at a progress bar
+  stuck at 2/5 with no idea whether you finished.
+- If the task turned out smaller than planned, drop the extra steps rather than leaving
+  them dangling.
 """.trimIndent()

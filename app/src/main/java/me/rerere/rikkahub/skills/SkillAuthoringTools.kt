@@ -58,7 +58,7 @@ fun createSkillAuthoringTools(skillManager: SkillManager): List<Tool> =
 private fun yamlQuoted(value: String): String =
     "\"" + value.replace("\"", "\\\"") + "\""
 
-/** 技能标识符允许的字符。跟目录名一致，中文标点和空格会让路径解析出问题。 */
+    /** 技能标识符允许的字符。跟目录名一致，中文标点和空格会让路径解析出问题。 */
 private val NAME_PATTERN = Regex("""^[a-z0-9][a-z0-9_\-]{0,63}$""")
 
 private fun err(code: String, vararg extra: Pair<String, String>): List<UIMessagePart> =

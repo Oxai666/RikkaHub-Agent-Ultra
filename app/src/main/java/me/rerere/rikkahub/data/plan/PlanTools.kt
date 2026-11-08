@@ -101,6 +101,7 @@ fun updatePlanTool(key: String): Tool = Tool(
                         updatedAtMs = System.currentTimeMillis(),
                     ),
                 )
+                val incomplete = parsed.steps.count { it.status != PlanStepStatus.COMPLETED }
                 listOf(
                     UIMessagePart.Text(
                         buildJsonObject {
@@ -111,6 +112,17 @@ fun updatePlanTool(key: String): Tool = Tool(
                                 "in_progress",
                                 parsed.steps.firstOrNull { it.status == PlanStepStatus.IN_PROGRESS }?.step ?: ""
                             )
+                            // 还有没做完的步骤时明确提一句。
+                            // 实测里模型经常做完活就停，计划停在 2/5 不动——
+                            // 它不知道用户看到的是个卡住的进度条。
+                            if (incomplete > 0) {
+                                put(
+                                    "note",
+                                    "还有 $incomplete 步没完成。全部做完时记得再调一次 update_plan，" +
+                                        "把所有步骤标成 completed；做到哪一步就把那一步标 completed，" +
+                                        "下一步标 in_progress。"
+                                )
+                            }
                         }.toString()
                     )
                 )

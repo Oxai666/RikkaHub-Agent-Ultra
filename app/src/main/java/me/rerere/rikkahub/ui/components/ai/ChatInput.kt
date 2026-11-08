@@ -584,7 +584,16 @@ private fun TextInputRow(
                 },
             shape = MaterialTheme.shapes.largeIncreased,
             placeholder = {
-                Text(stringResource(R.string.chat_input_placeholder))
+                // Plan 模式换文案：这时候发出去的不是聊天内容，是让模型生成计划
+                Text(
+                    stringResource(
+                        if (assistant.collaborationMode == "plan") {
+                            R.string.chat_input_placeholder_plan
+                        } else {
+                            R.string.chat_input_placeholder
+                        }
+                    )
+                )
             },
             lineLimits = TextFieldLineLimits.MultiLine(maxHeightInLines = 5),
             keyboardOptions = KeyboardOptions(
@@ -853,7 +862,15 @@ private fun FullScreenEditor(
                             .contentReceiver(receiveContentListener),
                         shape = RoundedCornerShape(32.dp),
                         placeholder = {
-                            Text(stringResource(R.string.chat_input_placeholder))
+                            Text(
+                                stringResource(
+                                    if (assistant.collaborationMode == "plan") {
+                                        R.string.chat_input_placeholder_plan
+                                    } else {
+                                        R.string.chat_input_placeholder
+                                    }
+                                )
+                            )
                         },
                         keyboardOptions = KeyboardOptions(
                             capitalization = KeyboardCapitalization.Sentences,

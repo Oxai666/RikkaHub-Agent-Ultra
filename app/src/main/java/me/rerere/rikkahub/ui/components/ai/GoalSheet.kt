@@ -85,7 +85,7 @@ fun GoalSheet(
                     onValueChange = { draft = it },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("要达成什么") },
-                    placeholder = { Text("例如：把项目里的所有旧 API 迁移到新接口") },
+                    placeholder = { Text("描述你的目标，定义可衡量的效果，以获得最佳效果") },
                     minLines = 3,
                 )
                 Row(

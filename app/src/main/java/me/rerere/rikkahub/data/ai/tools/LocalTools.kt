@@ -1151,6 +1151,11 @@ class LocalTools(
         tools.addAll(me.rerere.rikkahub.data.plan.planTools(planningKey))
         tools.addAll(me.rerere.rikkahub.data.goal.goalTools(planningKey))
 
+        // 快照查看与恢复。
+        // 快照存在 App 私有目录，用户从文件管理器看不到，
+        // 没有这两个工具就没法验证「到底备份没」。
+        tools.addAll(me.rerere.rikkahub.safety.createSnapshotTools(context))
+
         // ── 技能创作：同样常驻 ──
         // 但只有「列出来」是常驻的——模型得先能看见有哪些技能和分类。
         // 创建/修改/删除会改磁盘，挂在 SkillAuthoring 开关下面，

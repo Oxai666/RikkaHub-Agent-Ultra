@@ -192,6 +192,7 @@ object ToolApprovalDefaults {
 
         // AI 自己写技能：改磁盘、能覆盖已有内容，跟导入同级。
         // 删除尤其危险——模型自作主张清理会直接丢用户做好的东西。
+        "snapshot_restore",   // 覆盖现有文件，等同于一次批量写入
         "skill_create",
         "skill_update",
         "skill_delete",
