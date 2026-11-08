@@ -291,6 +291,7 @@ fun SkillsPage() {
                     .distinct()
                     .sorted()
             },
+            existingNames = remember(skills) { skills.map { it.name }.toSet() },
             onConfirm = { name, content, title, category ->
                 vm.saveSkill(name, content) { ok ->
                     if (ok && (title.isNotBlank() || category.isNotBlank())) {
@@ -608,6 +609,8 @@ private fun SkillCard(
 private fun AddSkillDialog(
     onDismiss: () -> Unit,
     knownCategories: List<String> = emptyList(),
+    /** 已存在的技能标识符。同名会直接覆盖磁盘上的旧技能，所以得挡一下。 */
+    existingNames: Set<String> = emptySet(),
     onConfirm: (name: String, content: String, title: String, category: String) -> Unit,
 ) {
     var content by rememberSaveable { mutableStateOf("") }
@@ -618,6 +621,7 @@ private fun AddSkillDialog(
         SkillFrontmatterParser.parse(content)["name"]?.trim() ?: ""
     }
     val nameError = content.isNotBlank() && name.isBlank()
+    val duplicated = name.isNotBlank() && name in existingNames
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -638,14 +642,23 @@ private fun AddSkillDialog(
                         )
                     },
                     supportingText = {
-                        if (nameError) Text(
-                            stringResource(R.string.skills_page_name_error),
-                            color = MaterialTheme.colorScheme.error
-                        )
-                        else if (name.isNotBlank()) Text(stringResource(R.string.skills_page_skill_name, name))
-                        else Text(stringResource(R.string.skills_page_paste_hint))
+                        when {
+                            nameError -> Text(
+                                stringResource(R.string.skills_page_name_error),
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            // 同名会直接覆盖磁盘上的旧技能，必须挡住——
+                            // 用户在新分类里建第二个技能时，如果 SKILL.md 的 name
+                            // 跟已有的重复，第一个就被冲掉了。
+                            duplicated -> Text(
+                                "已经有一个叫 `$name` 的技能了，换个 name 再保存",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            name.isNotBlank() -> Text(stringResource(R.string.skills_page_skill_name, name))
+                            else -> Text(stringResource(R.string.skills_page_paste_hint))
+                        }
                     },
-                    isError = nameError,
+                    isError = nameError || duplicated,
                     minLines = 6,
                     maxLines = 12,
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
@@ -693,7 +706,7 @@ private fun AddSkillDialog(
         confirmButton = {
             TextButton(
                 onClick = { onConfirm(name, content, title, category) },
-                enabled = name.isNotBlank() && !nameError,
+                enabled = name.isNotBlank() && !nameError && !duplicated,
             ) {
                 Text(stringResource(R.string.skills_page_save))
             }

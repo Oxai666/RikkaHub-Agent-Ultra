@@ -68,6 +68,13 @@ class SkillsVM(
 
     fun saveSkill(name: String, content: String, onResult: (Boolean) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
+            // 二次校验重名。UI 层虽然拦了，但那个判断基于可能过期的列表——
+            // 刚建完一个技能、列表还没刷新时再建同名的，会静默覆盖掉旧的。
+            // 这里是最后一道闸：名字已存在就不写。
+            if (skillManager.listSkills().any { it.name == name }) {
+                withContext(Dispatchers.Main) { onResult(false) }
+                return@launch
+            }
             val result = skillManager.saveSkill(name, content)
             _skills.value = skillManager.listSkills()
             withContext(Dispatchers.Main) {

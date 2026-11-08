@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,6 +37,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -109,7 +111,7 @@ fun SkillDetailPage(skillName: String) {
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<SkillFile?>(null) }
     var showTester by rememberSaveable { mutableStateOf(false) }
-    var showMetaEditor by rememberSaveable { mutableStateOf(false) }
+    var showMetaEditor by remember { mutableStateOf(false) }
     val deleteFailedMsg = stringResource(R.string.skill_detail_page_delete_failed)
 
     val scrollState = rememberScrollState()
@@ -225,7 +227,6 @@ fun SkillDetailPage(skillName: String) {
         Text(stringResource(R.string.skill_detail_page_delete_confirm, deleteTarget?.relativePath ?: ""))
     }
 
-    if (showTester) {
     if (showMetaEditor) {
         SkillMetaEditorDialog(
             initialTitle = meta?.title.orEmpty(),
@@ -244,6 +245,7 @@ fun SkillDetailPage(skillName: String) {
         )
     }
 
+    if (showTester) {
         SkillTesterSheet(
             skillName = skillName,
             onDismiss = { showTester = false },
@@ -251,12 +253,12 @@ fun SkillDetailPage(skillName: String) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 /**
  * 详情页顶部的技能信息卡。
  *
  * 显示中文名、英文标识符、分类徽章和描述。点右侧铅笔能改名字和分类。
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SkillHeaderCard(
     meta: SkillMetadata?,
@@ -342,6 +344,22 @@ private fun SkillHeaderCard(
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+
+            // 卡片底部给一个带文字的编辑入口。
+            // 右上角那个铅笔图标太小太不起眼，用户反馈「点了没反应」——
+            // 不管是不是真的没反应，先给一个一眼能看见的按钮。
+            OutlinedButton(
+                onClick = onEdit,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(
+                    imageVector = Lucide.Pencil,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(modifier = Modifier.size(6.dp))
+                Text("编辑名称与分类", style = MaterialTheme.typography.labelLarge)
             }
         }
     }
