@@ -24,12 +24,29 @@ import me.rerere.rikkahub.data.files.SkillManager
  *  - 另外三个都改磁盘，全部进审批（见 ToolApprovalDefaults）
  *  - `skill_create` 不能覆盖同名技能，要覆盖得显式走 `skill_update`
  */
-fun createSkillAuthoringTools(skillManager: SkillManager): List<Tool> = listOf(
+/**
+ * 只读的技能列表。始终可用——模型得先能看见有哪些技能、有哪些分类，
+ * 才谈得上用或改。不需要用户先去设置里开开关。
+ */
+fun createSkillReadTools(skillManager: SkillManager): List<Tool> = listOf(
     skillListTool(skillManager),
+)
+
+/**
+ * 写技能：创建、修改、删除。
+ *
+ * 挂在 `LocalToolOption.SkillAuthoring` 开关下面——这些会改磁盘，
+ * 默认不开，用户明确要「让 AI 帮我沉淀技能」时才打开。
+ */
+fun createSkillWriteTools(skillManager: SkillManager): List<Tool> = listOf(
     skillCreateTool(skillManager),
     skillUpdateTool(skillManager),
     skillDeleteTool(skillManager),
 )
+
+/** 读 + 写一起给。调用方不方便分开时用这个。 */
+fun createSkillAuthoringTools(skillManager: SkillManager): List<Tool> =
+    createSkillReadTools(skillManager) + createSkillWriteTools(skillManager)
 
 
 /**

@@ -201,6 +201,15 @@ sealed class LocalToolOption {
      * （压缩会话1 / 2 / …），工具里对缺 index 的检索直接拒绝。
      */
     @Serializable @SerialName("history_search")  data object HistorySearch  : LocalToolOption()
+    /**
+     * skill_authoring：让 AI 自己写技能、改技能、删技能。
+     *
+     * 默认不开。开了之后模型可以在完成一个项目时提议「要不要存成技能」，
+     * 用户同意就写进本地技能库。三个写工具全部要审批。
+     *
+     * 只读的 `skill_list` 不受这个开关影响，始终可用。
+     */
+    @Serializable @SerialName("skill_authoring") data object SkillAuthoring : LocalToolOption()
     @Serializable @SerialName("telegram_bot")    data object TelegramBot    : LocalToolOption()
     @Serializable @SerialName("screen_automation") data object ScreenAutomation : LocalToolOption()
     /**
@@ -1143,9 +1152,13 @@ class LocalTools(
         tools.addAll(me.rerere.rikkahub.data.goal.goalTools(planningKey))
 
         // ── 技能创作：同样常驻 ──
-        // 做完一个逆向/渗透项目之后要让模型能把过程沉淀成技能，
-        // 所以这几个工具不能挂在「已启用技能」的开关下面。
-        tools.addAll(me.rerere.rikkahub.skills.createSkillAuthoringTools(skillManager))
+        // 但只有「列出来」是常驻的——模型得先能看见有哪些技能和分类。
+        // 创建/修改/删除会改磁盘，挂在 SkillAuthoring 开关下面，
+        // 默认不开，用户明确要「让 AI 帮我沉淀技能」时才打开。
+        tools.addAll(me.rerere.rikkahub.skills.createSkillReadTools(skillManager))
+        if (options.contains(LocalToolOption.SkillAuthoring)) {
+            tools.addAll(me.rerere.rikkahub.skills.createSkillWriteTools(skillManager))
+        }
 
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of

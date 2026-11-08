@@ -1169,6 +1169,20 @@ private fun AssistantLocalToolContent(
             )
             item(
                 headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_skill_authoring_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_skill_authoring_desc))
+                },
+                trailingContent = {
+                    PermissionedSwitch(
+                        checked = assistant.localTools.contains(LocalToolOption.SkillAuthoring),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.SkillAuthoring, it) },
+                    )
+                }
+            )
+            item(
+                headlineContent = {
                     Text(stringResource(R.string.assistant_page_local_tools_shizuku_title))
                 },
                 supportingContent = {

@@ -1972,6 +1972,9 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_virtual_screen_window_not_running">虚拟屏没在运行</string>
   <string name="setting_virtual_screen_mirror">镜像当前屏幕</string>
   <string name="setting_virtual_screen_mirror_desc">关掉时是一块独立的空屏；打开后显示你手机屏幕的内容（只读镜像）。</string>
+  <string name="assistant_page_local_tools_skill_authoring_title">让 AI 写技能</string>
+  <string name="assistant_page_local_tools_skill_authoring_desc">助手可以在完成任务后提议把过程存成技能。开着才有创建、修改、删除权限；只是查看技能列表不受这个开关影响。</string>
+  <string name="tool_name_skill_authoring">技能创作</string>
   <string name="tool_name_history_search">历史存档检索</string>
   <string name="tool_name_virtual_screen">虚拟屏幕</string>
   <string name="assistant_page_local_tools_history_search_title">历史存档检索</string>
