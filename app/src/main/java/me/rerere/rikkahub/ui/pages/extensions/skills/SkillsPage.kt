@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.extensions.skills
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -40,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,8 +54,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Globe
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.Search
 import com.composables.icons.lucide.X
 import me.rerere.rikkahub.R
 import me.rerere.hugeicons.HugeIcons
@@ -64,6 +70,8 @@ import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.data.files.groupSkillsByCategory
+import me.rerere.rikkahub.data.files.skillCategoryLabel
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.skills.CatalogEntry
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -86,6 +94,23 @@ fun SkillsPage() {
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
     var showCatalog by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<SkillMetadata?>(null) }
+
+    // 搜索 + 分组折叠。84 个技能平铺下来要滑很久才找得到。
+    var query by rememberSaveable { mutableStateOf("") }
+    val filtered = remember(skills, query) {
+        val q = query.trim()
+        if (q.isEmpty()) {
+            skills
+        } else {
+            skills.filter {
+                it.name.contains(q, ignoreCase = true) ||
+                    (it.title?.contains(q, ignoreCase = true) == true) ||
+                    it.description.contains(q, ignoreCase = true)
+            }
+        }
+    }
+    val grouped = remember(filtered) { groupSkillsByCategory(filtered) }
+    val expanded = remember { mutableStateMapOf<String, Boolean>() }
 
     Scaffold(
         topBar = {
@@ -162,16 +187,93 @@ fun SkillsPage() {
                 }
             }
 
-            items(skills, key = { it.skillDir.absolutePath }) { skill ->
-                SkillCard(
-                    skill = skill,
-                    onClick = { navController.navigate(Screen.SkillDetail(skill.name)) },
-                    onDelete = { deleteTarget = skill },
+            // 搜索：84 个技能靠滑找不到。中英文名和描述都匹配。
+            item(key = "search") {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text(stringResource(R.string.skills_page_search_hint)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Lucide.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                    trailingIcon = if (query.isNotBlank()) {
+                        {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(
+                                    imageVector = Lucide.X,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    } else null,
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.large,
+                    modifier = Modifier.fillMaxWidth(),
                 )
+            }
+
+            if (filtered.isEmpty() && query.isNotBlank()) {
+                item(key = "no-result") {
+                    Text(
+                        text = stringResource(R.string.skills_page_search_empty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+
+            grouped.forEach { (categoryKey, categorySkills) ->
+                item(key = "header-$categoryKey") {
+                    val open = expanded[categoryKey] == true || query.isNotBlank()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { expanded[categoryKey] = !open }
+                            .padding(top = 8.dp, bottom = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = if (open) Lucide.ChevronDown else Lucide.ChevronRight,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = skillCategoryLabel(categoryKey),
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = categorySkills.size.toString(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                if (expanded[categoryKey] == true || query.isNotBlank()) {
+                    items(categorySkills, key = { it.skillDir.absolutePath }) { skill ->
+                        SkillCard(
+                            skill = skill,
+                            onClick = { navController.navigate(Screen.SkillDetail(skill.name)) },
+                            onDelete = { deleteTarget = skill },
+                        )
+                    }
+                }
             }
         }
     }
-
     if (showAddDialog) {
         AddSkillDialog(
             onDismiss = { showAddDialog = false },

@@ -1135,6 +1135,8 @@
   <string name="skills_page_save_failed">Save failed, please check the Skill format</string>
   <string name="skills_page_skill_content_label">SKILL.md Content</string>
   <string name="skills_page_skill_name">Skill name: %s</string>
+  <string name="skills_page_search_hint">Search by name or description</string>
+  <string name="skills_page_search_empty">No matching skills</string>
   <string name="skills_page_title">Agent Skills</string>
   <string name="speech_page_title">Speech</string>
   <string name="speech_tab_asr">Speech Recognition</string>

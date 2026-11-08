@@ -1100,6 +1100,8 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="skills_page_save_failed">保存失败，请检查技能格式</string>
   <string name="skills_page_skill_content_label">SKILL.md内容</string>
   <string name="skills_page_skill_name">技能名称：%s</string>
+  <string name="skills_page_search_hint">搜索技能（中英文名或描述）</string>
+  <string name="skills_page_search_empty">没有匹配的技能</string>
   <string name="skills_page_title">代理技能</string>
   <string name="speech_page_title">语音</string>
   <string name="speech_tab_asr">语音识别</string>

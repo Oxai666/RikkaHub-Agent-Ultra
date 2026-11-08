@@ -33,6 +33,8 @@ import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Link01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.SkillMetadata
+import me.rerere.rikkahub.data.files.SKILL_CATEGORY_ORDER
+import me.rerere.rikkahub.data.files.skillCategoryLabel
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
@@ -114,26 +116,6 @@ fun LorebooksContent(
     }
 }
 
-/**
- * 技能分类的展示顺序与中文名。
- *
- * `original` 排最前：那是 RikkaHub 自带的，用户最熟悉；
- * 后面按「攻击面 → 防御 → 其他」递减排列，破甲/逆向/渗透这类
- * 靠前是因为装了这套技能的人多半是冲它们来的。
- */
-private val SKILL_CATEGORY_ORDER = listOf(
-    "original" to "内置",
-    // 工具链排在第二：装环境是所有逆向/渗透的第一步，
-    // 用户第一次打开列表最可能先找的就是它
-    "tool" to "工具链",
-    "reverse" to "逆向",
-    "crack" to "破甲",
-    "pentest" to "渗透",
-    "game" to "游戏安全",
-    "gray" to "敏感",
-    "creative" to "创作",
-    "other" to "其他",
-)
 
 @Composable
 fun SkillsContent(
@@ -174,7 +156,7 @@ fun SkillsContent(
             val items = grouped[key].orEmpty().sortedBy { it.name }
             if (items.isEmpty()) return@forEach
 
-            val label = SKILL_CATEGORY_ORDER.firstOrNull { it.first == key }?.second ?: key
+            val label = skillCategoryLabel(key)
             val enabledInGroup = items.count { enabledSkills.contains(it.name) }
             val isOpen = expanded[key] == true
 
