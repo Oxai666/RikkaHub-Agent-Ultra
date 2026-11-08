@@ -10,9 +10,15 @@ package me.rerere.rikkahub.safety
  *  - [B_REVERSIBLE]   能撤销的操作，出 dry-run 摘要 + 快照计划，再问用户
  *  - [C_IRREVERSIBLE] 不可撤销，默认拒绝；工作区外的目标一律落这一档
  */
+@kotlinx.serialization.Serializable
 enum class RiskTier {
+    @kotlinx.serialization.SerialName("read")
     A_READ,
+
+    @kotlinx.serialization.SerialName("reversible")
     B_REVERSIBLE,
+
+    @kotlinx.serialization.SerialName("irreversible")
     C_IRREVERSIBLE,
     ;
 

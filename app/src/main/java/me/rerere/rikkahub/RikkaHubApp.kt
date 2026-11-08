@@ -85,6 +85,7 @@ class RikkaHubApp : Application() {
         runCatching {
             me.rerere.rikkahub.data.goal.GoalStore.init(this)
             me.rerere.rikkahub.data.plan.PlanStore.init(this)
+            me.rerere.rikkahub.safety.OperationAudit.init(this)
             // 上次进程被杀时卡在 in_progress 的步骤退回 pending，
             // 否则界面会一直显示「第 3 步执行中」而实际上没人在跑
             me.rerere.rikkahub.data.plan.PlanStore.resetAllInProgress()

@@ -1,21 +1,34 @@
 package me.rerere.rikkahub.safety
 
+import android.content.Context
+import android.util.Log
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import java.io.File
 import java.util.concurrent.ConcurrentLinkedDeque
 
 /**
  * 操作审计。
  *
- * 每条记录写库前过 [AuditRedactor] 脱敏——密码、token、私钥、连接串
- * 这些一旦进了数据库就等于永久泄露，日志文件会被备份工具带走。
+ * 每条记录写盘前过 [AuditRedactor] 脱敏——密码、token、私钥、连接串
+ * 一旦进了文件就等于永久泄露，文件还会被备份工具带走。
  *
- * 这一版存在内存环形缓冲里（[MAX_RECORDS] 条封顶）：
- * 审计的主要用途是「刚才那几步到底干了什么」，不是长期归档。
- * 真要长期留痕，应该走 DB + 定期导出，那是另一个话题。
+ * 持久化用 JSON（`files/agent-state/operation-audit.json`），跟 Goal/Plan 一个思路。
+ * 环形缓冲保留最近 [MAX_RECORDS] 条：审计的用途是「刚才那几步到底干了什么」，
+ * 不是长期归档。真要长期留痕应该走定期导出，那是另一个话题。
  */
 object OperationAudit {
 
     const val MAX_RECORDS = 200
 
+    private const val TAG = "OperationAudit"
+    private const val DIR = "agent-state"
+    private const val FILE = "operation-audit.json"
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    @Serializable
     data class Record(
         val atMs: Long,
         val toolName: String,
@@ -27,14 +40,64 @@ object OperationAudit {
         val targetPaths: List<String> = emptyList(),
     )
 
+    @Serializable
     enum class Decision {
+        @SerialName("auto_allowed")
         AUTO_ALLOWED,
+
+        @SerialName("approved_by_user")
         APPROVED_BY_USER,
+
+        @SerialName("blocked")
         BLOCKED,
+
+        @SerialName("failed")
         FAILED,
     }
 
     private val records = ConcurrentLinkedDeque<Record>()
+
+    @Volatile
+    private var appContext: Context? = null
+
+    @Volatile
+    private var loaded = false
+
+    fun init(context: Context) {
+        if (loaded) return
+        appContext = context.applicationContext
+        load()
+        loaded = true
+    }
+
+    private fun storeFile(): File? {
+        val ctx = appContext ?: return null
+        val dir = File(ctx.filesDir, DIR)
+        if (!dir.exists() && !dir.mkdirs()) return null
+        return File(dir, FILE)
+    }
+
+    private fun load() {
+        val file = storeFile() ?: return
+        if (!file.isFile) return
+        runCatching {
+            val stored: List<Record> = json.decodeFromString(file.readText())
+            // 文件里是新增在前的顺序，反着加进 deque 保证顺序一致
+            stored.reversed().forEach { records.addFirst(it) }
+            while (records.size > MAX_RECORDS) records.pollLast()
+        }.onFailure {
+            Log.w(TAG, "load failed, starting empty", it)
+        }
+    }
+
+    private fun persist() {
+        val file = storeFile() ?: return
+        runCatching {
+            file.writeText(json.encodeToString(records.toList()))
+        }.onFailure {
+            Log.w(TAG, "persist failed", it)
+        }
+    }
 
     fun record(
         toolName: String,
@@ -58,11 +121,15 @@ object OperationAudit {
         while (records.size > MAX_RECORDS) {
             records.pollLast()
         }
+        persist()
     }
 
     fun recent(limit: Int = 50): List<Record> = records.take(limit)
 
-    fun clear() = records.clear()
+    fun clear() {
+        records.clear()
+        persist()
+    }
 }
 
 /**
