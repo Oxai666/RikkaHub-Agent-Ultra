@@ -593,6 +593,20 @@ class SettingsStore(
             // user who later disables one is not re-opted-in on the next launch. A brand-new
             // skill cannot have been deliberately disabled before it shipped, so the first add is
             // always safe.
+            //
+            // 现在 DEFAULT_AUTO_ENABLED_SKILLS 是空的（用户要求「默认一个都不勾」），
+            // 所以下面这段实际上不会再加任何东西。真正要做的是**反悔**：
+            // 老版本已经自动开了 autonomous-agent / openclaw-converter 的，
+            // 这里把它们从启用列表里摘掉一次。只摘这两个具名技能，
+            // 用户自己勾的别的技能一律不动。
+            val previouslyAutoEnabled = it.autoEnabledDefaultSkills
+            if (previouslyAutoEnabled.isNotEmpty()) {
+                assistants = assistants.map { assistant ->
+                    if (DEFAULT_ASSISTANTS.any { d -> d.id == assistant.id }) {
+                        assistant.copy(enabledSkills = assistant.enabledSkills - previouslyAutoEnabled)
+                    } else assistant
+                }.toMutableList()
+            }
             val skillsToSeed = DEFAULT_AUTO_ENABLED_SKILLS - it.autoEnabledDefaultSkills
             if (skillsToSeed.isNotEmpty()) {
                 assistants = assistants.map { assistant ->
@@ -1145,7 +1159,7 @@ internal val DEFAULT_ASSISTANT_ID = Uuid.parse("0950e2dc-9bd5-4801-afa3-aa887aa3
  * (loaded on demand). Both are seeded to disk by [SkillManager.seedDefaultSkillsIfNeeded] and
  * added to the default assistants' enabledSkills once via [Settings.autoEnabledDefaultSkills].
  */
-internal val DEFAULT_AUTO_ENABLED_SKILLS = setOf("autonomous-agent", "openclaw-converter")
+internal val DEFAULT_AUTO_ENABLED_SKILLS = emptySet<String>()
 
 internal val DEFAULT_ASSISTANTS = listOf(
     Assistant(

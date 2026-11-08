@@ -408,9 +408,17 @@ private fun SkillCard(
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
-                    text = skill.name,
+                    text = skill.title?.takeIf { it.isNotBlank() } ?: skill.name,
                     style = MaterialTheme.typography.titleSmallEmphasized,
                 )
+                // 中文名下面挂英文标识符，小字。排查问题时要对得上文件名。
+                if (!skill.title.isNullOrBlank() && skill.title != skill.name) {
+                    Text(
+                        text = skill.name,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                }
                 Text(
                     text = skill.description,
                     style = MaterialTheme.typography.bodySmall,
