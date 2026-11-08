@@ -289,6 +289,10 @@ object ToolApprovalDefaults {
         // 「so it asks every time」——那是假的，因为没有 NO_ALWAYS_ALLOW
         // 的限制，∞ 按钮照常出现。注释和实现对不上，这里按注释的意思修。
         "root_shell",
+        // Shizuku 走的是 shell UID，权限比 root 低一档，但「读别的 App 数据 /
+        // 改系统设置 / pm 装卸载」这几件事已经越过了工作区这个概念。
+        // 跟 root_shell 一样：每次都要人看一眼，不给 ∞ 按钮。
+        "shizuku_exec",
 
         // 虚拟显示器：开一块用户**看不见**的屏幕，把任意包拉上去，再在那边点击。
         // ALWAYS_ASK 只保证第一次会问；能勾「始终允许」的话，之后模型可以

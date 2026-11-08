@@ -58,6 +58,13 @@ object RiskAssessor {
      */
     private const val SANDBOX_WORKSPACE_ROOT = "/workspace"
 
+    /**
+     * 高权限 shell。跟普通 shell 的区别只有一条：
+     * **它们能到达的地方远超工作区**，所以不走「越界预拒 + 快照备份」那套，
+     * 改成「每一颗命令都要人亲自看、亲自勾」。
+     */
+    val PRIVILEGED_SHELL_TOOLS: Set<String> = setOf("root_shell", "shizuku_exec")
+
     fun assess(
         toolName: String,
         args: JsonObject,
@@ -110,25 +117,30 @@ object RiskAssessor {
 
         val analysis = ShellCommandRiskAnalyzer.analyze(command, workspaceRoot)
 
-        // ── root_shell：能跑，但不备份、不预拒，也不许绕过审批 ──
+        // ── 高权限 shell：能跑，但不备份、不预拒，也不许绕过审批 ──
+        //
+        // root_shell（su）和 shizuku_exec（shell UID）走同一套规矩。
+        // shizuku 权限比 root 低一档，但「能读别的 App 数据、能改系统设置、
+        // 能 pm/am 装卸载」这几件事已经够越过「工作区」这个概念了，
+        // 按工作区边界预拒同样是把工具用废。
         //
         // 为什么单独处理：
         //  1. 快照对它没意义。快照的路径映射是「沙箱 /workspace/x →
-        //     filesDir/workspaces/<id>/files/x」，root 命令操作的是真机路径
+        //     filesDir/workspaces/<id>/files/x」，这两类命令操作的是真机路径
         //     （/system、/data/data/…），映射过去一概不存在，拍了也是空目录。
-        //     而且 root 能改的东西本来也不是「复制一份就能回滚」的。
-        //  2. 越界预拒对它是反的。root 的用途就是动工作区外的东西——
-        //     写 /system、读别的 App 私有数据。按越界一律拒等于把 root 用废。
-        //  3. 但它必须是**每一颗命令都亲自确认**，所以 requiresApproval 恒为 true，
+        //     而且它们能改的东西本来也不是「复制一份就能回滚」的。
+        //  2. 越界预拒对它是反的。用途就是动工作区外的东西——
+        //     写 /system、读别的 App 私有数据。按越界一律拒等于把工具用废。
+        //  3. 但必须是**每一条命令都亲自确认**，所以 requiresApproval 恒为 true，
         //     而且配合 ToolApprovalDefaults 里的 NO_ALWAYS_ALLOW（挡住 ∞ 按钮和
-        //     旧授权）+ GenerationLoop 里的 YOLO 例外（挡住全自动模式）。
-        //     三道锁缺一不可，光靠 ALWAYS_ASK 只能保证「第一次会问」。
-        if (toolName == "root_shell") {
+        //     旧授权）+ ChatService 里 isToolAutoApproved 的例外（挡住 YOLO
+        //     和 headless）。三道锁缺一不可，光靠 ALWAYS_ASK 只能保证「第一次会问」。
+        if (toolName in PRIVILEGED_SHELL_TOOLS) {
             return RiskAssessment(
                 toolName = toolName,
                 baseTier = RiskTier.C_IRREVERSIBLE,
                 tier = RiskTier.C_IRREVERSIBLE,
-                reasons = analysis.reasons + "root 权限，每次执行都需要你亲自确认",
+                reasons = analysis.reasons + "高权限 shell，每次执行都需要你亲自确认",
                 targets = analysis.targets,
                 reversible = false,
                 dryRunPlan = DryRunPlan(

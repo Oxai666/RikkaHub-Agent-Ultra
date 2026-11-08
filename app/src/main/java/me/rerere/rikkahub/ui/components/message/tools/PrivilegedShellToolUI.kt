@@ -26,7 +26,7 @@ import me.rerere.hugeicons.stroke.Shield01
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 
 /**
- * root_shell 的执行卡片。
+ * 高权限 shell 的执行卡片：root_shell（su）和 shizuku_exec（shell UID）。
  *
  * 为什么要单独写一个，不共用 [ShellToolUI]：
  *
@@ -40,15 +40,23 @@ import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
  *  - **Summary 给完整命令，一行不删**
  *  - Preview 也是完整命令 + 输出，可以滚动
  *
- * 根命令不做语法高亮以外的任何加工——不脱敏、不省略、不折叠。
+ * 命令不做语法高亮以外的任何加工——不脱敏、不省略、不折叠。
  * 用户看到什么，就跑什么。
+ *
+ * 写成带构造参数的 class 而不是 object，是因为它要覆盖两个工具名，
+ * 而 [ToolUIRegistry] 用 `associateBy { it.toolName }` 建表——
+ * 一个实例只能占一个位置，所以注册两次。
+ *
+ * @param toolName 这个实例负责的工具名。也用作卡片标题前缀。
  */
-object RootShellToolUI : ToolUIRenderer {
+class PrivilegedShellToolUI(override val toolName: String) : ToolUIRenderer {
 
     /** 折叠条上那行摘要最多这么长，超出截断加省略号。 */
-    private const val TITLE_MAX_CHARS = 48
+    private val titleMaxChars: Int = 48
 
-    override val toolName: String = "root_shell"
+    /** 权限来源标签，显示在 Preview 右上角。 */
+    private val privilegeLabel: String =
+        if (toolName == "root_shell") "su" else "shizuku"
 
     override fun icon(context: ToolUIContext): ImageVector = HugeIcons.Shield01
 
@@ -56,10 +64,10 @@ object RootShellToolUI : ToolUIRenderer {
     override fun title(context: ToolUIContext): String {
         val command = context.arguments.getStringContent("command").orEmpty()
         val oneLine = command.replace('\n', ' ').replace(Regex("\\s+"), " ").trim()
-        if (oneLine.isEmpty()) return "root"
+        if (oneLine.isEmpty()) return toolName
         val truncated =
-            if (oneLine.length > TITLE_MAX_CHARS) oneLine.take(TITLE_MAX_CHARS) + "…" else oneLine
-        return "root · $truncated"
+            if (oneLine.length > titleMaxChars) oneLine.take(titleMaxChars) + "…" else oneLine
+        return "$toolName · $truncated"
     }
 
     /** 折叠时也展示——命令是这条调用最重要的信息，藏起来等于不给看。 */
@@ -103,12 +111,12 @@ object RootShellToolUI : ToolUIRenderer {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    text = "root_shell",
+                    text = toolName,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = "su",
+                    text = privilegeLabel,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
                 )
