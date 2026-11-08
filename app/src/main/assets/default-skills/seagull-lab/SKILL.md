@@ -10,7 +10,7 @@ triggers:
   - 取证
   - evidence
   - 案例管理
-category: pentest
+category: other
 
 ---
 

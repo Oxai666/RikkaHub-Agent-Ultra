@@ -120,6 +120,9 @@ fun LorebooksContent(
  */
 private val SKILL_CATEGORY_ORDER = listOf(
     "original" to "内置",
+    // 工具链排在第二：装环境是所有逆向/渗透的第一步，
+    // 用户第一次打开列表最可能先找的就是它
+    "tool" to "工具链",
     "reverse" to "逆向",
     "crack" to "破甲",
     "pentest" to "渗透",
@@ -135,6 +138,14 @@ fun SkillsContent(
     enabledSkills: Set<String>,
     onToggle: (String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * 批量开关。
+     *
+     * 不能靠循环调 [onToggle]：那个回调每次基于**调用方持有的旧快照**算新集合，
+     * 连调 N 次只有最后一次生效，结果就是「点全选只勾上最后一个」。
+     * 批量必须一次性算出完整集合并提交。
+     */
+    onBulkToggle: ((List<String>, Boolean) -> Unit)? = null,
     onManage: (() -> Unit)? = null,
 ) {
     // 按 category 分组；没写 category 的归 other，老的自建技能不会消失
@@ -185,11 +196,17 @@ fun SkillsContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    // 整组开关：22 条渗透技能一条条点太累
+                    // 整组开关：22 条渗透技能一条条点太累。
+                    // 有批量回调就走批量，没有就退化成逐条（会丢状态，调用方要自己负责）。
                     TextButton(
                         onClick = {
-                            val allOn = items.all { enabledSkills.contains(it.name) }
-                            items.forEach { onToggle(it.name, !allOn) }
+                            val names = items.map { it.name }
+                            val allOn = names.all { enabledSkills.contains(it) }
+                            if (onBulkToggle != null) {
+                                onBulkToggle(names, !allOn)
+                            } else {
+                                names.forEach { onToggle(it, !allOn) }
+                            }
                         }
                     ) {
                         Text(

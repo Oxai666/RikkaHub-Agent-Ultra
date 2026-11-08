@@ -211,6 +211,14 @@ fun ExtensionSelector(
                                 }
                                 onUpdate(assistant.copy(enabledSkills = newSkills))
                             },
+                            onBulkToggle = { names, checked ->
+                                val newSkills = if (checked) {
+                                    assistant.enabledSkills + names
+                                } else {
+                                    assistant.enabledSkills - names.toSet()
+                                }
+                                onUpdate(assistant.copy(enabledSkills = newSkills))
+                            },
                             onManage = onNavigateToSkills,
                         )
                     } else {

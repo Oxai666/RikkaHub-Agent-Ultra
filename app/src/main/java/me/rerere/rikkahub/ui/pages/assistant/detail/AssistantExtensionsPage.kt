@@ -201,6 +201,16 @@ fun AssistantExtensionsPage(id: String) {
                                         else assistant.enabledSkills - name
                                         vm.update(assistant.copy(enabledSkills = newSkills))
                                     },
+                                    // 批量必须一次算完：循环调 onToggle 每次都基于同一个旧快照，
+                                    // 连调 N 次只有最后一次生效
+                                    onBulkToggle = { names, checked ->
+                                        val newSkills = if (checked) {
+                                            assistant.enabledSkills + names
+                                        } else {
+                                            assistant.enabledSkills - names.toSet()
+                                        }
+                                        vm.update(assistant.copy(enabledSkills = newSkills))
+                                    },
                                 )
                                 TextButton(
                                     onClick = { navController.navigate(Screen.Skills) },

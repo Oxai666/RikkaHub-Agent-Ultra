@@ -1,7 +1,7 @@
 ---
 name: phishing-kit
 description: Social engineering and fraud research: phishing, scripts, pretexting, identity spoofing, synthetic identity, scam design. Trigger: phishing, social engineering, pretext, scam, 钓鱼, 社工, 诈骗.
-category: pentest
+category: gray
 
 ---
 

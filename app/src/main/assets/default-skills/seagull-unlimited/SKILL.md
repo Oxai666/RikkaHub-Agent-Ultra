@@ -17,7 +17,7 @@ triggers:
   - CTF红队覆盖
   - 红队模式
   - CTF全局
-category: pentest
+category: other
 
 ---
 
