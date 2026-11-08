@@ -465,3 +465,450 @@ files/compaction/<助手名>__<id8>/<会话名>__<id8>/
 | ADB 直连 | 协议层已完成，但 Android 11 无线调试的 SPAKE2 配对成本过高 |
 
 回退后的行为：没有 root 时直接给出明确错误，不再尝试降级路径。
+
+---
+
+# 二十六、安全层（2026-11-08 新增）
+
+## 是什么
+
+工具执行前的一道风险闸门。跟 `HardlineCommandGuard` 的分工：
+
+```
+Hardline  硬底线，rm -rf / 这类即使「永远允许」也拦，绕不过去
+安全层    风险分级，告诉你这条命令有多危险、会碰哪些文件、要不要备份
+```
+
+**顺序固定**：Hardline 先跑，安全层在后。硬底线拦掉的，安全层根本不用算。
+
+## 三档分级
+
+| 档位 | 含义 | 处理 |
+|---|---|---|
+| `A_READ` | 只读，不改变任何东西 | 直接跑 |
+| `B_REVERSIBLE` | 能撤销 | 出 dry-run 摘要 + 快照计划，再审批 |
+| `C_IRREVERSIBLE` | 不可撤销 | 默认拒绝；工作区外的一律落这档 |
+
+## 分析流程
+
+```
+工具调用
+  → 拆子命令（按 ; && || | 换行）
+  → 认命令名（rm / dd / shred / find -delete / git / sudo …）
+  → 挑目标路径（跳过 URL、/dev/null）
+  → 判定档位
+  → 越界检查（只对写操作做，只读的读哪儿都不拦）
+  → 出风险报告
+```
+
+## 快照
+
+**不可逆操作之前，把目标文件复制一份。**
+
+```
+shred -u /workspace/a.txt
+        ↓
+安全层：C 档，需要备份
+        ↓
+复制到 /workspace/.snapshots/<时间戳>/files/workspace/a.txt
+        ↓
+才执行 shred
+```
+
+**放工作区里**，这样 AI 用 `workspace_shell ls /workspace/.snapshots` 能看到，
+用户在「文件」页也能看到。
+
+**路径要翻译**：安全层提取的是沙箱视角的 `/workspace/x`，
+拍快照的代码跑在 App 进程，`File("/workspace/x")` 不存在。
+`SnapshotRoots.resolveTarget` 负责翻译成 `filesDir/workspaces/<id>/files/x`。
+
+**容量上限**：单文件 8MB、整次 64MB，超了记进 manifest 的 `skipped`。
+
+**冲突策略**：同一个路径在一次操作里出现两次只备份第一次（先到先得）。
+
+## 两个工具
+
+| 工具 | 作用 | 审批 |
+|---|---|---|
+| `snapshot_list` | 列快照 | 不要 |
+| `snapshot_restore` | 从快照恢复 | 要 |
+
+## 设置页
+
+```
+设置 → 安全快照
+```
+
+直接读文件，不经过 AI。显示时间、触发工具、备份了几个文件、总大小。
+
+## 审计
+
+每次操作记一条：时间、工具名、档位、决定（通过/批准/拒绝/失败）、
+参数摘要（脱敏后）、目标路径。
+
+**脱敏**：`password=xxx`、`Bearer xxx`、PEM 私钥、长 hex 全部替换成 `[REDACTED]`。
+
+**落盘**在 `files/agent-state/operation-audit.json`，保留 200 条。
+
+---
+
+# 二十七、Plan 规划模式
+
+## 两种模式
+
+| 模式 | 工具表 | 产出 |
+|---|---|---|
+| 默认 | 全部 | 边说边做 |
+| 计划 | 只读子集 | 一份 `<proposed_plan>` 方案 |
+
+## 只读是过滤工具表，不是提示词
+
+```kotlin
+PlanModePolicy.project(tools, mode)
+  → 非 Plan 模式：原样返回
+  → Plan 模式：只留 ToolAccess.READ_ONLY 里的 + goal 三件套 + ask_user + update_plan
+```
+
+模型再怎么被劝「就帮我改一下」，手上根本没有写工具。
+
+## 只读白名单
+
+`ToolAccess.READ_ONLY`，166 个工具名里挑出来的 50 多个。**保守枚举**：
+没登记的算可写。忘登记最坏是 Plan 模式下用不了某个只读工具，
+不会出现「以为只读结果写坏了」。
+
+## 方案卡片
+
+模型输出的 `<proposed_plan>` 块渲染成卡片：
+
+```
+┌──────────────────────────────────┐
+│ 🗺 方案  在工作区创建 test.txt     │
+│                                  │
+│ ## Summary                       │
+│ ...                              │
+└──────────────────────────────────┘
+```
+
+没提案时原样交给 `MarkdownBlock`。没塞进 `MarkdownBlock` 是因为那是通用组件，
+用户消息、工具输出、设置页预览都在用。
+
+## 步骤条
+
+`update_plan` 更新计划后，输入框上方出现一条：
+
+```
+1/3  读目录
+● 读目录  ○ 分析  ○ 总结
+```
+
+三种状态三种颜色：完成用主色、进行中主色 + 高亮文字、待办 outline。
+
+## 收尾提醒
+
+**实测问题**：模型建了计划，做完活就停，步骤条永远卡在 2/5。
+
+两处加固：
+
+```
+update_plan 返回值：有未完成步骤时明确提醒「还有 N 步」
+系统提示词 PLAN_MAINTENANCE_HINT：每完成一步立刻标、收尾前必须全部 completed
+```
+
+## 界面入口
+
+聊天输入框那一排，地图图标。点亮表示只读规划中。
+
+---
+
+# 二十八、Goal 跨轮目标
+
+## 六个状态
+
+```
+active ─┬─→ complete          模型标（达成且验证过）
+        ├─→ blocked           模型标（连续三次同一阻塞）
+        ├─→ paused            模型标（仅用户明确要求）
+        ├─→ usage_limited     系统标（额度错误）
+        ├─→ budget_limited    系统标（token 耗尽）
+        └─→ 续跑到上限         系统自动暂停
+
+paused  → active   用户点「继续」
+blocked → active   用户点「再试一次」，阻塞计数清零
+```
+
+**模型只能设三个值**：`complete` / `blocked` / `paused`。
+`active` 归用户，`usage_limited` / `budget_limited` 归系统。这条边界画在工具 schema 里。
+
+## 三个工具
+
+| 工具 | 干什么 |
+|---|---|
+| `get_goal` | 读当前目标 |
+| `create_goal` | 立目标，只拦「进行中」的 |
+| `update_goal` | 改状态，只接受三个值 |
+
+## 自动续跑
+
+```
+一轮生成结束
+  → 有目标吗？
+  → 状态是 active 吗？
+  → 不是无人值守会话吗？
+  → 开关开着吗？
+  → 没到次数上限吗？
+  → 注入续跑规程 + 发一条「继续推进目标。」
+```
+
+**默认关**。原实现默认开，配合付费中转就是半夜自己跑一整晚。
+
+**注入完整规程**，不是只发一句「继续」——`GOAL_CONTINUATION.md` 里有三套审计
+（无进展检查 / 完成审计 / 受阻审计），缺了模型不知道自己该干什么。
+
+**预算行整行删掉**。原实现填成 `unlimited` 留着，等于告诉模型预算无限。
+
+## 面板
+
+点旗帜弹出：
+
+```
+目标
+描述你的目标，定义可衡量的效果，以获得最佳效果
+
+状态      消耗          耗时
+进行中    1234 tokens   2m30s
+
+[暂停]  [放弃目标]
+```
+
+按状态给不同操作：
+
+| 状态 | 按钮 |
+|---|---|
+| 进行中 | 暂停 · 放弃 |
+| 已暂停 | 继续 · 放弃 |
+| 受阻 | 再试一次 |
+| 已完成 | **结束目标**（主色） |
+| 额度/预算用尽 | **结束目标** |
+
+## 持久化
+
+`files/agent-state/goals.json`，App 重启不丢。
+
+受阻计数和续跑计数**故意不持久化**——重启后从零开始数才是对的。
+
+---
+
+# 二十九、技能系统（重做）
+
+## 85 个技能
+
+| 分类 | 数量 | 代表 |
+|---|---|---|
+| 内置 | 18 | `agent-core` `ctf-kb` `virtual-piano` |
+| 工具链 | 3 | `re-toolchain` `mcp-jadx` `apk-roundtrip-arm64` |
+| 逆向 | 17 | `apk-reverse` `ida-reverse` `radare2` `js-reverse` |
+| 破甲 | 4 | `crack-keygen` `l-license` `seagull-license-security` |
+| 渗透 | 17 | `pentest-tools` `pwn-chain` `firmware-pentest` |
+| 游戏安全 | 12 | `anti-cheat` `game-hack` `graphics-api` |
+| 敏感 | 4 | `identity-docs` `finance-movement` `border-crossing` |
+| 创作 | 3 | `adult-fiction` `mature-content` `pipeline-renderer` |
+| 其他 | 7 | `politics-history` `research-rigor` |
+
+## 中文名
+
+`SKILL.md` 的 frontmatter 加 `title` 字段。
+
+**`name` 不能改**——那是标识符，目录名、`enabledSkills` 里存的值、
+`use_skill` 传的参数全用它。改成中文会让已保存的助手配置全部失效。
+
+## 列表 UI
+
+- 按分类分组，**默认全部收起**
+- 顶部搜索框，中英文名和描述都匹配，搜索时自动展开所有组
+- 每组「全选 / 全不选」
+- 卡片：主色圆底图标 + 中文名 + 英文小字 + 描述 + 分类徽章
+
+## 详情页
+
+```
+┌──────────────────────────────────┐
+│ ╭──╮ APK 逆向（反编译/改包/脱壳）✏️│
+│ │🧩│ apk-reverse                  │
+│ ╰──╯ [逆向]                       │
+│      在 CLI 环境下做 Android APK… │
+│ ┌──────────────────────────────┐ │
+│ │ ✏ 编辑名称与分类              │ │
+│ └──────────────────────────────┘ │
+└──────────────────────────────────┘
+```
+
+点编辑能改中文名和分类。分类手打新的就是新分类，
+点已有分类的 chip 直接填上——避免打错变成两个看起来一样的分组。
+
+**分类会记住**：写进 `skills/.categories.txt`，一行一个。
+这样即使暂时没有技能用这个分类，它也不会从候选里消失。
+
+## AI 写技能
+
+| 工具 | 干什么 | 审批 |
+|---|---|---|
+| `skill_list` | 列出技能和分类 | 不要 |
+| `skill_create` | 新建 | 要 |
+| `skill_update` | 改任意字段 | 要 |
+| `skill_delete` | 删除 | 要 |
+
+**写工具挂在开关下面**（助手 → 本地工具 → 让 AI 写技能），默认不勾。
+`skill_list` 始终可用——模型得先能看见有什么，才谈得上用。
+
+**frontmatter 由工具自己拼**，不让模型拼。模型写 YAML 时经常把冒号或引号写坏，
+整个技能就解析不了了。
+
+**提示词**告诉模型什么时候该提议：
+
+```
+值得沉淀：5 步以上才摸对路 / 试错教会了具体的东西 / 下次同类目标步骤一样
+不值得：一次就成的简单操作 / 纯查询 / 只对这一个文件有意义的临时命令
+```
+
+---
+
+# 三十、逆向工具链
+
+## 不打包，给命令
+
+41MB 的 jadx-mcp jar + 57MB 的 frida-server，塞进 assets 会让 APK 破 200MB。
+改成给脚本让 AI 在沙箱里按需下载。
+
+```
+assets/scripts/install-rev.sh      147 行，一键装
+assets/scripts/ubuntu-setup.sh     58 个 apt 包
+docs/INSTALL-ONE-SHOT.md           352 行完整作业书 + 坑表
+```
+
+## 装在哪
+
+**全部装 `/workspace/rev`，不碰 `/usr/local` 和 `/opt`。**
+
+沙箱对工作区外的写入会拦；就算放行了，rootfs 一重建全没了。
+装工作区里，工作区留多久工具就在多久。
+
+## 三条链路验收
+
+```
+smali → dex → jadx        验证反编译
+APK 拆 → 回编 → 再拆       验证打包（最容易翻车）
+MCP initialize            验证 jadx-mcp
+```
+
+## 几个实测过的坑
+
+| 坑 | 现象 |
+|---|---|
+| apktool 内嵌 aapt2 是 x86_64 | arm64 上 `exit code = 132`（SIGILL），错误信息一个字不提架构 |
+| smali 的 tag 是 `3.0.10` | 写 `v3.0.10` 拿到 9 字节的 "Not Found"，静默失败 |
+| pip 缺 `--ignore-installed` | apt 的 pwntools 带进 debian 版 psutil，整个事务回滚 |
+| `pkill -f jadx-headless-mcp` | 会把 proot 外壳一起杀掉，要 `pkill -f '^java .*jadx-headless-mcp'` |
+
+## 状态检测
+
+`ReToolchainStatus` 用**一条命令**查完：
+
+```
+rootfs / jadx / apktool / smali / node / java / r2 / aapt2 兼容层 / jadx-mcp jar
+```
+
+之前要 AI 跑十几条 `--version`，慢且容易只查一半就报「都装好了」。
+
+---
+
+# 三十一、MCP 改进
+
+## 只读工具免审批
+
+MCP 协议里工具可以声明 `annotations.readOnlyHint`。
+
+```
+1. 用户手动勾了「需要审批」      → 审批
+2. 声明只读且没声明破坏性        → 免审批
+3. 其余按老规矩                → 审批
+```
+
+声明缺失（null）一律按需要审批处理——读不到不等于安全。
+
+读 `annotations` 用**反射**：SDK 在 0.x 阶段这个结构改过几次，
+硬编码字段名一次升版本就编译不过。
+
+## 一键添加 jadx
+
+MCP 设置页顶栏加了个按钮，点了直接弹创建框：
+
+```
+类型  Streamable HTTP（不能选 SSE）
+名字  jadx
+URL   http://127.0.0.1:8123/mcp
+```
+
+**为什么不能选 SSE**：`--transport http` 实现的是 Streamable HTTP
+（单端点、POST + 可选 SSE 流），不是老的 SSE 双端点协议。
+
+---
+
+# 三十二、UI 细节
+
+## 思考深度
+
+图标从「一个线性灯泡」改成「刺球 + 灯泡」，形状跟着档位变：
+
+| 档位 | 球 | 脸 | 装饰 |
+|---|---|---|---|
+| Off | 圆 | 闭眼打呼噜 + 三个 z | — |
+| Auto | 四角 | 圆点眼 + 微笑 | — |
+| Low | 六角 | 半睁眼，迷迷糊糊 | — |
+| Medium | 七角 | 微笑 + 系领带 | — |
+| High | 九角 | 微笑 | 天使光环 |
+| XHigh | 十二角 | 微笑 | 天使翼 + 光环 |
+| Max | 软刺球 | 邪恶笑露尖牙 | 恶魔翼 + 双角 |
+
+档位名改成参数值：`Off` / `Auto` / `Low` / `Medium` / `High` / `XHigh` / `Max`。
+
+## 搜索按钮
+
+开启搜索时：
+
+```
+        🔍        ← 左上角 13dp 放大镜
+       ╱ ╲
+      ╱   ╲       ← 锥形光束
+          ▓LOGO▓  ← 搜索方 logo 原尺寸，右下
+           ✦      ← 白色闪光点
+```
+
+logo 背后有呼吸的光圈（0.35 ↔ 0.85 alpha，1.1 秒来回），
+中心一个白点从 3dp 撑到 7dp 边扩散边淡掉（1.7 秒循环）。
+
+## 新建模型默认 1M
+
+三处都改了：
+
+```
+手动建的    AddModelButton 里 Model(contextLength = 1_000_000)
+表单兜底    ModelSettingsForm 的 LaunchedEffect
+自动获取    enrichCapabilities() 里 contextLength 为 null 时补 1M
+```
+
+---
+
+# 三十三、持久化总览
+
+| 文件 | 内容 | 上限 |
+|---|---|---|
+| `files/agent-state/goals.json` | 目标 | — |
+| `files/agent-state/plans.json` | 计划 | — |
+| `files/agent-state/operation-audit.json` | 审计 | 200 条 |
+| `files/skills/.categories.txt` | 自建分类 | — |
+| `files/workspaces/<id>/files/.snapshots/` | 文件快照 | 20 份 / 单文件 8MB / 整次 64MB |
+| `files/compaction/<助手>__<id>/<会话>__<id>/` | 对话存档 | — |
+
+**为什么都用 JSON 文件不用 Room**：数据量小，走 Room 要加 entity + 写 Migration +
+涨 DB 版本，为这点数据不值。文件坏了删掉就能恢复，DB 坏了要修。

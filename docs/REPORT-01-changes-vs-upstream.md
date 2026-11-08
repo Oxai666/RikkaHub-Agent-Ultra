@@ -380,3 +380,248 @@ tag   backup-shizuku     → 3d62bc48（含 Shizuku 兜底）
 ```
 
 **回退后的权限模型**：虚拟屏幕只走 root（su）。没有 root 时报明确错误，不再尝试降级。
+
+---
+
+# 追加：2026-11-08 的第三批改动
+
+这一批的大头是**移植包**（从另一个 App 拆出来的三个模块）和**技能系统重做**。
+共 57 个提交。
+
+---
+
+## F. 移植：安全层（`safety/`，新增 7 个文件）
+
+来源是移植包里 44 个 Java 文件 15397 行反编译产物。不是翻译，是按语义重写成精简版。
+
+| 文件 | 行数 | 干什么 |
+|---|---:|---|
+| `RiskModel.kt` | 165 | 三档分级 `A_READ / B_REVERSIBLE / C_IRREVERSIBLE`、6 种 dry-run 形态、3 种快照范围 |
+| `ShellCommandRiskAnalyzer.kt` | 400 | 拆子命令 → 认命令名 → 挑目标路径 → 定档 |
+| `RiskAssessor.kt` | 300 | 按工具类型分流：shell / 文件写 / 设置 / 界面 / 未知 |
+| `ToolSafetyCoordinator.kt` | 90 | 统一卡口 + 审批文案 |
+| `FileSnapshotManager.kt` | 270 | 快照的拍 / 恢复 / 列表 / 清理 |
+| `SnapshotRoots.kt` | 90 | 快照放哪 + 沙箱路径 → App 路径的翻译 |
+| `SnapshotTools.kt` | 130 | `snapshot_list` / `snapshot_restore` 两个工具 |
+| `OperationAudit.kt` | 190 | 脱敏审计 + 落盘 |
+
+**接入点**：`GenerationLoop` 里 `HardlineCommandGuard` 之后、审批之前。
+顺序不能反——Hardline 是硬底线（永远拦），安全层是风险分级。
+
+### 几个刻意的设计
+
+**只读命令不判越界**。`cat /etc/os-release` 读一个文件不改变任何东西，读哪里都不该拦。
+
+**沙箱场景放宽**。proot 里 `/usr/local`、`/opt` 是正常可写的，写坏了重建 rootfs 就行。
+只有 `/system`、`/data/adb`、根目录才拦。真机 shell（`root_shell`）仍按工作区边界严格判。
+
+**符号链接要解析**。`ln -s /etc /workspace/etc` 之后再写 `/workspace/etc/passwd`，
+字面在工作区内、实际落到 `/etc`。先 `canonicalPath` 再判。
+
+**重定向算写操作**。`echo x > file` 里的 `>` 之前不触发写入判定，
+`echo` 在只读名单里一路 A 档过去，既不审批也不备份。
+
+**快照路径要翻译**。安全层提取的是沙箱视角的 `/workspace/x`，
+拍快照的代码跑在 App 进程，`File("/workspace/x")` 根本不存在。
+`SnapshotRoots.resolveTarget` 负责把 `/workspace/x` 翻成 `filesDir/workspaces/<id>/files/x`。
+
+### 单测
+
+`ShellCommandRiskAnalyzerTest` 27 条：只读 / 危险 / 可撤销 / 复合命令 / 路径越界 / 未知命令，
+外加 `AuditRedactor` 5 条脱敏用例。
+
+---
+
+## G. 移植：Plan 规划模式（`data/plan/`，新增 8 个文件）
+
+| 文件 | 干什么 |
+|---|---|
+| `CollaborationMode.kt` | default / plan 两态 |
+| `ToolAccess.kt` | 166 个工具名里的只读白名单 |
+| `PlanModePolicy.kt` | 工具过滤 + 三套拒绝文案 |
+| `PlanStep.kt` | 步骤模型 + 状态 |
+| `PlanStore.kt` | 存储（JSON 落盘） |
+| `PlanTools.kt` | `update_plan` 实现，8 条校验码 |
+| `ProposedPlanParser.kt` | 抠 `<proposed_plan>` 块 |
+| `assets/prompts/PLAN_MODE.md` | 三阶段对话式规划规程 |
+
+**核心是「只读靠过滤工具表，不靠提示词」**。模型再怎么被劝「就帮我改一下」，
+它手上根本没有写工具，只能拿到 `tool_not_found`。
+
+**接入**在 `generateText` 建完 `toolsInternal` 之后统一 `project()` 一次——
+之前只过滤了发给模型的工具表，本地执行用的 `toolsInternal` 还是全量，
+模型被诱导着硬调还是能执行。
+
+**`<proposed_plan>` 渲染成卡片**：新增 `AssistantTextBlock`，
+标签前面的话照常渲染，块本身渲染成主色描边的卡片。
+
+**计划维护提示**：`update_plan` 的返回值里，有未完成步骤时明确提醒；
+系统提示词加 `PLAN_MAINTENANCE_HINT`，只在工具真在表里时注入。
+
+---
+
+## H. 移植：Goal 跨轮目标（`data/goal/`，新增 5 个文件）
+
+| 文件 | 干什么 |
+|---|---|
+| `Goal.kt` | 六态：active / paused / blocked / usage_limited / budget_limited / complete |
+| `GoalStore.kt` | 存储（JSON 落盘）+ 受阻计数 + 续跑计数 |
+| `GoalTools.kt` | `get_goal` / `create_goal` / `update_goal` |
+| `GoalTemplates.kt` | 续跑规程渲染 |
+| `assets/prompts/GOAL_CONTINUATION.md` | 续跑提示词 |
+
+**模型只能设 complete / blocked / paused**。`active`（恢复）归用户，
+`usage_limited` / `budget_limited` 归系统。
+
+**`blocked` 要连续三次**。一次受阻就投降的不给这个出口。
+
+**续跑默认关**（`enableGoalAutoContinuation = false`），上限 5 次。
+原实现默认开，配合付费中转就是半夜自己跑一整晚。
+
+**续跑注入完整规程**，不是只发一句「继续推进目标」。
+预算行整行删掉——这套机制的预算控制只有次数上限，不该在提示词里提 token。
+
+---
+
+## I. 移植：技能库（63 个技能 + 11 个相关文件）
+
+从移植包搬了 63 个技能，加上原有的 18 个，现在共 **85 个**。
+
+### 分类
+
+九个组，固定顺序：
+
+```
+内置 18 / 工具链 3 / 逆向 17 / 破甲 4 / 渗透 17 /
+游戏安全 12 / 敏感 4 / 创作 3 / 其他 7
+```
+
+分类存在每个 `SKILL.md` 的 frontmatter 里，`SKILL_CATEGORY_ORDER` 定义顺序。
+
+### 中文名
+
+85 个技能全部加了 `title` 字段。**`name` 是标识符不能改**（目录名、`enabledSkills`
+里存的值、`use_skill` 传的参数全用它），所以中文名单独放一个字段。
+
+### UI
+
+- 列表按分类分组，**默认全部收起**，点标题展开
+- 顶部搜索框，中英文名和描述都匹配，搜索时自动展开所有组
+- 每组有「全选 / 全不选」
+- 卡片：主色圆底图标 + 中文名 + 英文小字 + 描述 + 分类徽章
+
+### 自建分类
+
+`skills/.categories.txt` 一行一个，改技能分类时自动记进去。
+这样即使暂时没有技能用这个分类，它也不会从候选里消失。
+
+### AI 写技能
+
+四个工具：`skill_list`（只读，始终可用）/ `skill_create` / `skill_update` / `skill_delete`。
+
+写工具挂在 `LocalToolOption.SkillAuthoring` 开关下面，默认不勾。
+
+**frontmatter 由工具自己拼**，不让模型拼——模型写 YAML 时经常把 `description`
+里的冒号或引号写坏，整个技能就解析不了了。
+
+**提示词**（`SKILL_CAPTURE_HINT`）：只在 `skill_create` 真在工具表里时注入。
+写了可对照的信号：5 步以上才摸对路 / 试错教会了具体的东西 / 下次同类目标步骤一样。
+
+---
+
+## J. 移植：逆向工具链
+
+没有把 41MB 的 jar 和 57MB 的 frida-server 打进 APK（会让包体破 200MB）。
+改成给脚本让 AI 在沙箱里按需下载。
+
+| 文件 | 内容 |
+|---|---|
+| `assets/scripts/install-rev.sh` | 147 行实测过的一键安装脚本 |
+| `assets/scripts/ubuntu-setup.sh` | 58 个 apt 包的安装脚本 |
+| `assets/scripts/extract-from-apk.sh` | 从 APK 提二进制 |
+| `docs/INSTALL-ONE-SHOT.md` | 352 行完整作业书 + 坑表 |
+| 技能 `re-toolchain` | 沙箱搭环境的完整命令 |
+| 技能 `mcp-jadx` | jadx-headless-mcp 接入 |
+| 技能 `apk-roundtrip-arm64` | arm64 回编（aapt2 兼容层） |
+| `ReToolchainStatus.kt` | 一条命令查完工具链状态 |
+
+**几个实测过的坑写进技能了**：
+
+- apktool jar 内嵌的 aapt2 是 x86_64，arm64 上直接 SIGILL（exit 132）
+- smali 的 release tag 是 `3.0.10`，写 `v3.0.10` 会拿到 9 字节的 "Not Found"
+- pip 要 `--ignore-installed`（apt 的 pwntools 带进 debian 版 psutil）
+- `pkill -f jadx-headless-mcp` 会把 proot 外壳一起杀掉，要精确匹配
+
+---
+
+## K. MCP 改进
+
+- `McpTool` 加 `readOnlyHint` / `destructiveHint`，从 SDK 的 `annotations` 反射读
+- 声明只读且没声明破坏性的工具免审批（之前 `mcp__*` 一律要审）
+- MCP 设置页加「一键添加 jadx」按钮，name 和 URL 预填
+
+---
+
+## L. UI 细节
+
+### 思考深度
+
+- 图标换成刺球 + 灯泡，形状跟着档位变（圆 / 四角 / 六角 / 七角 / 九角 / 十二角 / 软刺球）
+- 每个档位一张脸：Off 睡觉飘 z / Auto 微笑 / Low 半睁眼 / Medium 系领带 / High 微笑 / Max 邪恶笑露尖牙
+- 高档位加装饰：High 光环 / XHigh 天使翼 + 光环 / Max 恶魔翼 + 双角
+- 档位名改成参数值：Off / Auto / Low / Medium / High / XHigh / Max
+
+### 搜索按钮
+
+开启时：搜索方 logo 原尺寸显示在右下，左上一个 13dp 小放大镜，
+中间一道锥形光束，logo 背后有呼吸的光圈和一闪一闪的白点。
+
+### 新建模型默认 1M
+
+三处都改了：手动建的（`AddModelButton`）、表单兜底（`ModelSettingsForm`）、
+自动获取的（`enrichCapabilities`）。
+
+---
+
+## M. 修复
+
+| 问题 | 原因 |
+|---|---|
+| 改名后存档目录不跟着动 | `remember` 缺 key；且 `update()` 和 `updateAssistant()` 是两条路径 |
+| 虚拟屏漏在审批名单外 | `virtual_screen` 一个 action 就做了 launching + tap，等于绕过审批 |
+| 历史检索配额 | `search()` 先搜全部再按序号过滤，配额被前面的存档吃光 |
+| 技能全选只勾上一个 | 循环调 `onToggle` 每次基于旧快照，只有最后一次生效 |
+| 同名技能静默覆盖 | UI 层查重基于可能过期的列表，加了 VM 层二次校验 |
+| 自动启用两个技能 | `DEFAULT_AUTO_ENABLED_SKILLS` 硬编码 |
+| 目标消耗恒为 0 | `accumulate` 从来没被调用过 |
+| 已完成目标只有「放弃」 | 面板没按状态分支 |
+| 计划步骤条永远空 | `update_plan` 在 Plan 模式被硬拒 |
+| `<proposed_plan>` 标签裸露 | 只在 `parseMarkdown` 里剥标签，没渲染成块 |
+| 沙箱里 `/usr/local` 被拦 | 越界判定把真机标准套到了沙箱上 |
+| 快照目录空 | 沙箱路径没翻译成 App 路径 |
+
+---
+
+## N. CI
+
+`setup-bun` 拉 GitHub releases 返回 504 会把整个构建干掉。
+改成 `npm install -g bun` + 三次重试，npm registry 稳得多。
+
+---
+
+## 附：当前统计
+
+```
+Kotlin 新增文件    约 30 个
+技能总数           85（原 18 + 破甲 63 + REA + 工具链 2 + 回编 1）
+提交              57 个（这一批）
+```
+
+### 完成度对照移植包
+
+```
+01-安全层      85%   缺：执行许可令牌、ShellImpact、符号链接的完整链
+02-计划与目标  100%
+03-沙箱逆向    80%   缺：sha256 校验、双源下载、UI 安装入口
+04-技能库     100%
+```
