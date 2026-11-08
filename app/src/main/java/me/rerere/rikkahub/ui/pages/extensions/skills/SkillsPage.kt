@@ -7,7 +7,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -20,6 +23,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -282,12 +286,17 @@ fun SkillsPage() {
     if (showAddDialog) {
         AddSkillDialog(
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, content ->
-                vm.saveSkill(name, content) { success ->
-                    showAddDialog = false
-                    if (!success) {
-                        toaster.show(context.getString(R.string.skills_page_save_failed))
+            knownCategories = remember(skills) {
+                skills.mapNotNull { it.category?.takeIf { c -> c.isNotBlank() } }
+                    .distinct()
+                    .sorted()
+            },
+            onConfirm = { name, content, title, category ->
+                vm.saveSkill(name, content) { ok ->
+                    if (ok && (title.isNotBlank() || category.isNotBlank())) {
+                        vm.updateMeta(name, title, category)
                     }
+                    showAddDialog = false
                 }
             },
         )
@@ -598,9 +607,12 @@ private fun SkillCard(
 @Composable
 private fun AddSkillDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, content: String) -> Unit,
+    knownCategories: List<String> = emptyList(),
+    onConfirm: (name: String, content: String, title: String, category: String) -> Unit,
 ) {
     var content by rememberSaveable { mutableStateOf("") }
+    var title by rememberSaveable { mutableStateOf("") }
+    var category by rememberSaveable { mutableStateOf("") }
 
     val name = remember(content) {
         SkillFrontmatterParser.parse(content)["name"]?.trim() ?: ""
@@ -611,34 +623,76 @@ private fun AddSkillDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.skills_page_add_title)) },
         text = {
-            OutlinedTextField(
-                value = content,
-                onValueChange = { content = it },
-                label = { Text(stringResource(R.string.skills_page_skill_content_label)) },
-                placeholder = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                OutlinedTextField(
+                    value = content,
+                    onValueChange = { content = it },
+                    label = { Text(stringResource(R.string.skills_page_skill_content_label)) },
+                    placeholder = {
+                        Text(
+                            "---\nname: my-skill\ndescription: \"...\"\n---\n\nSkill body goes here...",
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    },
+                    supportingText = {
+                        if (nameError) Text(
+                            stringResource(R.string.skills_page_name_error),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        else if (name.isNotBlank()) Text(stringResource(R.string.skills_page_skill_name, name))
+                        else Text(stringResource(R.string.skills_page_paste_hint))
+                    },
+                    isError = nameError,
+                    minLines = 6,
+                    maxLines = 12,
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                // 粘贴完顺手填个中文名，省得再点进详情页改
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("中文名（可选）") },
+                    placeholder = { Text("留空就显示英文标识符") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = { category = it },
+                    label = { Text("分类（可选）") },
+                    placeholder = { Text("填新的就是新分类") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (knownCategories.isNotEmpty()) {
                     Text(
-                        "---\nname: my-skill\ndescription: \"...\"\n---\n\nSkill body goes here...",
-                        fontFamily = FontFamily.Monospace,
+                        text = "已有分类",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                },
-                supportingText = {
-                    if (nameError) Text(
-                        stringResource(R.string.skills_page_name_error),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                    else if (name.isNotBlank()) Text(stringResource(R.string.skills_page_skill_name, name))
-                    else Text(stringResource(R.string.skills_page_paste_hint))
-                },
-                isError = nameError,
-                minLines = 8,
-                maxLines = 14,
-                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                modifier = Modifier.fillMaxWidth(),
-            )
+                    @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        knownCategories.forEach { c ->
+                            AssistChip(
+                                onClick = { category = c },
+                                label = { Text(c, style = MaterialTheme.typography.labelSmall) },
+                            )
+                        }
+                    }
+                }
+            }
         },
         confirmButton = {
             TextButton(
-                onClick = { onConfirm(name, content) },
+                onClick = { onConfirm(name, content, title, category) },
                 enabled = name.isNotBlank() && !nameError,
             ) {
                 Text(stringResource(R.string.skills_page_save))

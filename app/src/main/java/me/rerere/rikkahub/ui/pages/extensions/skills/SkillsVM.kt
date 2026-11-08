@@ -83,6 +83,29 @@ class SkillsVM(
         }
     }
 
+    /**
+     * 改中文名和分类。
+     *
+     * 导入时用得到：粘贴完 SKILL.md 之后可以让用户顺手填个中文名，
+     * 不用再点进详情页。
+     */
+    fun updateMeta(
+        name: String,
+        title: String,
+        category: String,
+        onResult: (Boolean) -> Unit = {},
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ok = skillManager.updateSkillMeta(
+                skillName = name,
+                title = title.trim().ifBlank { null },
+                category = category.trim().ifBlank { null },
+            )
+            if (ok) _skills.value = skillManager.listSkills()
+            withContext(Dispatchers.Main) { onResult(ok) }
+        }
+    }
+
     fun getSkillsDir() = skillManager.getSkillsDir()
 
     fun importSkillFromGitHub(repoUrl: String, onResult: (Boolean, String) -> Unit) {

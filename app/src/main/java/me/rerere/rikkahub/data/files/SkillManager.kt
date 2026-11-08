@@ -23,6 +23,9 @@ class SkillManager(
          * and the `use_skill` read paths in SkillsTools) rather than silently loaded.
          */
         const val MAX_SKILL_FILE_BYTES: Long = 512L * 1024L
+
+        /** 用户手动建过的分类名单，一行一个。见 [knownCategories]。 */
+        private const val CATEGORY_REGISTRY_FILE = ".categories.txt"
     }
 
     /** Thrown by [readCached] when a skill file exceeds [MAX_SKILL_FILE_BYTES]. */
@@ -294,21 +297,67 @@ class SkillManager(
         setKey("category", category)
 
         val updated = "---" + lines.joinToString("\n") + body
-        return runCatching { file.writeText(updated) }.isSuccess
+        val ok = runCatching { file.writeText(updated) }.isSuccess
+        // 改了分类就把它记进注册表——这样即使用户建完分类、
+        // 暂时没有技能用它，下次打开列表时这个分类名还在候选里
+        if (ok && !category.isNullOrBlank()) rememberCategory(category)
+        return ok
     }
 
     /**
      * 所有技能用过的分类，去重后给 UI 做候选列表。
      *
-     * 让用户能复用已有分类名，而不是每次手打——手打容易打错，
-     * 一旦打错就变成两个看起来一样的分组。
+     * 两个来源合并：
+     *  1. 用户手动建过的分类（存在 `skills/.categories.json`）——
+     *     不合并这个的话，建完分类但暂时没有技能用它，下次打开就消失了
+     *  2. 现有技能 frontmatter 里出现的分类
+     *
+     * 排序按 SKILL_CATEGORY_ORDER 的顺序，未知分类接在后面。
      */
     fun knownCategories(): List<String> = runCatching {
-        listSkills()
+        val fromSkills = listSkills()
             .mapNotNull { it.category?.takeIf { c -> c.isNotBlank() } }
+        val fromRegistry = readCategoryRegistry()
+        (fromRegistry + fromSkills)
             .distinct()
-            .sorted()
+            .sortedWith(compareBy({ categoryOrderIndex(it) }, { it }))
     }.getOrDefault(emptyList())
+
+    /**
+     * 把分类名记进注册表，这样即使暂时没有技能用它也不会消失。
+     *
+     * 写失败不影响主流程——分类记不住是小事，不该让保存技能失败。
+     */
+    fun rememberCategory(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        runCatching {
+            val dir = getSkillsDir()
+            val file = File(dir, CATEGORY_REGISTRY_FILE)
+            val current = readCategoryRegistry().toMutableSet()
+            if (!current.add(trimmed)) return      // 已经有了，不用重写
+            file.writeText(
+                current.sorted().joinToString("\n", postfix = "\n")
+            )
+        }
+    }
+
+    /** 注册表是一条一行纯文本，比 JSON 好读也好手改。 */
+    private fun readCategoryRegistry(): List<String> {
+        val dir = getSkillsDir()
+        val file = File(dir, CATEGORY_REGISTRY_FILE)
+        if (!file.isFile) return emptyList()
+        return runCatching {
+            file.readLines()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() && !it.startsWith("#") }
+        }.getOrDefault(emptyList())
+    }
+
+    private fun categoryOrderIndex(key: String): Int {
+        val idx = me.rerere.rikkahub.data.files.SKILL_CATEGORY_ORDER.indexOfFirst { it.first == key }
+        return if (idx >= 0) idx else Int.MAX_VALUE
+    }
 
     fun saveSkillFilesAtomically(skillName: String, files: Map<String, String>): Boolean {
         return saveSkillFileBytesAtomically(
