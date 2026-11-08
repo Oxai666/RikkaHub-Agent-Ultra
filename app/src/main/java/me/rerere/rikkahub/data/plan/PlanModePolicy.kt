@@ -52,6 +52,15 @@ object PlanModePolicy {
         return tools.filter { isAllowedInPlan(it.name) }
     }
 
+    /**
+     * 从助手配置里读模式。
+     *
+     * 单独抽出来是因为过滤点有好几处（模型请求的工具表、本地执行用的
+     * toolsInternal），每一处都自己解析一遍字符串容易写岔。
+     */
+    fun modeOf(assistant: me.rerere.rikkahub.data.model.Assistant): CollaborationMode =
+        CollaborationMode.fromSerialName(assistant.collaborationMode)
+
     fun rejectionCode(toolName: String): String =
         if (toolName == PlanToolCatalog.UPDATE_PLAN) PLAN_MODE_TOOL_FORBIDDEN else PLAN_MODE_READ_ONLY
 

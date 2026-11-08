@@ -622,6 +622,15 @@ class GenerationLoop(
                     ).let(this::addAll)
                 }
                 addAll(tools)
+            }.let { raw ->
+                // Plan 模式在这里统一掐一次。
+                // 之前只在 generateInternal 里过滤，那只影响**发给模型**的工具表
+                // （TextGenerationParams.tools），本地执行用的 toolsInternal 还是全量——
+                // 模型一旦被诱导着硬调写工具，toolsInternal.find 找得到，就真执行了。
+                //
+                // 另外 memory 工具是在上面 buildList 里后加的，不在入参 tools 里，
+                // 所以必须在这层过滤，不能只过滤入参。
+                PlanModePolicy.project(raw, PlanModePolicy.modeOf(assistant))
             }
 
             // Check if we have tool calls ready to continue after user interaction.

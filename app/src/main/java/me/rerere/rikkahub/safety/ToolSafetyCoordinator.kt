@@ -44,7 +44,12 @@ object ToolSafetyCoordinator {
         val base = RiskAssessor.assess(toolName, args, workspaceRoot)
 
         // 快照拍不了但又是必须拍的 → 拒绝。这是"宁可不让做"的那条线。
+        //
+        // 加 targets.isNotEmpty() 这个条件很关键：参数名对不上时 pathsOf 会返回空，
+        // 此时既没有要备份的东西、也谈不上"拍不了"，不该因此把操作拦死。
+        // 没有 target 的情况交给审批弹窗，让人自己看一眼参数。
         if (base.snapshotPlan.required &&
+            base.snapshotPlan.targets.isNotEmpty() &&
             !base.snapshotPlan.captureSupported &&
             !base.snapshotPlan.noSnapshotAllowed
         ) {

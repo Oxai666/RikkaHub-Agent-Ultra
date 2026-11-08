@@ -156,6 +156,9 @@ fun ChatInput(
     // 目标按会话存；拿不到会话 id 时退回助手粒度，至少不会串到别人身上。
     val goalKey = conversationId ?: assistant.id.toString()
     val currentGoal by GoalStore.observe(goalKey).collectAsStateWithLifecycle()
+    // 计划表跟目标共用同一个键：都挂在会话上
+    val currentPlan by me.rerere.rikkahub.data.plan.PlanStore
+        .observe(goalKey).collectAsStateWithLifecycle()
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
     val inputHazeStyle = HazeBlurStyle.Material3 {
         blurRadius(12.dp)
@@ -225,6 +228,8 @@ fun ChatInput(
                 .padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            PlanStepsBar(plan = currentPlan)
+
             MessageQueuePanel(
                 state = messageQueue,
                 onRemove = onRemoveQueuedMessage,

@@ -412,6 +412,10 @@ class ConversationRepository(
             me.rerere.rikkahub.data.compaction.CompactionArchive
                 .deleteByConversationId(null, conversation.id.toString())
         }
+        // 计划表和目标也是以 conversationId 为键的进程内单例。
+        // 不跟着删的话，用户删了一堆会话之后这两张 map 只增不减。
+        me.rerere.rikkahub.data.plan.PlanStore.clear(conversation.id.toString())
+        me.rerere.rikkahub.data.goal.GoalStore.clear(conversation.id.toString())
     }
 
     suspend fun searchMessages(
