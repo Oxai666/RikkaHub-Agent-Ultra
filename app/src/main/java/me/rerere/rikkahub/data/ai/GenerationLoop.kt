@@ -808,7 +808,35 @@ class GenerationLoop(
                     // envelope to the model without executing.
                     val hardlineReason = me.rerere.rikkahub.data.ai.tools
                         .HardlineCommandGuard.checkTool(tool.toolName, tool.input)
+                    // 安全层评估：Hardline 是硬底线（永远拦），这层是风险分级
+                    // （工作区越界 / 不可逆 / 快照拍不了都要直接拒）。
+                    // 跑在 hardline 之后、审批之前，所以永远不会绕过 Hardline。
+                    val safetyVerdict = me.rerere.rikkahub.safety.ToolSafetyCoordinator.assess(
+                        toolName = tool.toolName,
+                        argsJson = tool.input,
+                        workspaceRoot = workspaceCwd,
+                    )
                     val transformed = when {
+                        safetyVerdict.blocked && tool.approvalState is ToolApprovalState.Auto -> {
+                            Log.w(
+                                TAG,
+                                "safety-blocked ${tool.toolName}: ${safetyVerdict.blockCode}"
+                            )
+                            me.rerere.rikkahub.safety.OperationAudit.record(
+                                toolName = tool.toolName,
+                                tier = safetyVerdict.tier,
+                                decision = me.rerere.rikkahub.safety.OperationAudit.Decision.BLOCKED,
+                                argsDigest = tool.input,
+                                blockCode = safetyVerdict.blockCode,
+                                targetPaths = safetyVerdict.dryRunPlan.targetPaths,
+                            )
+                            tool.copy(
+                                approvalState = ToolApprovalState.Denied(
+                                    safetyVerdict.blockMessage ?: "blocked by safety layer"
+                                )
+                            )
+                        }
+
                         hardlineReason != null && tool.approvalState is ToolApprovalState.Auto -> {
                             Log.w(TAG, "hardline-blocked ${tool.toolName}: $hardlineReason")
                             tool.copy(approvalState = ToolApprovalState.Denied(
