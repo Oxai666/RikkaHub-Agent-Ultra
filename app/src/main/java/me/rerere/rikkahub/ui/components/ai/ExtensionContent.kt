@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.components.ai
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.ExternalLink
 import com.composables.icons.lucide.Lucide
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowDown01
+import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.Link01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.files.SkillMetadata
@@ -157,6 +160,11 @@ fun SkillsContent(
         val unknown = grouped.keys.filter { key -> SKILL_CATEGORY_ORDER.none { it.first == key } }.sorted()
         known + unknown
     }
+    // 默认全部收起。84 个技能全展开要滑很久才找得到想要的，
+    // 先看分类标题再展开，比一路划下去高效。
+    val expanded = remember {
+        androidx.compose.runtime.mutableStateMapOf<String, Boolean>()
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -168,11 +176,13 @@ fun SkillsContent(
 
             val label = SKILL_CATEGORY_ORDER.firstOrNull { it.first == key }?.second ?: key
             val enabledInGroup = items.count { enabledSkills.contains(it.name) }
+            val isOpen = expanded[key] == true
 
             item(key = "header-$key") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable { expanded[key] = !isOpen }
                         .padding(top = 12.dp, bottom = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
@@ -181,6 +191,17 @@ fun SkillsContent(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // 展开/收起指示，跟着状态转
+                        Icon(
+                            imageVector = if (isOpen) {
+                                HugeIcons.ArrowDown01
+                            } else {
+                                HugeIcons.ArrowRight01
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
                         Text(
                             text = label,
                             style = MaterialTheme.typography.titleSmall,
@@ -196,8 +217,7 @@ fun SkillsContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    // 整组开关：22 条渗透技能一条条点太累。
-                    // 有批量回调就走批量，没有就退化成逐条（会丢状态，调用方要自己负责）。
+                    // 整组开关：22 条渗透技能一条条点太累
                     TextButton(
                         onClick = {
                             val names = items.map { it.name }
@@ -217,7 +237,8 @@ fun SkillsContent(
                 }
             }
 
-            items(items, key = { it.skillDir.absolutePath }) { skill ->
+            if (isOpen) {
+                items(items, key = { it.skillDir.absolutePath }) { skill ->
                 ListItem(
                     // 主标题用中文名，英文标识符缩成小字放在副标题前面——
                     // 用户要能一眼看懂干什么，但排查问题时还需要英文名
@@ -248,8 +269,9 @@ fun SkillsContent(
                             onCheckedChange = { checked -> onToggle(skill.name, checked) }
                         )
                     },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                )
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
+                }
             }
         }
         if (onManage != null) {

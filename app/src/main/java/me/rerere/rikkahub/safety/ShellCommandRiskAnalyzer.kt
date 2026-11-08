@@ -310,15 +310,20 @@ object ShellCommandRiskAnalyzer {
                 // dd 的 of= 参数
                 a.startsWith("of=") -> out += a.removePrefix("of=")
 
-                // 重定向会被 split 拆掉，这里兜一层 `>` 和 `>>` 后面的
+                // 重定向：`>` `>>` 后面的那个才是目标
                 a == ">" || a == ">>" -> args.getOrNull(i + 1)?.let { out += it }
+
+                // URL 不是路径。`https://x/y` 里既有 `:` 又有 `//`，
+                // 被当成写目标是之前误拦的直接原因之一。
+                a.contains("://") -> Unit
 
                 // 普通路径参数
                 !a.startsWith("-") && (a.contains('/') || a.startsWith(".")) -> out += a
 
                 // mv/cp/tee/rm 的非选项参数全当目标
-                !a.startsWith("-") && name in setOf("rm", "mv", "cp", "tee", "truncate", "shred", "touch", "mkdir", "rmdir") ->
-                    out += a
+                !a.startsWith("-") && name in setOf(
+                    "rm", "mv", "cp", "tee", "truncate", "shred", "touch", "mkdir", "rmdir", "ln",
+                ) -> out += a
             }
             i++
         }
@@ -328,22 +333,39 @@ object ShellCommandRiskAnalyzer {
     /**
      * 这个路径在不在工作区外。
      *
-     * `workspaceRoot` 为 null 表示**不知道工作区在哪**——
-     * 这时候返回 false，不做越界判断。之前这里返回 true（全算越界），
-     * 结果整台机器上所有绝对路径都被拒，连 `ls /workspace` 都跑不了。
+     * 这里的判定标准分两种场景，不能混：
      *
-     * 拿不准时应该交给审批弹窗，而不是直接拦死。
+     * **沙箱内**（[workspaceRoot] 是 `/workspace`）：proot 本身就是隔离的，
+     * 写坏 `/usr/local` 重建 rootfs 就行，没必要按真机的标准拦。
+     * 只有真正会把设备搞死的路径才拦。
+     *
+     * **真机**（`root_shell` 这类，root 是 App 侧路径）：按工作区边界严格判。
      */
     fun isOutside(path: String, workspaceRoot: String?): Boolean {
         if (path.isBlank()) return false
         // 相对路径默认认为在工作区内
         if (!path.startsWith("/")) return false
-        // 这几个路径无论工作区在哪都算危险：写它们等于动系统
+
+        // URL 被 split 之后会剩一段 `//github.com/...`，那不是路径
+        if (path.startsWith("//")) return false
+
+        // /dev/null、/dev/stdout 这些是重定向的去处，不是真在写文件
+        if (path.startsWith("/dev/")) {
+            val name = path.removePrefix("/dev/").substringBefore('/')
+            if (name in setOf(
+                    "null", "zero", "stdout", "stderr", "stdin", "tty",
+                    "random", "urandom", "full",
+                )
+            ) return false
+        }
+
+        // 这几个无论什么场景都算危险：动它们等于动设备
         if (path == "/" || path.startsWith("/system") || path.startsWith("/data/adb")) return true
-        // 不知道工作区在哪 → 不判
-        if (workspaceRoot == null) return false
+
+        // 沙箱场景：除了上面那几条，写哪都放行
+        if (workspaceRoot == null || workspaceRoot.trimEnd('/') == "/workspace") return false
+
         val root = workspaceRoot.trimEnd('/')
-        if (root.isEmpty()) return false
         return !(path == root || path.startsWith("$root/"))
     }
 }
