@@ -30,9 +30,19 @@ class SystemPromptBuilder {
         systemAddendum: String? = null,
         /** 本次真正注册的工具名。用来判断提示词里提到的东西存不存在。 */
         toolNames: Set<String> = emptySet(),
+        /**
+         * Plan 模式的整段提示词。非空时整段拼在助手提示词之后。
+         * 内容来自 `assets/prompts/PLAN_MODE.md`，由调用方读取后传进来——
+         * 这个 builder 是纯函数，不碰 Context。
+         */
+        planModePrompt: String? = null,
     ): Pair<String, String> {
         val stable = buildString {
             if (assistantPrompt.isNotBlank()) append(assistantPrompt)
+            if (!planModePrompt.isNullOrBlank()) {
+                if (isNotEmpty()) appendLine().appendLine()
+                append(planModePrompt.trim())
+            }
             if (toolPrompts.isNotEmpty()) {
                 if (isNotEmpty()) appendLine()
                 // 这几条以前是硬编码整句塞进去的，结果：

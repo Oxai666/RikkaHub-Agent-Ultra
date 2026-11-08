@@ -46,6 +46,8 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceButtons
+import me.rerere.rikkahub.ui.components.ui.ConnectedChoiceLabel
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.components.ui.TagsInput
@@ -163,6 +165,39 @@ internal fun AssistantBasicContent(
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+
+            HorizontalDivider()
+
+            // 协作模式：Plan 模式下工具表会被掐成只读子集，只产出计划不执行。
+            // 开关放在这里而不是聊天页，是因为它属于助手的长期设定。
+            FormItem(
+                label = {
+                    Text("协作模式")
+                },
+                description = {
+                    Text(
+                        if (assistant.collaborationMode == "plan") {
+                            "计划模式：只能查资料和提问，不会改任何东西。最后给出一份方案。"
+                        } else {
+                            "默认模式：边做边说，可以调用全部工具。"
+                        }
+                    )
+                },
+                modifier = Modifier.padding(8.dp),
+            ) {
+                ConnectedChoiceButtons(
+                    options = listOf("default", "plan"),
+                    selected = assistant.collaborationMode,
+                    onSelect = { mode ->
+                        onUpdate(assistant.copy(collaborationMode = mode))
+                    },
+                ) { mode, selected ->
+                    ConnectedChoiceLabel(
+                        text = if (mode == "plan") "计划" else "默认",
+                        selected = selected,
+                    )
+                }
             }
 
             HorizontalDivider()

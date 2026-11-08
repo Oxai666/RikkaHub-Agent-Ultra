@@ -53,6 +53,8 @@ import me.rerere.ai.ui.limitContext
 import me.rerere.ai.util.HttpException
 import me.rerere.ai.util.redactSecrets
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.plan.CollaborationMode
+import me.rerere.rikkahub.data.plan.PlanModePolicy
 import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.MessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
@@ -497,6 +499,20 @@ class GenerationLoop(
     private val aiLoggingManager: AILoggingManager,
     private val systemPromptBuilder: SystemPromptBuilder,
 ) {
+    /**
+     * Plan 模式的规划规程。从 assets 读一次就缓存——
+     * 每次生成都读一遍文件没必要，而且这段文字基本不会变。
+     *
+     * 读失败返回空串：Plan 模式会退化成「工具被掐成只读但没有规程」，
+     * 模型会一脸懵但不会崩，比抛异常强。
+     */
+    private val planModePrompt: String by lazy {
+        runCatching {
+            context.assets.open("prompts/PLAN_MODE.md")
+                .bufferedReader(Charsets.UTF_8)
+                .use { it.readText() }
+        }.getOrDefault("")
+    }
     fun generateText(
         settings: Settings,
         model: Model,
@@ -1293,6 +1309,13 @@ class GenerationLoop(
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
     ) {
+        // ── 协作模式 ──
+        // Plan 模式把工具表掐成只读子集，同时往系统提示词里塞一段规划规程。
+        // 过滤必须落在工具层：提示词说「别写文件」是软约束，模型只要不听一次就真写了。
+        val collaborationMode = CollaborationMode.fromSerialName(assistant.collaborationMode)
+        val effectiveTools = PlanModePolicy.project(tools, collaborationMode)
+        val planPrompt = if (collaborationMode.isPlan) planModePrompt else null
+
         val internalMessages = buildList {
             // Conversation-level system prompt override (upstream): when the assistant
             // allows it and the conversation supplies one, it replaces the assistant prompt.
@@ -1308,7 +1331,7 @@ class GenerationLoop(
             val recentChatsPrompt = if (assistant.enableRecentChatsReference) {
                 buildRecentChatsPrompt(assistant, conversationRepo)
             } else ""
-            val toolPrompts = tools.map { tool -> tool.systemPrompt(model, messages) }
+            val toolPrompts = effectiveTools.map { tool -> tool.systemPrompt(model, messages) }
             // Split into stable (assistant + tools) and volatile (memory + recent chats +
             // addendum) so prompt caching survives memory injection: the stable part is the
             // cached prefix, the volatile part sits after it. See SystemPromptBuilder.
@@ -1318,7 +1341,8 @@ class GenerationLoop(
                 recentChatsPrompt = recentChatsPrompt,
                 toolPrompts = toolPrompts,
                 systemAddendum = systemAddendum,
-                toolNames = tools.map { it.name }.toSet(),
+                toolNames = effectiveTools.map { it.name }.toSet(),
+                planModePrompt = planPrompt,
             )
             val systemParts = buildList {
                 if (stableSystem.isNotBlank()) add(UIMessagePart.Text(stableSystem))
@@ -1352,7 +1376,7 @@ class GenerationLoop(
             topP = assistant.topP,
             maxTokens = assistant.maxTokens,
             maxStreamRetries = if (settings.networkSetting.enableAutoRetry) settings.responseStreamMaxRetries else 0,
-            tools = tools,
+            tools = effectiveTools,
             reasoningLevel = assistant.reasoningLevel,
             customHeaders = buildList {
                 addAll(assistant.customHeaders)
