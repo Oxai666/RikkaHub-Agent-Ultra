@@ -80,6 +80,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.replaceRegexes
+import me.rerere.rikkahub.data.plan.ProposedPlanParser
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
 import me.rerere.rikkahub.ui.components.richtext.buildMarkdownPreviewHtml
@@ -435,8 +436,8 @@ private fun MessagePartsBlock(
                                         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = settings.displaySetting.bubbleOpacity),
                                     ) {
                                         Column(modifier = Modifier.padding(8.dp)) {
-                                            MarkdownBlock(
-                                                content = part.text.replaceRegexes(
+                                            AssistantTextBlock(
+                                                text = part.text.replaceRegexes(
                                                     assistant = assistant,
                                                     scope = AssistantAffectScope.ASSISTANT,
                                                     visual = true,
@@ -446,15 +447,14 @@ private fun MessagePartsBlock(
                                         }
                                     }
                                 } else {
-                                    MarkdownBlock(
-                                        content = part.text.replaceRegexes(
+                                    AssistantTextBlock(
+                                        text = part.text.replaceRegexes(
                                             assistant = assistant,
                                             scope = AssistantAffectScope.ASSISTANT,
                                             visual = true,
                                         ),
                                         onClickCitation = handleClickCitation,
-                                        modifier = Modifier
-                                            .animateContentSize()
+                                        modifier = Modifier.animateContentSize(),
                                     )
                                 }
                             }
@@ -677,6 +677,98 @@ private fun MessagePartsBlock(
             ) {
                 Text(stringResource(R.string.citations_count, annotations.size))
             }
+        }
+    }
+}
+
+
+/**
+ * 助手消息正文。
+ *
+ * 普通文本直接交给 MarkdownBlock；如果里面有 `<proposed_plan>` 块，
+ * 就把标签前面的话照常渲染，块本身渲染成一张卡片。
+ *
+ * 为什么不在 MarkdownBlock 里做：那是通用组件，用户消息、工具输出、
+ * 设置页的预览都在用，把 Plan 的特例塞进去会污染所有调用点。
+ */
+@Composable
+private fun AssistantTextBlock(
+    text: String,
+    onClickCitation: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val parsed = remember(text) { ProposedPlanParser.parse(text) }
+    if (parsed == null) {
+        MarkdownBlock(content = text, onClickCitation = onClickCitation, modifier = modifier)
+        return
+    }
+
+    val before = remember(text) {
+        val idx = text.indexOf(ProposedPlanParser.OPEN_TAG)
+        if (idx < 0) "" else text.take(idx).trim()
+    }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (before.isNotBlank()) {
+            MarkdownBlock(content = before, onClickCitation = onClickCitation)
+        }
+        ProposedPlanCard(plan = parsed, onClickCitation = onClickCitation)
+    }
+}
+
+/**
+ * `<proposed_plan>` 渲染成的卡片。
+ *
+ * 用主色描边 + 淡主色底，跟普通正文区分开——这是「方案」，不是「已经在做的事」。
+ */
+@Composable
+private fun ProposedPlanCard(
+    plan: ProposedPlanParser.Parsed,
+    onClickCitation: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.30f),
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = me.rerere.rikkahub.ui.components.ui.icons.IconMap,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = "方案",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                if (!plan.title.isNullOrBlank()) {
+                    Text(
+                        text = plan.title,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+            MarkdownBlock(content = plan.markdown, onClickCitation = onClickCitation)
         }
     }
 }
