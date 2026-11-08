@@ -854,6 +854,11 @@ data class Settings(
     val compressModelId: Uuid = Uuid.random(),
     val compressPrompt: String = DEFAULT_COMPRESS_PROMPT,
     val enableAutoCompaction: Boolean = false,
+    // 目标自动续跑。默认关：开着但没人看就是烧钱机器。
+    // 原实现默认 true，这里刻意反过来。
+    val enableGoalAutoContinuation: Boolean = false,
+    // 一个目标最多自动续几轮，到上限就自动暂停。
+    val goalContinuationLimit: Int = 5,
     val autoCompactionThresholdMode: AutoCompactionThresholdMode = AutoCompactionThresholdMode.PERCENT,
     val autoCompactionThresholdPercent: Int = 80,
     val autoCompactionThresholdTokensK: Int = 8,

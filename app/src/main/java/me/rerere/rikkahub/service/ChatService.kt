@@ -597,12 +597,53 @@ class ChatService(
                         session.messageQueue.failReplyWaiters(context.getString(R.string.chat_page_voice_tool_approval))
                     }
                     appScope.launch { dispatchNextQueuedMessage(id) }
+                    // 目标自动续跑：这轮完了，如果还有活着的目标就接着推。
+                    // 放在 dispatchNextQueuedMessage 之后，保证队列优先。
+                    appScope.launch { maybeStartGoalContinuation(id) }
                 },
             ).also {
                 _sessionsVersion.value++
                 Log.i(TAG, "createSession: $id (total: ${sessions.size + 1})")
             }
         }
+    }
+
+    /**
+     * 目标自动续跑。
+     *
+     * 一轮生成结束后调。判据：
+     *   有目标 → 状态是 active → 不是无人值守会话 → 开关开着 → 没到次数上限
+     *
+     * 默认**关闭**。原实现默认开，配合付费中转就是无限烧钱——
+     * 用户不盯着的时候，它会在半夜一直跑下去。
+     */
+    private suspend fun maybeStartGoalContinuation(conversationId: Uuid) {
+        val key = conversationId.toString()
+        val goal = me.rerere.rikkahub.data.goal.GoalStore.get(key) ?: return
+        if (goal.status != me.rerere.rikkahub.data.goal.GoalStatus.ACTIVE) return
+        // 无人值守会话（cron / 子智能体 / 工作流）自己会跑，这里再推一次会打架
+        if (me.rerere.rikkahub.data.ai.tools.HeadlessConversations.isHeadless(conversationId)) return
+
+        val settings = settingsStore.settingsFlow.first()
+        if (!settings.enableGoalAutoContinuation) return
+
+        val count = me.rerere.rikkahub.data.goal.GoalStore.bumpContinuation(key)
+        if (count > settings.goalContinuationLimit) {
+            // 到上限就自己停下，别等用户发现账单
+            me.rerere.rikkahub.data.goal.GoalStore.set(
+                key,
+                goal.copy(
+                    status = me.rerere.rikkahub.data.goal.GoalStatus.PAUSED,
+                    updatedAtMs = System.currentTimeMillis(),
+                ),
+            )
+            return
+        }
+
+        sendMessage(
+            conversationId = conversationId,
+            content = listOf(UIMessagePart.Text("继续推进目标。")),
+        )
     }
 
     private fun removeSession(conversationId: Uuid) {
