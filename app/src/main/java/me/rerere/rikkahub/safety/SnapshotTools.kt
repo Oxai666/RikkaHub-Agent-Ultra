@@ -121,27 +121,68 @@ private fun snapshotRestoreTool(context: Context, workspaceId: String?): Tool = 
                     }.toString()
                 )
             )
-        val result = FileSnapshotManager.restore(
-            root = root,
-            record = record,
-            resolveTarget = { sandboxPath ->
-                SnapshotRoots.resolveTarget(context, workspaceId, sandboxPath)
-            },
-        )
+        val result = runCatching {
+            // 恢复之前先给自己拍一张。
+            // 恢复会覆盖现有文件、删掉「拍快照时不存在的文件」——不可逆。
+            // 不先备份的话，恢复成错的那一份就再也回不来了。
+            val preRestore = runCatching {
+                FileSnapshotManager.capture(
+                    root = root,
+                    plan = SnapshotPlan(
+                        scope = SnapshotScope.FILES,
+                        targets = record.entries
+                            .filter { it.existed && it.snapshotPath.isNotEmpty() }
+                            .map { SnapshotTarget(path = it.originalPath, exists = true) },
+                        required = false,
+                        captureSupported = record.entries.isNotEmpty(),
+                        noSnapshotAllowed = true,
+                    ),
+                    toolName = "snapshot_restore",
+                    resolveTarget = { sandboxPath ->
+                        SnapshotRoots.resolveTarget(context, workspaceId, sandboxPath)
+                    },
+                )
+            }.getOrNull()
+
+            FileSnapshotManager.restore(
+                root = root,
+                record = record,
+                resolveTarget = { sandboxPath ->
+                    SnapshotRoots.resolveTarget(context, workspaceId, sandboxPath)
+                },
+            ).let { it to preRestore }
+        }.getOrElse { e ->
+            return@Tool listOf(
+                UIMessagePart.Text(
+                    buildJsonObject {
+                        put("ok", false)
+                        put("error", "RESTORE_FAILED")
+                        put("detail", e.message ?: e::class.simpleName.orEmpty())
+                    }.toString()
+                )
+            )
+        }
+        val (restoreResult, preRestore) = result
         listOf(
             UIMessagePart.Text(
                 buildJsonObject {
-                    put("ok", result.ok)
-                    put("restored", result.restored)
-                    put("deleted", result.deleted)
-                    put("failed_count", result.failed.size)
-                    if (result.failed.isNotEmpty()) {
+                    put("ok", restoreResult.ok)
+                    put("restored", restoreResult.restored)
+                    put("deleted", restoreResult.deleted)
+                    put("failed_count", restoreResult.failed.size)
+                    if (restoreResult.failed.isNotEmpty()) {
                         put("failed", buildJsonArray {
-                            result.failed.take(10).forEach {
+                            restoreResult.failed.take(10).forEach {
                                 add(kotlinx.serialization.json.JsonPrimitive(it))
                             }
                         })
                     }
+                    // 告诉模型「这次恢复本身也拍了快照」，用户反悔时还能再回去
+                    put(
+                        "undo_hint",
+                        preRestore?.let { "恢复前的现场已存为快照 ${it.id}，用户可以再调 snapshot_restore 回去" }
+                            ?: "恢复前的现场没能存下来（目标文件可能已经不在了）",
+                    )
                 }.toString()
             )
         )

@@ -349,9 +349,16 @@ object ShellCommandRiskAnalyzer {
      *
      * **真机**（`root_shell` 这类，root 是 App 侧路径）：按工作区边界严格判。
      *
-     * **符号链接会被解析**：`ln -s /etc /workspace/etc` 之后再写
-     * `/workspace/etc/passwd`，字面看在工作区内，实际落到 `/etc/passwd`。
-     * 所以先 `canonicalPath` 拿到真实路径再判。
+     * **符号链接只在真机场景能解析**。`ln -s /etc /workspace/etc` 之后再写
+     * `/workspace/etc/passwd`，字面看在工作区内、实际落到 `/etc/passwd`。
+     * 真机场景用 `canonicalPath` 拿真实路径再判是对的。
+     *
+     * 但**沙箱场景解析不了**：这段代码跑在 App 进程里，`File("/workspace/x")`
+     * 指向的是 Android 根目录，不是 proot 里的那个 /workspace。沙箱里建的
+     * 软链接在 App 进程看来根本不存在，`canonicalPath` 只会原样返回。
+     * 所以沙箱场景下这条防线是空的——只能靠「只拦 /、/system、/data/adb」
+     * 这三条兜底。真要防软链接逃逸得在沙箱内跑一次 `readlink -f`，
+     * 那是另一层的事，不在这里做。
      */
     fun isOutside(path: String, workspaceRoot: String?): Boolean {
         if (path.isBlank()) return false
@@ -371,18 +378,23 @@ object ShellCommandRiskAnalyzer {
             ) return false
         }
 
-        // 解析符号链接。canonicalPath 对不存在的文件会尽力解析已有的前缀，
-        // 失败就退回字面路径——不能因为解析不了就放行。
+        // 沙箱场景：路径空间跟 App 进程不是一回事，canonicalPath 解析没有意义，
+        // 只做字面判断。这三条是硬底线，碰就是碰设备。
+        val sandboxMode = workspaceRoot == null || workspaceRoot.trimEnd('/') == "/workspace"
+        if (sandboxMode) {
+            return path == "/" ||
+                path.startsWith("/system") ||
+                path.startsWith("/data/adb")
+        }
+
+        // 真机场景：解析符号链接再判。canonicalPath 对不存在的文件会尽力解析
+        // 已有的前缀，失败就退回字面路径——不能因为解析不了就放行。
         val resolved = runCatching { java.io.File(path).canonicalPath }.getOrDefault(path)
 
-        // 这几个无论什么场景都算危险：动它们等于动设备
         if (resolved == "/" ||
             resolved.startsWith("/system") ||
             resolved.startsWith("/data/adb")
         ) return true
-
-        // 沙箱场景：除了上面那几条，写哪都放行
-        if (workspaceRoot == null || workspaceRoot.trimEnd('/') == "/workspace") return false
 
         val root = workspaceRoot.trimEnd('/')
         return !(resolved == root || resolved.startsWith("$root/"))

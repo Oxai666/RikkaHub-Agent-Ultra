@@ -1178,12 +1178,37 @@ class LocalTools(
             )
         }
 
-        // ── 技能创作：同样常驻 ──
-        // 但只有「列出来」是常驻的——模型得先能看见有哪些技能和分类。
-        // 创建/修改/删除会改磁盘，挂在 SkillAuthoring 开关下面，
-        // 默认不开，用户明确要「让 AI 帮我沉淀技能」时才打开。
-        tools.addAll(me.rerere.rikkahub.skills.createSkillReadTools(skillManager))
-        if (options.contains(LocalToolOption.SkillAuthoring)) {
+        // ── 技能工具 ──
+        // 一个技能都没勾的时候，这一整块都不注册。
+        //
+        // 为什么：没勾技能时 assistant 就是一个纯聊天助手。
+        // 这时候还塞 skill_list 进去，模型会去调它、看到 86 个技能的名字，
+        // 然后试图 use_skill 一个用户根本没开的技能（结果 tool_not_found），
+        // 或者开始跟你聊「我这里有哪些技能」——用户压根没要这个。
+        // 提示词那边的 SKILL_CAPTURE_HINT 也只在 skill_create 真在表里时才注入，
+        // 所以不注册就等于彻底没有技能这回事。
+        //
+        // getTools 的入参里没有 assistant，只能按 callerAssistantId 反查。
+        val enabledSkills = runCatching {
+            settingsStore.settingsFlow.value.assistants
+                .firstOrNull { it.id.toString() == invocationContext.callerAssistantId }
+                ?.enabledSkills
+        }.getOrNull()
+        val hasEnabledSkills = !enabledSkills.isNullOrEmpty()
+        val wantSkillAuthoring = options.contains(LocalToolOption.SkillAuthoring)
+
+        if (hasEnabledSkills) {
+            // 列表只在真勾了技能时才有意义：模型得先能看见自己手上有什么。
+            tools.addAll(me.rerere.rikkahub.skills.createSkillReadTools(skillManager))
+        }
+        // 写工具独立判断：用户可能一个技能都没勾，但明确开了「让 AI 写技能」，
+        // 想让它从零沉淀第一个技能。这种情况得给。
+        if (wantSkillAuthoring) {
+            if (!hasEnabledSkills) {
+                // 没勾技能但要能写，就得先能列——不然模型不知道有哪些分类已存在，
+                // 会建出一堆名字相近的重复分类。
+                tools.addAll(me.rerere.rikkahub.skills.createSkillReadTools(skillManager))
+            }
             tools.addAll(me.rerere.rikkahub.skills.createSkillWriteTools(skillManager))
         }
 

@@ -827,6 +827,21 @@ class GenerationLoop(
                     )
                     // 真的拍快照。之前只产出 SnapshotPlan 就完事了，
                     // 等于告诉用户「已备份」但一个字节都没存。
+                    //
+                    // 目标路径是**沙箱视角**的 /workspace/...，拍快照的代码跑在
+                    // App 进程里，必须翻译成 filesDir/workspaces/<id>/files/...
+                    // 才找得到文件。下面那个「备份失败就拒绝」的判断用的是同一个
+                    // 翻译函数——之前那里写的是 File(it.path).exists()，
+                    // 沙箱路径在 App 进程里恒不存在，导致 required 但拍失败时
+                    // 判断恒为 false，直接放行了。
+                    val snapshotWorkspaceId = assistant.workspaceId?.toString()
+                    val resolveSnapshotTarget: (String) -> File = { sandboxPath ->
+                        me.rerere.rikkahub.safety.SnapshotRoots.resolveTarget(
+                            context = context,
+                            workspaceId = snapshotWorkspaceId,
+                            sandboxPath = sandboxPath,
+                        )
+                    }
                     val snapshotRecord = runCatching {
                         if (safetyVerdict.snapshotPlan.required) {
                             withContext(Dispatchers.IO) {
@@ -836,20 +851,11 @@ class GenerationLoop(
                                     // 放 App 私有目录的话两头都是瞎的。
                                     root = me.rerere.rikkahub.safety.SnapshotRoots.of(
                                         context = context,
-                                        workspaceId = assistant.workspaceId?.toString(),
+                                        workspaceId = snapshotWorkspaceId,
                                     ),
                                     plan = safetyVerdict.snapshotPlan,
                                     toolName = tool.toolName,
-                                    // 目标路径是**沙箱视角**的 /workspace/...，
-                                    // 拍快照的代码跑在 App 进程里，必须翻译成
-                                    // filesDir/workspaces/<id>/files/... 才找得到文件
-                                    resolveTarget = { sandboxPath ->
-                                        me.rerere.rikkahub.safety.SnapshotRoots.resolveTarget(
-                                            context = context,
-                                            workspaceId = assistant.workspaceId?.toString(),
-                                            sandboxPath = sandboxPath,
-                                        )
-                                    },
+                                    resolveTarget = resolveSnapshotTarget,
                                 )
                             }
                         } else {
@@ -863,7 +869,9 @@ class GenerationLoop(
                         // 所以额外判断一下 targets 里有没有真存在的文件。
                         safetyVerdict.snapshotPlan.required &&
                             snapshotRecord == null &&
-                            safetyVerdict.snapshotPlan.targets.any { File(it.path).exists() } -> {
+                            safetyVerdict.snapshotPlan.targets.any {
+                                resolveSnapshotTarget(it.path).exists()
+                            } -> {
                             Log.w(TAG, "snapshot-required-but-failed ${tool.toolName}")
                             tool.copy(
                                 approvalState = ToolApprovalState.Denied(
@@ -873,7 +881,12 @@ class GenerationLoop(
                             )
                         }
 
-                        safetyVerdict.blocked && tool.approvalState is ToolApprovalState.Auto -> {
+                        // blocked 是无条件的：安全层已经判定这条命令不能跑，
+                        // 那它就不该出现在任何状态下。之前带了
+                        // `&& tool.approvalState is Auto`，模型如果因为上一轮
+                        // 审批暂停过、这一轮带着 Pending 状态重放同一条命令，
+                        // 就绕过这道闸了。
+                        safetyVerdict.blocked -> {
                             Log.w(
                                 TAG,
                                 "safety-blocked ${tool.toolName}: ${safetyVerdict.blockCode}"
@@ -893,7 +906,8 @@ class GenerationLoop(
                             )
                         }
 
-                        hardlineReason != null && tool.approvalState is ToolApprovalState.Auto -> {
+                        // 同上：硬底线不看状态。Always Allow / YOLO / Pending 全都不该影响它。
+                        hardlineReason != null -> {
                             Log.w(TAG, "hardline-blocked ${tool.toolName}: $hardlineReason")
                             tool.copy(approvalState = ToolApprovalState.Denied(
                                 "blocked by safety floor (hardline): $hardlineReason. " +
