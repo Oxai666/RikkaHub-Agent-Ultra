@@ -13,6 +13,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -345,6 +346,42 @@ fun SettingPreferencesGeneralPage(vm: SettingVM = koinViewModel()) {
                             )
                         },
                     )
+                    // ── 目标自动续跑 ──
+                    // 这个开关之前只有字段和逻辑，没接到界面上——用户永远开不了。
+                    item(
+                        headlineContent = { Text(stringResource(R.string.setting_goal_auto_continuation_title)) },
+                        supportingContent = { Text(stringResource(R.string.setting_goal_auto_continuation_desc)) },
+                        trailingContent = {
+                            Switch(
+                                checked = settings.enableGoalAutoContinuation,
+                                onCheckedChange = {
+                                    vm.updateSettings(settings.copy(enableGoalAutoContinuation = it))
+                                }
+                            )
+                        },
+                    )
+                    if (settings.enableGoalAutoContinuation) {
+                        item(
+                            headlineContent = { Text(stringResource(R.string.setting_goal_continuation_limit_title)) },
+                            supportingContent = { Text(stringResource(R.string.setting_goal_continuation_limit_desc)) },
+                            trailingContent = {
+                                var limitText by remember(settings.goalContinuationLimit) {
+                                    mutableStateOf(settings.goalContinuationLimit.toString())
+                                }
+                                OutlinedTextField(
+                                    value = limitText,
+                                    onValueChange = { raw ->
+                                        limitText = raw
+                                        raw.toIntOrNull()?.takeIf { it in 1..50 }?.let {
+                                            vm.updateSettings(settings.copy(goalContinuationLimit = it))
+                                        }
+                                    },
+                                    singleLine = true,
+                                    modifier = Modifier.width(88.dp),
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }

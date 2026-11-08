@@ -11,22 +11,23 @@ import me.rerere.rikkahub.data.ai.tools.ToolAccess
  * 调用的结果只能是「工具不存在」，而不是「我拒绝你」。
  *
  * 三条规则：
- *  1. `update_plan` 在 Plan 模式一律拒绝——它是执行期的检查表，
- *     混进规划期会让模型一边规划一边开干。
- *  2. Plan 自己的三件套（get/create/update plan）+ `ask_user` 放行。
+ *  1. 系统工具放行表（见 [PLAN_ALLOWED_SYSTEM_TOOLS]）：`update_plan`
+ *     + goal 三件套 + `ask_user`。
+ *  2. `update_plan` 放行的理由见 [isAllowedInPlan] 的注释——
+ *     不放行的话界面步骤条永远是空的。
  *  3. 其余只看 [ToolAccess.isReadOnly]。
  */
 object PlanModePolicy {
 
+    /** 唯一的拒绝原因：这个工具不在只读名单里。 */
     const val PLAN_MODE_READ_ONLY = "PLAN_MODE_READ_ONLY"
-    const val PLAN_MODE_TOOL_FORBIDDEN = "PLAN_MODE_TOOL_FORBIDDEN"
 
     /**
      * Plan 模式里额外放行的系统工具。
      *
-     * 注意**不含** `update_plan`——那是执行期的检查表，规划阶段调它
-     * 会让模型一边规划一边开干。但 goal 三件套要放行：规划阶段同样需要
-     * 读目标、建目标、把目标标成受阻。
+     * 这些都是「改的是元数据，不是用户的东西」：计划表、目标、提问。
+     * 真执行期的检查表和规划期的提纲是同一个工具，区别在提示词里的约束
+     * （规划期不许标 in_progress），不在这个白名单上。
      */
     private val PLAN_ALLOWED_SYSTEM_TOOLS: Set<String> = setOf(
         // Plan 模式下也放行：用来列出「打算分几步走」，界面上的步骤条靠它。
@@ -73,22 +74,13 @@ object PlanModePolicy {
     fun modeOf(assistant: me.rerere.rikkahub.data.model.Assistant): CollaborationMode =
         CollaborationMode.fromSerialName(assistant.collaborationMode)
 
-    fun rejectionCode(toolName: String): String =
-        if (toolName == PlanToolCatalog.UPDATE_PLAN) PLAN_MODE_TOOL_FORBIDDEN else PLAN_MODE_READ_ONLY
+    fun rejectionCode(toolName: String): String = PLAN_MODE_READ_ONLY
 
     /** 给模型看的英文说明。 */
     fun rejectionMessage(toolName: String): String =
-        if (toolName == PlanToolCatalog.UPDATE_PLAN) {
-            "update_plan is a TODO/checklist tool and is not allowed in Plan mode"
-        } else {
-            "Tool `$toolName` is not available in Plan mode; Plan mode is read-only."
-        }
+        "Tool `$toolName` is not available in Plan mode; Plan mode is read-only."
 
     /** 给用户看的中文说明。 */
     fun rejectionUserMessage(toolName: String): String =
-        if (toolName == PlanToolCatalog.UPDATE_PLAN) {
-            "update_plan 不能在 Plan 模式调用；Plan 模式只产出计划，退出后执行阶段再更新检查表。"
-        } else {
-            "工具 `$toolName` 在 Plan 模式下不可用，Plan 模式只读。"
-        }
+        "工具 `$toolName` 在 Plan 模式下不可用，Plan 模式只读。"
 }

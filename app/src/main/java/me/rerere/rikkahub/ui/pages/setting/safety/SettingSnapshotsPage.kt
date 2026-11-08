@@ -18,6 +18,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -69,10 +74,15 @@ fun SettingSnapshotsPage() {
     }
 
     var records by remember { mutableStateOf(FileSnapshotManager.list(root)) }
+    var restoringId by remember { mutableStateOf<String?>(null) }
+    // 恢复结果弹一次 Snackbar 就够了，不占卡片位置
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     val timeFormat = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             LargeFlexibleTopAppBar(
                 title = { Text("安全快照") },
@@ -173,11 +183,50 @@ fun SettingSnapshotsPage() {
                                 text = timeFormat.format(Date(record.createdAtMs)),
                                 style = MaterialTheme.typography.titleSmall,
                             )
-                            Text(
-                                text = formatBytes(bytes),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(
+                                    text = formatBytes(bytes),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (captured > 0) {
+                                    TextButton(
+                                        enabled = restoringId == null,
+                                        onClick = {
+                                            restoringId = record.id
+                                            val result = FileSnapshotManager.restore(
+                                                root = root,
+                                                record = record,
+                                                resolveTarget = { sandboxPath ->
+                                                    SnapshotRoots.resolveTarget(
+                                                        context = context,
+                                                        workspaceId = assistant.workspaceId?.toString(),
+                                                        sandboxPath = sandboxPath,
+                                                    )
+                                                },
+                                            )
+                                            restoringId = null
+                                            scope.launch {
+                                                snackbarHostState.showSnackbar(
+                                                    if (result.failed.isNotEmpty()) {
+                                                        "恢复了 ${result.restored} 个，${result.failed.size} 个失败：${result.failed.first()}"
+                                                    } else {
+                                                        "恢复了 ${result.restored} 个文件"
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    ) {
+                                        Text(
+                                            if (restoringId == record.id) "恢复中…" else "恢复",
+                                            style = MaterialTheme.typography.labelMedium,
+                                        )
+                                    }
+                                }
+                            }
                         }
                         Text(
                             text = "由 ${record.toolName} 触发",

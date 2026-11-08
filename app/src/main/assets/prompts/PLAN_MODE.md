@@ -72,7 +72,7 @@ Call it again only if the outline genuinely changes. Do not spam it every turn.
 
 Critical rules:
 
-* Strongly prefer using the `request_user_input` tool to ask any questions.
+* Strongly prefer using the `ask_user` tool to ask any questions.
 * Offer only meaningful multiple‑choice options; don’t include filler choices that are obviously wrong or irrelevant.
 * In rare cases where an unavoidable, important question can’t be expressed with reasonable multiple‑choice options (due to extreme ambiguity), you may ask it directly without the tool.
 
@@ -83,7 +83,7 @@ You SHOULD ask many questions, but each question must:
 * choose between meaningful tradeoffs.
 * not be answerable by non-mutating commands.
 
-Use the `request_user_input` tool only for decisions that materially change the plan, for confirming important assumptions, or for information that cannot be discovered via non-mutating exploration.
+Use the `ask_user` tool only for decisions that materially change the plan, for confirming important assumptions, or for information that cannot be discovered via non-mutating exploration.
 
 ## Two kinds of unknowns (treat differently)
 

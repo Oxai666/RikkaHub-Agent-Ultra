@@ -76,8 +76,12 @@ object GoalTemplates {
                     t.startsWith("- Tokens remaining：")
             }
             .joinToString("\n")
-            .replace("{{ token_budget }}", "unlimited")
-            .replace("{{ remaining_tokens }}", "unlimited")
+            // 兜底：万一模板换了措辞导致上面那几行没被删掉，
+            // 也不能填成 "unlimited"——那等于告诉模型预算无限。
+            .replace("{{ token_budget }}", "not tracked")
+            .replace("{{ remaining_tokens }}", "not tracked")
+            .replace("{{token_budget}}", "not tracked")
+            .replace("{{remaining_tokens}}", "not tracked")
             .trim()
     }
 }

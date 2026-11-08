@@ -1157,20 +1157,42 @@ class GenerationLoop(
                         val toolDef = toolsInternal.find { toolDef -> toolDef.name == tool.toolName }
                         if (toolDef == null) {
                             Log.w(TAG, "tool ${tool.toolName} not found among ${toolsInternal.size} tools available this turn")
+                            // 两种「找不到」要说清区别：
+                            //   ① 工具压根不存在（模型幻觉、MCP 没开）
+                            //   ② 工具存在，但当前是 Plan 模式被闸门掐掉了
+                            // ②是设计如此，得让模型知道自己被限制而不是拼错名字了。
+                            val planBlocked = PlanModePolicy.modeOf(assistant).isPlan &&
+                                !PlanModePolicy.isAllowedInPlan(tool.toolName)
                             executedTools += tool.copy(
                                 output = listOf(
                                     UIMessagePart.Text(
-                                        json.encodeToString(buildJsonObject {
-                                            put("error", JsonPrimitive("tool_not_found"))
-                                            put(
-                                                "detail",
-                                                JsonPrimitive("Tool '${tool.toolName}' was called but is not among the tools available this turn."),
-                                            )
-                                            put(
-                                                "tools_available_this_turn",
-                                                JsonPrimitive(toolsInternal.joinToString(", ") { it.name }.take(1500)),
-                                            )
-                                        })
+                                        if (planBlocked) {
+                                            json.encodeToString(buildJsonObject {
+                                                put("error", JsonPrimitive(PlanModePolicy.rejectionCode(tool.toolName)))
+                                                put("detail", JsonPrimitive(PlanModePolicy.rejectionMessage(tool.toolName)))
+                                                put("user_message", JsonPrimitive(PlanModePolicy.rejectionUserMessage(tool.toolName)))
+                                                put(
+                                                    "hint",
+                                                    JsonPrimitive(
+                                                        "Plan mode only exposes read-only tools plus update_plan. " +
+                                                            "Put what you intend to change into a <proposed_plan> block instead; " +
+                                                            "the user switches to default mode to apply it."
+                                                    ),
+                                                )
+                                            })
+                                        } else {
+                                            json.encodeToString(buildJsonObject {
+                                                put("error", JsonPrimitive("tool_not_found"))
+                                                put(
+                                                    "detail",
+                                                    JsonPrimitive("Tool '${tool.toolName}' was called but is not among the tools available this turn."),
+                                                )
+                                                put(
+                                                    "tools_available_this_turn",
+                                                    JsonPrimitive(toolsInternal.joinToString(", ") { it.name }.take(1500)),
+                                                )
+                                            })
+                                        }
                                     )
                                 )
                             )

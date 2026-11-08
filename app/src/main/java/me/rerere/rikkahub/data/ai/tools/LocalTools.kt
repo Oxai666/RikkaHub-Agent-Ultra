@@ -1147,7 +1147,14 @@ class LocalTools(
         // ── 规划与目标：跟助手开了哪些开关无关，全局常驻 ──
         // Plan 模式下 update_plan 会被 PlanModePolicy 滤掉，goal 三件套放行
         // （规划阶段也要能读目标、建目标、把目标标成受阻）。
+        //
+        // key 的兜底必须跟 UI 侧一致：
+        //   ChatInput  取 conversationId ?: assistant.id
+        //   这里原本只传 callerConversationId，新建会话时它是 null，
+        //   工具就落到 "__default__" 这个私有 key 上，而界面在等 assistant.id，
+        //   结果就是模型明明建了计划、步骤条永远不显示、目标面板永远空。
         val planningKey = invocationContext.callerConversationId
+            ?: invocationContext.callerAssistantId
         tools.addAll(me.rerere.rikkahub.data.plan.planTools(planningKey))
         tools.addAll(me.rerere.rikkahub.data.goal.goalTools(planningKey))
 

@@ -898,6 +898,10 @@
   <string name="setting_page_extensions_desc">Manage prompt injections, skills and more</string>
   <string name="setting_page_general_settings">General Settings</string>
   <string name="setting_page_interaction_notification_settings">Interaction &amp;amp; Notifications</string>
+  <string name="setting_goal_auto_continuation_title">Auto-continue goals</string>
+  <string name="setting_goal_auto_continuation_desc">Start another round automatically when a goal is not yet met</string>
+  <string name="setting_goal_continuation_limit_title">Max continuation rounds</string>
+  <string name="setting_goal_continuation_limit_desc">Auto-pauses at the limit, 1–50</string>
   <string name="setting_page_snapshots">Safety snapshots</string>
   <string name="setting_page_snapshots_desc">Automatic backups taken before irreversible operations</string>
   <string name="setting_page_mcp">MCP</string>
