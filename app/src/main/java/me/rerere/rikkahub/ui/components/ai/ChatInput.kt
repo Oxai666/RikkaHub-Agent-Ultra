@@ -91,11 +91,13 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Fullscreen
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.goal.GoalStore
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.service.MessageQueueState
@@ -144,9 +146,16 @@ fun ChatInput(
     onStartVoiceMode: (() -> Unit)? = null,
     voiceState: VoiceSessionState = VoiceSessionState(),
     onStopVoiceMode: () -> Unit = {},
+    /** 会话 id，用来定位这个会话的目标。为空时退回按助手 id 存。 */
+    conversationId: String? = null,
+    /** 点击旗帜时打开目标面板。 */
+    onOpenGoal: () -> Unit = {},
 ) {
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
+    // 目标按会话存；拿不到会话 id 时退回助手粒度，至少不会串到别人身上。
+    val goalKey = conversationId ?: assistant.id.toString()
+    val currentGoal by GoalStore.observe(goalKey).collectAsStateWithLifecycle()
     val hazeTintColor = MaterialTheme.colorScheme.surfaceContainerLow
     val inputHazeStyle = HazeBlurStyle.Material3 {
         blurRadius(12.dp)
@@ -281,6 +290,23 @@ fun ChatInput(
                                 state = modelListState,
                                 onlyIcon = true,
                                 modifier = Modifier,
+                            )
+
+                            // Plan（地图）与 Goal（旗帜）——摆在这里是因为
+                            // 它们决定了这一轮「能干什么」，属于跟模型同一层的选择，
+                            // 不是助手设置里那种一次性配置。
+                            PlanModeButton(
+                                active = assistant.collaborationMode == "plan",
+                                onClick = {
+                                    val next =
+                                        if (assistant.collaborationMode == "plan") "default" else "plan"
+                                    onUpdateAssistant(assistant.copy(collaborationMode = next))
+                                },
+                            )
+
+                            GoalButton(
+                                goal = currentGoal,
+                                onClick = onOpenGoal,
                             )
 
                             // Search

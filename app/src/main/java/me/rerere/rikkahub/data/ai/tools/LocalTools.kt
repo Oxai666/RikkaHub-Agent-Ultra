@@ -1135,6 +1135,13 @@ class LocalTools(
             tools.add(keyboardSetCursorTool(keyboardApiClient))
             tools.add(keyboardSelectRangeTool(keyboardApiClient))
         }
+        // ── 规划与目标：跟助手开了哪些开关无关，全局常驻 ──
+        // Plan 模式下 update_plan 会被 PlanModePolicy 滤掉，goal 三件套放行
+        // （规划阶段也要能读目标、建目标、把目标标成受阻）。
+        val planningKey = invocationContext.callerConversationId
+        tools.addAll(me.rerere.rikkahub.data.plan.planTools(planningKey))
+        tools.addAll(me.rerere.rikkahub.data.goal.goalTools(planningKey))
+
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of
         // truth, and the GenerationHandler / Telegram/in-app prompt path keys off needsApproval.

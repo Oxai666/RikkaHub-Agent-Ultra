@@ -21,10 +21,18 @@ object PlanModePolicy {
     const val PLAN_MODE_READ_ONLY = "PLAN_MODE_READ_ONLY"
     const val PLAN_MODE_TOOL_FORBIDDEN = "PLAN_MODE_TOOL_FORBIDDEN"
 
-    /** Plan 模式里额外放行的系统工具：规划自己 + 提问。 */
+    /**
+     * Plan 模式里额外放行的系统工具。
+     *
+     * 注意**不含** `update_plan`——那是执行期的检查表，规划阶段调它
+     * 会让模型一边规划一边开干。但 goal 三件套要放行：规划阶段同样需要
+     * 读目标、建目标、把目标标成受阻。
+     */
     private val PLAN_ALLOWED_SYSTEM_TOOLS: Set<String> = setOf(
-        PlanToolCatalog.UPDATE_PLAN,
         "ask_user",
+        "get_goal",
+        "create_goal",
+        "update_goal",
     )
 
     /** 这个工具在 Plan 模式下能不能用。 */
