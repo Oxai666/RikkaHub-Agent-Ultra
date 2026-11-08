@@ -579,15 +579,20 @@ class SettingsStore(
                     assistants.add(defaultAssistant.copy())
                 }
             }
-            // One-shot upgrade for existing installs that pre-date the agent-core auto-load:
-            // if a default-IDed assistant has an empty enabledSkills, treat it as fresh and
-            // pin agent-core. Users who deliberately added other skills are untouched.
-            assistants = assistants.map { assistant ->
-                val isDefault = DEFAULT_ASSISTANTS.any { it.id == assistant.id }
-                if (isDefault && assistant.enabledSkills.isEmpty()) {
-                    assistant.copy(enabledSkills = setOf("agent-core"))
-                } else assistant
-            }.toMutableList()
+            // agent-core 自动勾选已废弃。
+            //
+            // 原来是「默认助手启用列表为空 → 判定为新装 → 勾上 agent-core」。
+            // 两个问题：
+            //   1. 用户手动把唯一勾着的 agent-core 关掉之后，列表恰好变空，
+            //      下次启动又被判定成新装，再勾回去。关一次开一次，永远关不掉。
+            //   2. 默认助手模板本身已经不预勾了（见 DEFAULT_ASSISTANTS），
+            //      这个迁移的前提不存在了。
+            //
+            // 所以整段删掉。agentCoreSeedDone 只写不读，留着是为了
+            // 记住「这个历史迁移已经作废」，以后不再有人把它加回来。
+            //
+            // 已经装过又想要这个技能的用户，自己在 Skills 面板里打开就行——
+            // 它一直在「内置」分类的第一位。
             // One-shot additive enable for newly-bundled default-on skills. Each name is added
             // to every default assistant exactly once, tracked in autoEnabledDefaultSkills, so a
             // user who later disables one is not re-opted-in on the next launch. A brand-new
@@ -626,6 +631,7 @@ class SettingsStore(
                 providers = providers,
                 assistants = assistants,
                 autoEnabledDefaultSkills = newAutoEnabled,
+                agentCoreSeedDone = true,
                 ttsProviders = ttsProviders,
             )
         }
@@ -902,6 +908,17 @@ data class Settings(
      * never re-added, so toggling it off sticks across launches.
      */
     val autoEnabledDefaultSkills: Set<String> = emptySet(),
+
+    /**
+     * 「默认助手自动勾上 agent-core」这个一次性迁移是否已经执行过。
+     *
+     * 为什么需要这个而不是靠 `enabledSkills.isEmpty()` 判断：
+     * 用户手动把 agent-core 关掉之后，启用列表**恰好就是空的**——
+     * 用「空」当「没迁移过」的信号，下一次启动又会把它勾回去，
+     * 关一次开一次，永远关不掉。这个标志把「迁移做过了」和
+     * 「当前没启用任何技能」两件事分开。
+     */
+    val agentCoreSeedDone: Boolean = false,
     /**
      * Names of bundled skills the user explicitly deleted via [SkillManager.deleteSkill].
      * Recorded outside the skill directory (deletion wipes that directory, sentinel and
@@ -1168,9 +1185,12 @@ internal val DEFAULT_ASSISTANTS = listOf(
         systemPrompt = "",
         // The agent-core skill bundle (SOUL/HEARTBEAT/TOOLS) ships with the app and is what
         // teaches every model "you are running on RikkaHub, here are the tools, here is how
-        // to avoid loops". Auto-enabling it on default assistants means new users get an
-        // agent-aware model out of the box without having to discover the skill toggle.
-        enabledSkills = setOf("agent-core") + DEFAULT_AUTO_ENABLED_SKILLS,
+        // to avoid loops".
+        //
+        // **默认不勾。** 模板助手的初始状态应该跟用户自己新建的一致——
+        // 一个空名单。想开就在 Skills 面板里自己打开，而不是被预置一个
+        // 他不知道为什么开着的技能。
+        enabledSkills = DEFAULT_AUTO_ENABLED_SKILLS,
     ),
     Assistant(
         id = Uuid.parse("3d47790c-c415-4b90-9388-751128adb0a0"),
@@ -1190,7 +1210,7 @@ internal val DEFAULT_ASSISTANTS = listOf(
             - If the user does not specify a language, reply in the user's primary language.
             - Remember to use Markdown syntax for formatting, and use latex for mathematical expressions.
         """.trimIndent(),
-        enabledSkills = setOf("agent-core") + DEFAULT_AUTO_ENABLED_SKILLS,
+        enabledSkills = DEFAULT_AUTO_ENABLED_SKILLS,
     ),
 )
 
