@@ -13,10 +13,17 @@ import kotlinx.serialization.json.jsonPrimitive
  * The "hardline" tier — unconditional command blocklist.
  *
  * Patterns here are blocked BEFORE any approval prompt and BEFORE any allow-list check.
- * Even if the user has granted "Always Allow" for the parent tool (e.g. termux_run_command),
- * a hardline-matching command never runs. There is no way to override hardline through the
- * UI — that's the whole point. If the user genuinely needs to run something on this list,
- * they should run it themselves in a terminal, not through the agent.
+ * Even if the user has granted "Always Allow" for the parent tool, a hardline-matching
+ * command never runs.
+ *
+ * 唯一的例外是「无审核模式」（ToolApprovalPreferences.dangerousModeEnabled）——
+ * 它藏在「关于页连点 5 下头像 → 工具授权 → 危险授权」后面，开启要手打一整句话。
+ * GenerationLoop 用 `hardlineReason != null && !dangerousMode` 判断，
+ * 那个开关打开时这一步整个跳过。
+ *
+ * 所以下面这句话现在只在**无审核模式关闭时**成立：
+ * 「没有任何 UI 途径可以绕过 hardline」——那是刻意的：这是个把手机变砖的地板，
+ * 想越过它得先证明自己知道自己在干什么。
  *
  * The list is deliberately tiny: only commands with no recovery path.
  *   - filesystem destruction rooted at /, $HOME, /etc, /usr, /var, etc. (incl. descendants)

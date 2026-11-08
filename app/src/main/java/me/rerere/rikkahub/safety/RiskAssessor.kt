@@ -65,6 +65,24 @@ object RiskAssessor {
      */
     val PRIVILEGED_SHELL_TOOLS: Set<String> = setOf("root_shell", "shizuku_exec")
 
+    /**
+     * 完全放行的 shell：不审批、不备份、不预拒。
+     *
+     * Termux 那套跑在 App 私有环境的 proot 里，能碰到的东西本来就在工作区
+     * 和它自己的 rootfs 之内——它没能力动 /system、动别的 App 数据，
+     * 所以「越界」这个概念对它没有意义。而在它自己的盒子里删东西，
+     * 重建 rootfs 就恢复了，快照反而是浪费。
+     *
+     * 注意这只是**安全层**放行。Hardline 仍然在它之前跑
+     * （rm -rf / 这种照样拦），审批则由 ToolApprovalDefaults 决定——
+     * 那边也已经把 termux_run_command 移出 ALWAYS_ASK 了。
+     */
+    val UNMANAGED_SHELL_TOOLS: Set<String> = setOf(
+        "termux_run_command",
+        "termux_session_start",
+        "termux_session_send",
+    )
+
     fun assess(
         toolName: String,
         args: JsonObject,
@@ -98,6 +116,20 @@ object RiskAssessor {
         args: JsonObject,
         workspaceRoot: String?,
     ): RiskAssessment {
+        // 完全放行的通道：不评估、不备份、不预拒
+        if (toolName in UNMANAGED_SHELL_TOOLS) {
+            return RiskAssessment(
+                toolName = toolName,
+                baseTier = RiskTier.A_READ,
+                tier = RiskTier.A_READ,
+                reasons = listOf("Termux 通道，按配置完全放行"),
+                reversible = true,
+                dryRunPlan = DryRunPlan.NONE,
+                snapshotPlan = SnapshotPlan.NONE,
+                requiresApproval = false,
+            )
+        }
+
         val command = commandOf(args)
         if (command.isNullOrBlank()) {
             return RiskAssessment(

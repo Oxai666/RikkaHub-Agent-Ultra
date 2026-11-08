@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,8 +37,11 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
+import org.koin.compose.koinInject
 import coil3.compose.AsyncImage
 import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.R
@@ -67,6 +71,14 @@ fun SettingAboutPage() {
         )
     }
     var logoCenterPx by remember { mutableStateOf(Offset.Zero) }
+
+    // 连点 5 下头像解锁「危险授权」入口。
+    // 用 remember 而不是 rememberSaveable：转屏/切后台清零无所谓，
+    // 反正五下很快，而且这种入口不该被持久化成「点到第 3 下」的状态。
+    val approvalPrefs: me.rerere.rikkahub.data.preferences.ToolApprovalPreferences = koinInject()
+    val scope = rememberCoroutineScope()
+    var logoTapCount by remember { mutableStateOf(0) }
+    var lastLogoTapAt by remember { mutableStateOf(0L) }
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
@@ -117,6 +129,24 @@ fun SettingAboutPage() {
                                 }
                                 .clickable {
                                     onBurst(logoCenterPx)
+                                    // 连点计数：两下之间超过 1.2 秒就重来，
+                                    // 免得用户随手点几下、隔天再点两下就解锁了
+                                    val now = System.currentTimeMillis()
+                                    logoTapCount = if (now - lastLogoTapAt > 1200L) {
+                                        1
+                                    } else {
+                                        logoTapCount + 1
+                                    }
+                                    lastLogoTapAt = now
+                                    if (logoTapCount >= 5) {
+                                        logoTapCount = 0
+                                        scope.launch { approvalPrefs.unlockDangerousMode() }
+                                        Toast.makeText(
+                                            context,
+                                            "已解锁「危险授权」入口 · 设置 → 工具授权",
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                    }
                                 }
                         )
 

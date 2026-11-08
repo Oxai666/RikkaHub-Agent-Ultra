@@ -540,6 +540,13 @@ class GenerationLoop(
         // closure that reads ToolApprovalAllowList + ToolApprovalPreferences. Default
         // returns false so callers that don't care still get vanilla approval gating.
         isToolAutoApproved: suspend (toolName: String) -> Boolean = { false },
+        /**
+         * 无审核模式。true 时跳过安全层的越界预拒和 HARDLINE 硬底线。
+         *
+         * **快照照拍**。这个标志关的是「拦不拦」，不是「备不备份」——
+         * 无审核模式下用户连 rm -rf / 都能跑，那备份就是唯一的退路。
+         */
+        dangerousMode: Boolean = false,
         // Optional per-call addendum appended to the system prompt. Used by surfaces that
         // need the model to know runtime context (e.g. "you're talking via Telegram, the
         // chat_id is 12345") without polluting the user message body — without this the
@@ -691,6 +698,7 @@ class GenerationLoop(
                         tools = toolsInternal,
                         memories = memories ?: emptyList(),
                         stream = assistant.streamOutput,
+                        dangerousMode = dangerousMode,
                         processingStatus = processingStatus,
                         conversationSystemPrompt = conversationSystemPrompt,
                         conversationId = conversationId,
@@ -886,7 +894,9 @@ class GenerationLoop(
                         // `&& tool.approvalState is Auto`，模型如果因为上一轮
                         // 审批暂停过、这一轮带着 Pending 状态重放同一条命令，
                         // 就绕过这道闸了。
-                        safetyVerdict.blocked -> {
+                        // 无审核模式下这条不生效——那是用户手打一句话开启的，
+                        // 但它只取消「拦」，备份照做。
+                        safetyVerdict.blocked && !dangerousMode -> {
                             Log.w(
                                 TAG,
                                 "safety-blocked ${tool.toolName}: ${safetyVerdict.blockCode}"
@@ -906,8 +916,10 @@ class GenerationLoop(
                             )
                         }
 
-                        // 同上：硬底线不看状态。Always Allow / YOLO / Pending 全都不该影响它。
-                        hardlineReason != null -> {
+                        // 硬底线同样被无审核模式豁免。注意注释里那句
+                        // 「There is no way to override hardline」现在不再成立——
+                        // 无审核模式就是那条路，所以它被藏得那么深。
+                        hardlineReason != null && !dangerousMode -> {
                             Log.w(TAG, "hardline-blocked ${tool.toolName}: $hardlineReason")
                             tool.copy(approvalState = ToolApprovalState.Denied(
                                 "blocked by safety floor (hardline): $hardlineReason. " +
@@ -1428,6 +1440,7 @@ class GenerationLoop(
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
+        dangerousMode: Boolean = false,
     ) {
         // ── 协作模式 ──
         // Plan 模式把工具表掐成只读子集，同时往系统提示词里塞一段规划规程。

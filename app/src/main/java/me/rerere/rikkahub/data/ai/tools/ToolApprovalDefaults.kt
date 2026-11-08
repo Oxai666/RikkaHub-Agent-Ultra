@@ -27,10 +27,15 @@ object ToolApprovalDefaults {
 
     /** Tool names that ALWAYS require approval unless the user has granted an exception. */
     val ALWAYS_ASK: Set<String> = setOf(
-        // Shell / arbitrary code execution
-        "termux_run_command",
-        "termux_session_start",  // opens a persistent interactive shell; the meaningful consent moment
-        "transcribe_audio_file",  // shells out to whisper-cli via Termux; reads arbitrary audio files
+        // ── Termux：不审批 ──
+        // 主人明确要求：Termux 这条通道不用管，任何命令直接过。
+        // 它是 App 私有环境里的 shell（/data/data/<pkg>/files/usr 那套 proot），
+        // 碰不到别的 App 数据、也碰不到 /system，能力边界本来就在盒子里面。
+        // 真要有破坏力的路径（root_shell / shizuku_exec）另有闸门，不靠这条兜。
+        //
+        // transcribe_audio_file 保留：它会读任意音频文件并把内容送进模型上下文，
+        // 那是隐私问题，跟能不能跑命令是两回事。
+        "transcribe_audio_file",
         "eval_javascript",
 
         // Shell via Shizuku (shell UID, no root)

@@ -44,6 +44,11 @@ internal fun migrateWorkspaceToolsFrom(stored: Set<String>): Pair<Set<String>, S
  *    explicit "I trust the agent fully, stop asking me" escape hatch. Surfaced as a
  *    bright-red toggle behind a confirm dialog because it's a live foot-gun.
  *
+ * 3. **无审核模式** — 比 YOLO 更彻底。YOLO 免审批但 HARDLINE 和越界预拒还在，
+ *    root_shell / shizuku_exec 也不受它影响。无审核模式把审批、HARDLINE、
+ *    越界预拒**全部关掉**，只保留快照（那是唯一的退路）。入口藏在
+ *    「关于页连点 5 下头像 → 工具授权页 → 危险授权」，开启要手打一句话确认。
+ *
  * The companion in-memory "Allow for this chat" allow-list lives in
  * [me.rerere.rikkahub.data.ai.tools.ToolApprovalAllowList] and resets on /new or app
  * process restart.
@@ -52,6 +57,8 @@ class ToolApprovalPreferences(private val context: Context) {
     private val store = context.toolApprovalDataStore
     private val K_ALWAYS_ALLOW = stringSetPreferencesKey("always_allow_tool_names")
     private val K_GLOBAL_YOLO = booleanPreferencesKey("global_auto_approve_yolo")
+    private val K_DANGEROUS_ENABLED = booleanPreferencesKey("dangerous_mode_enabled")
+    private val K_DANGEROUS_UNLOCKED = booleanPreferencesKey("dangerous_mode_unlocked")
 
     // Filtered on every read: a stale workspace_-prefixed entry (from before this
     // filtering existed) must never resurface in the settings list or an auto-approve
@@ -112,5 +119,38 @@ class ToolApprovalPreferences(private val context: Context) {
 
     suspend fun revokeAll() {
         store.edit { it.remove(K_ALWAYS_ALLOW) }
+    }
+
+    // ── 无审核模式 ──
+    //
+    // 跟 YOLO 不是一回事。YOLO 只免审批，HARDLINE 和越界预拒仍然生效，
+    // 而且 root_shell / shizuku_exec 根本不受它影响。无审核模式连那两道
+    // 一起关掉——它关的是**最后两道防线**，所以入口藏得深、开启要多打一句话。
+
+    /** 入口是否已解锁（关于页连点 5 下头像）。只控制按钮出不出现。 */
+    val dangerousUnlockedFlow: Flow<Boolean> = store.data.map {
+        it[K_DANGEROUS_UNLOCKED] ?: false
+    }
+
+    /** 无审核模式是否开启。默认 false。 */
+    val dangerousEnabledFlow: Flow<Boolean> = store.data.map {
+        it[K_DANGEROUS_ENABLED] ?: false
+    }
+
+    suspend fun currentDangerousEnabled(): Boolean = dangerousEnabledFlow.first()
+
+    suspend fun currentDangerousUnlocked(): Boolean = dangerousUnlockedFlow.first()
+
+    /** 解锁入口。只设一次，没有反向操作——锁回去没有意义，关开关就够了。 */
+    suspend fun unlockDangerousMode() {
+        store.edit { it[K_DANGEROUS_UNLOCKED] = true }
+    }
+
+    suspend fun setDangerousMode(enabled: Boolean) {
+        store.edit {
+            it[K_DANGEROUS_ENABLED] = enabled
+            // 开启即视为解锁过，免得下次进来又要连点五下
+            if (enabled) it[K_DANGEROUS_UNLOCKED] = true
+        }
     }
 }

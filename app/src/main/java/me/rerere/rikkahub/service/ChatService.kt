@@ -1684,6 +1684,7 @@ class ChatService(
             } else {
                 compactedMessageView!!.messages
             }
+            val dangerousModeNow = toolApprovalPreferences.currentDangerousEnabled()
             generationLoop.generateText(
                 settings = settings,
                 model = model,
@@ -1694,6 +1695,11 @@ class ChatService(
                 // for in-app conversations that didn't register one.
                 systemAddendum = me.rerere.rikkahub.data.ai.tools
                     .ConversationSystemAddendum.get(conversationId),
+                // 无审核模式：连安全层的越界预拒和 HARDLINE 一起跳过。
+                // 快照不受影响——那是唯一的退路。
+                // 提前读出来是因为 currentDangerousEnabled() 是 suspend，
+                // 而 generateText 是普通函数（返回 Flow），参数位不能调协程。
+                dangerousMode = dangerousModeNow,
                 isToolAutoApproved = { toolName ->
                     // YOLO mode ("I AM STUPID" toggle in Settings → Tool approvals): every
                     // tool auto-approves. User opted into this explicitly. HARDLINE still
@@ -1718,8 +1724,19 @@ class ChatService(
                     // answer, so it still auto-approves there and falls through to that graceful
                     // envelope instead of hanging the turn.
                     if (toolName == "ask_user") {
+                        // ask_user 不是权限闸门，是「我需要你回答一个问题」。无审核模式
+                        // 关的是审批，不该顺手把这个也关掉——不然模型想问你也问不出来。
                         me.rerere.rikkahub.data.ai.tools.HeadlessConversations
                             .shouldAutoApprove(conversationId)
+                    } else if (toolApprovalPreferences.currentDangerousEnabled()) {
+                        // ── 无审核模式 ──
+                        // 比 YOLO 更彻底：连 root_shell / shizuku_exec 也放行。
+                        // 这一条放在 PRIVILEGED_SHELL_TOOLS 判断之前，否则那两道锁
+                        // 会把它挡回去——用户手打那句话开启的模式，不该被工具白名单否掉。
+                        //
+                        // 配套：GenerationLoop 里 blocked 和 hardline 也按这个标志跳过。
+                        // 不跳的话这里放行了、那边照样拒，等于开关是假的。
+                        true
                     } else if (toolName in me.rerere.rikkahub.safety.RiskAssessor.PRIVILEGED_SHELL_TOOLS) {
                         // 高权限 shell 是唯一一类「任何自动批准模式都无效」的工具。
                         //
