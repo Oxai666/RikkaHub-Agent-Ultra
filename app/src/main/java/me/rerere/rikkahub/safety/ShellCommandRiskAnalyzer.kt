@@ -109,14 +109,22 @@ object ShellCommandRiskAnalyzer {
         val riskyFlags = subs.flatMap { sub ->
             sub.args.filter { it.startsWith("-") && it.length > 1 }
         }.distinct()
-        // 二次判定：任何一个子命令越界，整体就算越界
-        val outside = targets.filter { isOutside(it, workspaceRoot) }
+
+        // 越界判断只对**写操作**做。
+        // 之前把只读命令的路径也算进来，导致 `cat /etc/os-release` 被当成
+        // 「往工作区外写东西」，整条命令升到 C 档直接拒——这是错的。
+        // 读一个文件不改变任何东西，读哪里都不该拦。
+        val writeTargets = subs
+            .filter { it.tier != RiskTier.A_READ }
+            .flatMap { it.targets }
+            .distinct()
+        val outside = writeTargets.filter { isOutside(it, workspaceRoot) }
 
         return Analysis(
             subcommands = subs,
             tier = if (outside.isNotEmpty()) RiskTier.C_IRREVERSIBLE else worst,
             reasons = if (outside.isNotEmpty()) {
-                reasons + "删除/擦除目标位于工作区外，默认拒绝"
+                reasons + "写入目标位于工作区外，默认拒绝"
             } else reasons,
             targets = targets,
             riskyFlags = riskyFlags,
@@ -272,7 +280,8 @@ object ShellCommandRiskAnalyzer {
         }
 
         val targets = extractTargets(name, args)
-        if (targets.any { isOutside(it, workspaceRoot) }) {
+        // 只有写操作才关心目标在不在工作区外
+        if (tier != RiskTier.A_READ && targets.any { isOutside(it, workspaceRoot) }) {
             reasons += "写入目标包含工作区外路径"
         }
 
@@ -319,19 +328,22 @@ object ShellCommandRiskAnalyzer {
     /**
      * 这个路径在不在工作区外。
      *
-     * `workspaceRoot` 为 null 时，**所有绝对路径都算越界**——
-     * 拿不到工作区根就别赌，宁可多拦一次。
+     * `workspaceRoot` 为 null 表示**不知道工作区在哪**——
+     * 这时候返回 false，不做越界判断。之前这里返回 true（全算越界），
+     * 结果整台机器上所有绝对路径都被拒，连 `ls /workspace` 都跑不了。
+     *
+     * 拿不准时应该交给审批弹窗，而不是直接拦死。
      */
     fun isOutside(path: String, workspaceRoot: String?): Boolean {
         if (path.isBlank()) return false
         // 相对路径默认认为在工作区内
         if (!path.startsWith("/")) return false
-        // 危险系统路径，无论工作区在哪都算越界
-        if (path == "/" || path.startsWith("/system") || path.startsWith("/data/adb") ||
-            path.startsWith("/proc") || path.startsWith("/sys") || path.startsWith("/dev")
-        ) return true
-        if (workspaceRoot == null) return true
+        // 这几个路径无论工作区在哪都算危险：写它们等于动系统
+        if (path == "/" || path.startsWith("/system") || path.startsWith("/data/adb")) return true
+        // 不知道工作区在哪 → 不判
+        if (workspaceRoot == null) return false
         val root = workspaceRoot.trimEnd('/')
+        if (root.isEmpty()) return false
         return !(path == root || path.startsWith("$root/"))
     }
 }

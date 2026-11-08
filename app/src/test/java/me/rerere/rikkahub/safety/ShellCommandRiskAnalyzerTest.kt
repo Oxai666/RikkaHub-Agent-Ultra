@@ -8,16 +8,16 @@ import org.junit.Test
 /**
  * 命令风险分析的行为锁定。
  *
- * 本地没有 Android 环境，CI 是唯一验证手段，所以纯逻辑必须自带测试。
- * 用例按「正常 / 危险 / 模糊」三类挑，每类都要有。
+ * 重点是**不误伤**：只读命令即便碰工作区外的路径也不该被拦，
+ * 沙箱里 `mkdir /workspace/xxx` 必须放行。
  */
 class ShellCommandRiskAnalyzerTest {
 
-    private val root = "/workspace/proj"
+    private val root = "/workspace"
 
     private fun tier(cmd: String) = ShellCommandRiskAnalyzer.analyze(cmd, root).tier
 
-    // ── 正常：只读命令一律 A 档 ──
+    // ── 只读：一律 A 档，路径在哪都不管 ──
 
     @Test
     fun `read only commands are tier A`() {
@@ -25,6 +25,29 @@ class ShellCommandRiskAnalyzerTest {
             "ls -la", "cat foo.txt", "grep -r TODO src/", "find . -name '*.kt'",
             "head -20 README.md", "wc -l main.kt", "git status", "id", "pwd",
         ).forEach { assertTrue("`$it` 应该判成只读", tier(it) == RiskTier.A_READ) }
+    }
+
+    @Test
+    fun `reading files outside the workspace is still tier A`() {
+        // 读 /etc/os-release 是合法操作，不该被当成越界写入
+        val a = ShellCommandRiskAnalyzer.analyze("cat /etc/os-release", root)
+        assertEquals(RiskTier.A_READ, a.tier)
+        assertTrue("只读命令不该产生越界目标", a.outsideWorkspaceTargets.isEmpty())
+    }
+
+    @Test
+    fun `compound read only command stays tier A`() {
+        val a = ShellCommandRiskAnalyzer.analyze("uname -a; cat /etc/os-release; id", root)
+        assertEquals(RiskTier.A_READ, a.tier)
+        assertEquals(3, a.subcommands.size)
+        assertTrue(a.outsideWorkspaceTargets.isEmpty())
+    }
+
+    @Test
+    fun `probe commands used to identify the sandbox stay tier A`() {
+        // 这几条是摸环境的常用组合，必须畅通
+        assertEquals(RiskTier.A_READ, tier("pwd; ls -la; id; uname -m"))
+        assertEquals(RiskTier.A_READ, tier("cat /proc/version"))
     }
 
     // ── 危险：不可逆的一律 C 档 ──
@@ -63,7 +86,7 @@ class ShellCommandRiskAnalyzerTest {
         assertEquals(RiskTier.C_IRREVERSIBLE, tier("sh -c 'ls'"))
     }
 
-    // ── 可撤销：B 档 ──
+    // ── 可撤销：B 档，沙箱内正常工作都要放行 ──
 
     @Test
     fun `file mutations are tier B`() {
@@ -72,6 +95,20 @@ class ShellCommandRiskAnalyzerTest {
             "sed -i 's/a/b/' file.txt", "chmod 755 run.sh",
             "mkdir -p build", "touch new.txt",
         ).forEach { assertEquals("`$it` 应该判成可撤销", RiskTier.B_REVERSIBLE, tier(it)) }
+    }
+
+    @Test
+    fun `mkdir inside workspace is allowed`() {
+        val a = ShellCommandRiskAnalyzer.analyze("mkdir -p /workspace/logs /workspace/notes", root)
+        assertEquals(RiskTier.B_REVERSIBLE, a.tier)
+        assertTrue("工作区内的路径不该判越界", a.outsideWorkspaceTargets.isEmpty())
+    }
+
+    @Test
+    fun `touch inside workspace is allowed`() {
+        val a = ShellCommandRiskAnalyzer.analyze("touch /workspace/t.txt", root)
+        assertEquals(RiskTier.B_REVERSIBLE, a.tier)
+        assertTrue(a.outsideWorkspaceTargets.isEmpty())
     }
 
     @Test
@@ -95,27 +132,32 @@ class ShellCommandRiskAnalyzerTest {
     // ── 路径越界 ──
 
     @Test
-    fun `absolute path outside workspace counts as outside`() {
+    fun `path outside workspace is detected`() {
         assertTrue(ShellCommandRiskAnalyzer.isOutside("/data/local/tmp/x", root))
         assertTrue(ShellCommandRiskAnalyzer.isOutside("/system/bin/sh", root))
-        assertFalse(ShellCommandRiskAnalyzer.isOutside("/workspace/proj/src/a.kt", root))
+        assertFalse(ShellCommandRiskAnalyzer.isOutside("/workspace/src/a.kt", root))
         assertFalse(ShellCommandRiskAnalyzer.isOutside("src/a.kt", root))
     }
 
     @Test
-    fun `dangerous system roots are always outside`() {
-        listOf("/", "/system/x", "/proc/1", "/sys/kernel", "/dev/block/sda", "/data/adb")
-            .forEach { assertTrue("`$it` 应该算越界", ShellCommandRiskAnalyzer.isOutside(it, root)) }
-    }
-
-    @Test
-    fun `null workspace root makes every absolute path outside`() {
-        assertTrue(ShellCommandRiskAnalyzer.isOutside("/workspace/proj/a.kt", null))
+    fun `null workspace root disables the outside check`() {
+        // 不知道工作区在哪就不判，交给审批——
+        // 之前这里返回 true（全算越界），连 ls /workspace 都被拒
+        assertFalse(ShellCommandRiskAnalyzer.isOutside("/workspace/proj/a.kt", null))
         assertFalse(ShellCommandRiskAnalyzer.isOutside("a.kt", null))
     }
 
     @Test
-    fun `rm with outside target escalates to tier C`() {
+    fun `only system critical roots are always outside`() {
+        listOf("/", "/system/x", "/data/adb")
+            .forEach { assertTrue("`$it` 应该算越界", ShellCommandRiskAnalyzer.isOutside(it, root)) }
+        // /proc /sys /dev 读是正常的，不该拦
+        listOf("/proc/1", "/sys/kernel", "/dev/block/sda")
+            .forEach { assertFalse("`$it` 不该判越界", ShellCommandRiskAnalyzer.isOutside(it, root)) }
+    }
+
+    @Test
+    fun `rm outside workspace escalates to tier C`() {
         val a = ShellCommandRiskAnalyzer.analyze("rm /data/local/tmp/x", root)
         assertEquals(RiskTier.C_IRREVERSIBLE, a.tier)
         assertTrue(a.outsideWorkspaceTargets.isNotEmpty())

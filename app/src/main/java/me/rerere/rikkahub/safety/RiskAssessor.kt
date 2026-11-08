@@ -45,6 +45,19 @@ object RiskAssessor {
         "keyboard_set_cursor", "keyboard_select_range",
     )
 
+    /**
+     * 沙箱里工作区文件区的固定挂载点。
+     *
+     * `workspace_shell` / `workspace_*` 这些工具跑在 proot 里，
+     * 它们看到的路径空间是**沙箱内部的**：App 的文件区挂在 `/workspace`，
+     * 根是 rootfs。
+     *
+     * 所以判断越界必须用这个常量，不能用调用方传进来的 `workspaceCwd`——
+     * 那是 App 侧的路径（形如 `/data/user/0/<pkg>/files/workspace/xxx`），
+     * 在沙箱里根本不存在，拿它比什么都算越界。
+     */
+    private const val SANDBOX_WORKSPACE_ROOT = "/workspace"
+
     fun assess(
         toolName: String,
         args: JsonObject,
@@ -55,9 +68,16 @@ object RiskAssessor {
             return RiskAssessment.readOnly(toolName)
         }
 
+        // 沙箱系工具的根固定，不看调用方传什么
+        val effectiveRoot = if (toolName.startsWith("workspace_")) {
+            SANDBOX_WORKSPACE_ROOT
+        } else {
+            workspaceRoot
+        }
+
         return when {
-            toolName in SHELL_TOOLS -> assessShell(toolName, args, workspaceRoot)
-            toolName in FILE_WRITE_TOOLS -> assessFileWrite(toolName, args, workspaceRoot)
+            toolName in SHELL_TOOLS -> assessShell(toolName, args, effectiveRoot)
+            toolName in FILE_WRITE_TOOLS -> assessFileWrite(toolName, args, effectiveRoot)
             toolName in SETTING_TOOLS -> assessSetting(toolName)
             toolName in GUI_TOOLS -> assessGui(toolName)
             else -> assessUnknown(toolName)
