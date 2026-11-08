@@ -58,7 +58,11 @@ fun SettingsSearchPage(vm: SettingVM = koinViewModel()) {
             entries.filter { entry ->
                 context.getString(entry.titleRes).contains(q, ignoreCase = true) ||
                     entry.descriptionRes?.let { context.getString(it).contains(q, ignoreCase = true) } == true ||
-                    context.getString(entry.groupRes).contains(q, ignoreCase = true)
+                    context.getString(entry.groupRes).contains(q, ignoreCase = true) ||
+                    // 页面内部的关键词。这一层索引只到页面级，不加这个的话
+                    // 「目标自动续跑」「让 AI 写技能」这类藏在页面第三屏的开关
+                    // 搜出来是空的——用户知道有这个东西，但搜不到在哪。
+                    entry.keywords.any { it.contains(q, ignoreCase = true) }
             }
         }
     }

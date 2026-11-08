@@ -8,12 +8,24 @@ import me.rerere.rikkahub.Screen
  * One searchable entry in the settings hub. [titleRes] prefers the destination page's own
  * top-bar title over the hub row's headline when the two differ in wording, so a search for
  * either term finds the page.
+ *
+ * [keywords] 是**页面内部**的重要条目名，用来解决「搜得到页面、搜不到页面里的开关」。
+ * 这一层索引只到页面级，所以一个开关如果不在标题或描述里出现，用户搜它就一无所获——
+ * 比如「目标自动续跑」在「常规」页里、藏在第三屏，「让 AI 写技能」在助手详情页里。
+ * 把这些词补进 keywords，命中后仍然跳整页，但至少能找到地方。
+ *
+ * **不要给「危险授权 / 无审批模式」加关键词。** 那个入口是刻意藏起来的：
+ * 关于页连点 5 下才出现，而且就算解锁了也不该被搜索发现——
+ * 用户能搜到就说明它不该只靠「不知道在哪」来防护，那是另一套设计。
+ * 现在这套是「知道的人知道，不知道的人翻不到」，搜索会破坏这个前提。
  */
 data class SettingsSearchEntry(
     @param:StringRes val titleRes: Int,
     @param:StringRes val descriptionRes: Int? = null,
     @param:StringRes val groupRes: Int,
     val route: Screen,
+    /** 页面内部的关键词。纯文本，不走 string 资源——它们只用于匹配，不显示。 */
+    val keywords: List<String> = emptyList(),
 )
 
 /**
@@ -35,6 +47,13 @@ fun settingsSearchIndex(developerMode: Boolean): List<SettingsSearchEntry> {
             descriptionRes = R.string.setting_page_assistant_desc,
             groupRes = R.string.setting_page_general_settings,
             route = Screen.Assistant,
+            keywords = listOf(
+                // 本地工具里的开关
+                "写技能", "技能创作", "skill", "authoring", "让 AI 写技能",
+                "root", "shizuku", "Termux", "虚拟屏",
+                // 协作模式
+                "计划", "目标", "plan", "goal",
+            ),
         ),
         SettingsSearchEntry(
             titleRes = R.string.setting_page_extensions,
@@ -49,6 +68,7 @@ fun settingsSearchIndex(developerMode: Boolean): List<SettingsSearchEntry> {
             descriptionRes = R.string.setting_page_default_model_desc,
             groupRes = R.string.setting_page_model_and_services,
             route = Screen.SettingModels,
+            keywords = listOf("上下文", "上下文长度", "1M", "context", "1000000", "token 上限"),
         ),
         SettingsSearchEntry(
             titleRes = R.string.setting_page_providers,
@@ -67,6 +87,16 @@ fun settingsSearchIndex(developerMode: Boolean): List<SettingsSearchEntry> {
             descriptionRes = R.string.setting_page_tts_service_desc,
             groupRes = R.string.setting_page_model_and_services,
             route = Screen.SettingSpeech,
+        ),
+        SettingsSearchEntry(
+            titleRes = R.string.setting_page_snapshots,
+            descriptionRes = R.string.setting_page_snapshots_desc,
+            groupRes = R.string.setting_page_model_and_services,
+            route = Screen.SettingSnapshots,
+            keywords = listOf(
+                "快照", "备份", "回滚", "恢复", "还原", "snapshot", "restore", "backup",
+                "删错了", "撤销", "undo",
+            ),
         ),
         SettingsSearchEntry(
             titleRes = R.string.setting_page_mcp,
@@ -217,12 +247,19 @@ fun settingsSearchIndex(developerMode: Boolean): List<SettingsSearchEntry> {
             descriptionRes = R.string.setting_page_preferences_general_desc,
             groupRes = R.string.setting_page_preferences,
             route = Screen.SettingPreferencesGeneral,
+            keywords = listOf(
+                // 目标自动续跑（在这一页的第三屏，标题里搜不到）
+                "目标", "续跑", "自动续跑", "续跑轮数", "goal", "continuation",
+                // 其它容易被搜的
+                "TTS", "语音播放", "震动", "长文本", "粘贴", "图片裁剪",
+            ),
         ),
         SettingsSearchEntry(
             titleRes = R.string.setting_page_preferences_ui,
             descriptionRes = R.string.setting_page_preferences_ui_desc,
             groupRes = R.string.setting_page_preferences,
             route = Screen.SettingPreferencesUI,
+            keywords = listOf("视频背景", "背景", "思考深度", "刺球", "缩放", "壁纸"),
         ),
     )
 
