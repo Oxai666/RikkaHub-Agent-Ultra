@@ -3,6 +3,16 @@
   "updated_at": "2026-11-08",
   "skills": [
     {
+      "name": "reverse-engineer-anything",
+      "title": "Reverse Engineer Anything",
+      "description": "Reverse engineer native, managed, Electron/JavaScript, packaged, firmware, and browser targets with REA. Use shipped-artifact or requested runtime evidence to explain features, compare versions, decom",
+      "category": "reverse",
+      "license": "MIT",
+      "size_kb": 46,
+      "compatibility": "any",
+      "is_bundled": true
+    },
+    {
       "name": "adult-fiction",
       "title": "Adult Fiction",
       "description": "Adult fiction writing at requested explicitness. Trigger: adult fiction, explicit story, erotica, 成人, 色情, 黄文, 小黄文.",
@@ -559,6 +569,16 @@
       "category": "reverse",
       "license": "MIT",
       "size_kb": 16,
+      "compatibility": "any",
+      "is_bundled": true
+    },
+    {
+      "name": "re-toolchain",
+      "title": "Re Toolchain",
+      "description": "在 proot 沙箱里搭 Android 逆向/渗透工具链时使用。覆盖 apt 基础包、pip 安全栈、Node、jadx/apktool/smali、jadx-headless-mcp（26 个 MCP 工具）、frida-server 推送。当用户提到装逆向环境、jadx、apktool、frida、radare2、pwntools、反编译工具链、REA 时触发。",
+      "category": "reverse",
+      "license": "MIT",
+      "size_kb": 6,
       "compatibility": "any",
       "is_bundled": true
     },
