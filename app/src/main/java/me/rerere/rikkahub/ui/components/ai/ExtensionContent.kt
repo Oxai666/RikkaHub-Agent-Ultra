@@ -219,18 +219,29 @@ fun SkillsContent(
 
             items(items, key = { it.skillDir.absolutePath }) { skill ->
                 ListItem(
-                    headlineContent = { Text(skill.name) },
-                    supportingContent = if (skill.description.isNotBlank()) {
-                        {
+                    // 主标题用中文名，英文标识符缩成小字放在副标题前面——
+                    // 用户要能一眼看懂干什么，但排查问题时还需要英文名
+                    headlineContent = {
+                        Text(skill.title?.takeIf { it.isNotBlank() } ?: skill.name)
+                    },
+                    supportingContent = {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = skill.description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
+                                text = skill.name,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             )
+                            if (skill.description.isNotBlank()) {
+                                Text(
+                                    text = skill.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
-                    } else null,
+                    },
                     trailingContent = {
                         Switch(
                             checked = enabledSkills.contains(skill.name),

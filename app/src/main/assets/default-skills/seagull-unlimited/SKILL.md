@@ -18,6 +18,7 @@ triggers:
   - 红队模式
   - CTF全局
 category: other
+title: 海鸥·全域专家模式
 
 ---
 

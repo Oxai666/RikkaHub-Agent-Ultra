@@ -14,6 +14,7 @@ triggers:
   - defense validation
   - red team payload
 category: pentest
+title: 海鸥·免杀与检测分析
 
 ---
 

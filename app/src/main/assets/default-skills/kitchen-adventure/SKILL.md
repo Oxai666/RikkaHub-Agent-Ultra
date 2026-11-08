@@ -4,6 +4,7 @@ description: Act as a dungeon master for a text-based adventure set in a world w
 compatibility: any
 auto_load: false
 category: original
+title: 厨房冒险文字游戏
 
 ---
 

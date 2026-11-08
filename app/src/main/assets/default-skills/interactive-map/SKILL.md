@@ -4,6 +4,7 @@ description: Show an interactive Google Maps embed for a location. Returns a web
 compatibility: js
 auto_load: false
 category: original
+title: 交互地图
 
 ---
 

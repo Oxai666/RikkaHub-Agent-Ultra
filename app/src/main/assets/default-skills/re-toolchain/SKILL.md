@@ -2,6 +2,7 @@
 name: re-toolchain
 description: 在 proot 沙箱里搭 Android 逆向/渗透工具链时使用。覆盖 apt 基础包、pip 安全栈、Node、jadx/apktool/smali、jadx-headless-mcp（26 个 MCP 工具）、frida-server 推送。当用户提到装逆向环境、jadx、apktool、frida、radare2、pwntools、反编译工具链、REA 时触发。
 category: tool
+title: 逆向工具链安装（沙箱搭环境）
 
 ---
 

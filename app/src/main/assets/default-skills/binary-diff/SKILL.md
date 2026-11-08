@@ -6,6 +6,7 @@ description: |
   核心方法：用 LLM 做结构化差异比对，程序化输入输出，成本极低（200 函数 ~1 元）。
   触发关键词：符号迁移、bindiff、跨版本、PDB 缺失、函数偏移迁移、symbol migration、binary diff、版本对比。
 category: reverse
+title: 二进制比对（版本差异/补丁）
 
 ---
 

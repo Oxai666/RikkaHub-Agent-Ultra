@@ -4,6 +4,7 @@ description: Calculate the SHA-1 hash of a given text via the WebView's WebCrypt
 compatibility: js
 auto_load: false
 category: original
+title: 计算 SHA-1 哈希
 
 ---
 

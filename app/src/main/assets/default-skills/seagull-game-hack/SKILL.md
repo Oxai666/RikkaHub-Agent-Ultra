@@ -16,6 +16,7 @@ triggers:
   - game mod
   - 游戏研究
 category: game
+title: 海鸥·游戏内存与绘制
 
 ---
 

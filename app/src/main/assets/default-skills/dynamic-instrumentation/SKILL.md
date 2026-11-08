@@ -2,6 +2,7 @@
 name: dynamic-instrumentation
 description: Frida dynamic hooking, memory patching, API parameter tracing, and anti-debug bypass script generation.
 category: reverse
+title: Frida 动态注入（Hook/内存改写）
 
 ---
 

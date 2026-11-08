@@ -2,6 +2,7 @@
 name: mobile-reverse
 description: "Android/iOS reverse engineering: APK/IPA analysis, Frida/Objection workflows, SSL pinning/root-detection research, and runtime hooks."
 category: reverse
+title: 移动端逆向（APK/IPA/Frida）
 
 ---
 

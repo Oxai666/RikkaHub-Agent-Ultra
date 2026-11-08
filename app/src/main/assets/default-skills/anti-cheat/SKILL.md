@@ -2,6 +2,7 @@
 name: anti-cheat-systems
 description: Guide for modern game anti-cheat architecture, Windows kernel monitoring, and detection tradeoffs. Use this skill when analyzing EAC, BattlEye, Vanguard, FACEIT AC, kernel callbacks, handle protection, manual-map detection, boot-start drivers, BYOVD, DMA threats, or behavioral telemetry in game security research.
 category: game
+title: 反作弊机制分析（EAC/BattlEye）
 
 ---
 

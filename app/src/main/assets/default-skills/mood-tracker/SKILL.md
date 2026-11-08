@@ -4,6 +4,7 @@ description: Log a daily 1-10 mood score with comments and view trend dashboards
 compatibility: js
 auto_load: false
 category: original
+title: 心情记录与趋势
 
 ---
 

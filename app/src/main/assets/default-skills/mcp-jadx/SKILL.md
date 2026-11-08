@@ -2,6 +2,7 @@
 name: mcp-jadx
 description: 把 jadx-headless-mcp 接进 App 做 APK 静态分析时使用。覆盖在沙箱里起 HTTP 服务、在设置里配 MCP 服务器、参数调优、内存控制、连接排错。当用户提到 MCP、jadx、反编译一个 APK、分析包结构、找类找方法时触发。
 category: tool
+title: jadx-MCP 接入（APK 静态分析）
 
 ---
 

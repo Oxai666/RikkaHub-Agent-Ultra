@@ -2,6 +2,7 @@
 name: full-crack
 description: Complete cracking workflow chain. Trigger: full crack, complete crack, crack workflow, 完整破解, 破解工作流.
 category: crack
+title: 完整破解流程
 
 ---
 

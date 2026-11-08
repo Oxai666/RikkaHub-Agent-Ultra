@@ -2,6 +2,7 @@
 name: binary-analysis
 description: Static binary reverse engineering, PE/ELF structural analysis, pattern scanning, disassembly, and binary patch generation.
 category: reverse
+title: 二进制静态分析（PE/ELF/反汇编）
 
 ---
 

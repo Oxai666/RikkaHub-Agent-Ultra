@@ -7,6 +7,7 @@ allowed-tools: Bash Read Write Edit Glob Grep Task WebFetch WebSearch
 metadata:
   user-invocable: "false"
 category: reverse
+title: 通用逆向方法（混淆/加壳/虚拟机）
 
 ---
 

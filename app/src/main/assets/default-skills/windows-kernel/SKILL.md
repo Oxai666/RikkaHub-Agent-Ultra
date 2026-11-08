@@ -2,6 +2,7 @@
 name: windows-kernel-security
 description: Guide for Windows kernel internals and security mechanisms used in game protection and low-level research. Use this skill when working with drivers, IRQL-sensitive callbacks, EPROCESS, ETHREAD, MMVAD internals, IOCTL paths, DSE, PatchGuard, HVCI, PiDDBCache, MmUnloadedDrivers, or kernel memory inspection.
 category: game
+title: Windows 内核（驱动/游戏保护）
 
 ---
 

@@ -12,6 +12,7 @@ triggers:
   - patch license
   - 授权验证
 category: crack
+title: 海鸥·卡密与授权验证
 
 ---
 

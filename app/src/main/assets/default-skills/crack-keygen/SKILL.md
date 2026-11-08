@@ -2,6 +2,7 @@
 name: crack-keygen
 description: Software reverse engineering and licensing research: disassembly, decompilation, patching, keygen, serial algorithms, license bypass, DRM, trial reset. Trigger: crack, keygen, serial, license, activation, drm, patch, 破解, 脱壳, 注册机, 卡密, 激活码.
 category: crack
+title: 破解与注册机（授权绕过/DRM）
 
 ---
 

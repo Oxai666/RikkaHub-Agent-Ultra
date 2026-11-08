@@ -10,6 +10,7 @@ description: >
   关键词触发：编码、开发、写代码、改bug、重构、API调用、接口对接、
   架构设计、代码审查、技术方案、feature开发、hotfix。
 category: original
+title: 八荣八耻（对话风格约束）
 
 ---
 

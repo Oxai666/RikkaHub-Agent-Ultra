@@ -2,6 +2,7 @@
 name: js-reverse
 description: "JavaScript reverse engineering: obfuscation recovery, signature/HMAC location, browser environment patching, and frontend crypto extraction."
 category: reverse
+title: JavaScript 逆向（混淆还原/签名）
 
 ---
 

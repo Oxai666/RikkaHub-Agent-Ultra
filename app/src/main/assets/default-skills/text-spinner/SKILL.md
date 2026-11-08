@@ -4,6 +4,7 @@ description: Render a 3D-spinning text label inside a webview. Returns a relativ
 compatibility: js
 auto_load: false
 category: original
+title: 3D 旋转文字
 
 ---
 

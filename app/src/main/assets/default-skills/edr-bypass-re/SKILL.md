@@ -8,6 +8,7 @@ description: |
   ntdll unhook、kernel callback、CrowdStrike 绕过、Defender 绕过、Sentinel One 绕过、Elastic Defend、
   Sysmon 规避、PPID spoof、Sleep mask、Process Hollowing、Reflective DLL。
 category: pentest
+title: 杀软 EDR 免杀研究
 
 ---
 

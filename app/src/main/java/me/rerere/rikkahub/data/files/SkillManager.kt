@@ -505,6 +505,7 @@ class SkillManager(
                 name = name,
                 description = description,
                 compatibility = frontmatter["compatibility"],
+                title = frontmatter["title"]?.takeIf { it.isNotBlank() },
                 category = frontmatter["category"]?.takeIf { it.isNotBlank() },
                 autoLoad = frontmatter["auto_load"]?.equals("true", ignoreCase = true) == true,
                 autoLoadPath = frontmatter["auto_load_path"]?.takeIf { it.isNotBlank() },
@@ -578,6 +579,16 @@ data class SkillMetadata(
     val name: String,
     val description: String,
     val compatibility: String? = null,
+    /**
+     * 中文显示名，来自 frontmatter 的 `title:`。
+     *
+     * 为什么要有这个：`name` 是标识符——目录名、`enabledSkills` 里存的值、
+     * 工具调用时传的参数全用它，改成中文会让已保存的配置全部失效。
+     * 所以中文名单独放一个字段，只在界面上显示。
+     *
+     * 为空时界面回退到 `name`，不会因为缺字段就显示不了。
+     */
+    val title: String? = null,
     /**
      * 技能分类，来自 frontmatter 的 `category:`。
      *

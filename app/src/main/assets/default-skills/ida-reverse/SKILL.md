@@ -7,6 +7,7 @@ description: |
 
   Use the bundled scripts (scripts/start.ps1, scripts/open.ps1) for deterministic server management and file opening — do NOT write ad-hoc PowerShell commands for these operations.
 category: reverse
+title: IDA 逆向（静态分析/反编译）
 
 ---
 

@@ -4,6 +4,7 @@ description: Operating manual for the on-device RikkaHub agent. Loads the person
 auto_load: true
 auto_load_path: SOUL.md
 category: original
+title: 助手核心准则（人格+心跳+工具）
 
 ---
 

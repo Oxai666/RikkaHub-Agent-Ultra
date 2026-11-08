@@ -8,6 +8,7 @@ allowed-tools: Bash Read Write Edit Glob Grep Task WebFetch WebSearch
 metadata:
   user-invocable: "false"
 category: reverse
+title: .NET 逆向（C# 程序/红队工具）
 
 ---
 

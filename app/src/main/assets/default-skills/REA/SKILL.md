@@ -11,6 +11,7 @@ tools:
   - jadx-headless-mcp
   - procps
 category: reverse
+title: REA 逆向引擎（二进制/固件/Electron）
 
 ---
 

@@ -4,6 +4,7 @@ description: Show a playable 88-key virtual piano with synthesized note audio in
 compatibility: js
 auto_load: false
 category: original
+title: 虚拟钢琴
 
 ---
 

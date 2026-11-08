@@ -2,6 +2,7 @@
 name: api-security
 description: "API security testing for REST/GraphQL/WebSocket/SOAP: discovery, authz, BOLA/IDOR, JWT/OAuth, rate-limit, and CI-oriented validation workflows."
 category: pentest
+title: API 安全测试（REST/GraphQL/JWT）
 
 ---
 

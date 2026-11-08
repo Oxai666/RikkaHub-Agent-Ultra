@@ -4,6 +4,7 @@ description: Generate a 512x512 QR code PNG for a given URL. Returns a base64-en
 compatibility: js
 auto_load: false
 category: original
+title: 生成二维码
 
 ---
 

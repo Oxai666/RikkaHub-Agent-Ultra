@@ -2,6 +2,7 @@
 name: l-reverse
 description: "MUST on 逆向/脱壳/反编译/Frida/IDA/PE/APK/Hook/协议/微信小程序. Surface→deep→reproduce. Evidence E#."
 category: reverse
+title: 逆向直出（脱壳/反编译/Hook）
 
 ---
 

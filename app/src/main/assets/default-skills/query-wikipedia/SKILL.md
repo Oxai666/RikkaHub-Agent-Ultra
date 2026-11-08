@@ -4,6 +4,7 @@ description: Fuzzy-search Wikipedia for a topic and return the introduction plus
 compatibility: js
 auto_load: false
 category: original
+title: 查维基百科
 
 ---
 

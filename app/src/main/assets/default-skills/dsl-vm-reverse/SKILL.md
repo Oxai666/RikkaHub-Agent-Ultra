@@ -3,6 +3,7 @@ name: dsl-vm-reverse
 description: "Reverse custom JavaScript/WASM DSL virtual machines, recover opcodes, state transitions, and runtime behavior in authorized local artifacts."
 author: SeaGull
 category: reverse
+title: 自定义虚拟机逆向（JS/WASM 字节码）
 
 ---
 

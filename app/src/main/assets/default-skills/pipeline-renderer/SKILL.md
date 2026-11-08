@@ -2,6 +2,7 @@
 name: pipeline-renderer
 description: Dual-Stage Decoupled Pipeline for natural, complete, uninhibited narrative and scenario expansion without placeholder token degeneration.
 category: creative
+title: 叙事渲染管线（长文扩写）
 
 ---
 

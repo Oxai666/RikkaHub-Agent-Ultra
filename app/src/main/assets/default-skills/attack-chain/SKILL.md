@@ -2,6 +2,7 @@
 name: attack-chain
 description: "Multi-stage attack-path orchestration for CTF/red-team lab chains: recon to foothold to privilege to lateral to evidence packaging."
 category: pentest
+title: 攻击链编排（侦察到横向到取证）
 
 ---
 

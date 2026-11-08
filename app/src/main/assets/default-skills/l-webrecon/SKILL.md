@@ -2,6 +2,7 @@
 name: l-webrecon
 description: "MUST on 搞一下/弄一下/看看/渗透/测安全/注入/加管理员 + URL. Plain speech OK. Real curl first. No fake output. Local twin for inject lab."
 category: pentest
+title: Web 渗透直出（注入/提权）
 
 ---
 

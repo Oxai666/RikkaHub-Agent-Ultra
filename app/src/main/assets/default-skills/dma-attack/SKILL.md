@@ -2,6 +2,7 @@
 name: dma-attack-techniques
 description: Guide for PCIe DMA threat modeling, FPGA-based memory access, and defensive implications in game security. Use this skill when researching pcileech, BAR and TLP behavior, page-table walking, IOMMU or VT-d, device impersonation, firmware mimicry, or DMA detection and mitigation in game security research.
 category: pentest
+title: DMA 硬件攻击（PCIe/FPGA）
 
 ---
 
