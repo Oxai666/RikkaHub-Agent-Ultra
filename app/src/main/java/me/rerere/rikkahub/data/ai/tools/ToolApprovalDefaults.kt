@@ -278,6 +278,25 @@ object ToolApprovalDefaults {
      * read this set when rendering the keyboard.
      */
     val NO_ALWAYS_ALLOW: Set<String> = setOf(
+
+        // ── 最高权限通道：不允许「始终允许」 ──
+        //
+        // 这几个的共同点：一次批准等于把整台设备交出去，而且之后的调用
+        // 用户看不到任何提示。放进 ALWAYS_ASK 只保证「第一次会问」，
+        // 没放进 NO_ALWAYS_ALLOW 的话用户点一次 ∞，后面全静默执行。
+        //
+        // root_shell 原本在这里只登记了 ALWAYS_ASK，注释还写着
+        // 「so it asks every time」——那是假的，因为没有 NO_ALWAYS_ALLOW
+        // 的限制，∞ 按钮照常出现。注释和实现对不上，这里按注释的意思修。
+        "root_shell",
+
+        // 虚拟显示器：开一块用户**看不见**的屏幕，把任意包拉上去，再在那边点击。
+        // ALWAYS_ASK 只保证第一次会问；能勾「始终允许」的话，之后模型可以
+        // 在隐藏屏上把银行 App 点穿而用户一次提示都收不到。
+        // 上游注释其实已经点出了这个风险（"without a single prompt"），
+        // 但只登记了 ALWAYS_ASK，等于只关了一半。
+        "virtual_screen",
+
         "mcp_add",
         "mcp_update",
         // eval_javascript runs arbitrary code in the QuickJS engine. Even with a wall-clock

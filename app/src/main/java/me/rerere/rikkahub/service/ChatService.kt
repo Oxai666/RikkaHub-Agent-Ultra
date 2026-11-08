@@ -1730,7 +1730,15 @@ class ChatService(
                             // workspace tool (it is per-app, not per-workspace) - this
                             // guard also covers any stale "workspace_" entry left over
                             // from before ToolApprovalPreferences started filtering them.
+                            //
+                            // NO_ALWAYS_ALLOW 也要在这里挡一次：那个名单只控制 UI 上
+                            // ∞ 按钮出不出来，但旧版本里用户可能已经点过 ∞ 了——
+                            // 记录还躺在 DataStore 里，光靠隐藏按钮收不回来。
+                            // 所以持久授权查询时把这份名单排除掉，
+                            // 老授权等于自动作废，用户下一次会遇到审批提示。
                             (!isWorkspaceToolName(toolName) &&
+                                me.rerere.rikkahub.data.ai.tools.ToolApprovalDefaults
+                                    .allowsAlwaysAllow(toolName) &&
                                 toolApprovalPreferences.current().contains(toolName))
                     }
                 },
