@@ -39,7 +39,7 @@ object ReToolchainStatus {
      * 用一条而不是十几条：每条 `workspace_shell` 都是一次进程启动，
      * 十几条下来要好几秒。
      */
-    private const val PROBE_SCRIPT = """
+    private val PROBE_SCRIPT = """
         [ -x /bin/sh ] && echo "rootfs=OK" || echo "rootfs=MISSING"
         [ -f $REV_HOME/env.sh ] && . $REV_HOME/env.sh 2>/dev/null
         . $REV_HOME/env.sh 2>/dev/null || true
