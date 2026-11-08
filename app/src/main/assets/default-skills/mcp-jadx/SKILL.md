@@ -33,6 +33,9 @@ proot 沙箱和 App 共享网络命名空间，`127.0.0.1` 是通的。
 mkdir -p /opt/rev
 curl -L -o /opt/rev/jadx-headless-mcp.jar \
   https://github.com/atxx/jadx-headless-mcp/releases/download/v0.7.1/jadx-headless-mcp-0.7.1-all.jar
+# ↑ 这个仓库地址是照原始包里的 jar 文件名推的，没有实际验证过。
+#   404 的话先 `curl -s https://api.github.com/search/repositories?q=jadx-headless-mcp`
+#   找到真实仓库再换 URL。
 
 # 要有 JDK
 apt-get install -y openjdk-21-jdk-headless

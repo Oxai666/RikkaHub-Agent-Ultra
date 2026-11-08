@@ -3,8 +3,8 @@
   "updated_at": "2026-11-08",
   "skills": [
     {
-      "name": "reverse-engineer-anything",
-      "title": "Reverse Engineer Anything",
+      "name": "REA",
+      "title": "Rea",
       "description": "Reverse engineer native, managed, Electron/JavaScript, packaged, firmware, and browser targets with REA. Use shipped-artifact or requested runtime evidence to explain features, compare versions, decom",
       "category": "reverse",
       "license": "MIT",
@@ -33,8 +33,8 @@
       "is_bundled": true
     },
     {
-      "name": "anti-cheat-systems",
-      "title": "Anti Cheat Systems",
+      "name": "anti-cheat",
+      "title": "Anti Cheat",
       "description": "Guide for modern game anti-cheat architecture, Windows kernel monitoring, and detection tradeoffs. Use this skill when analyzing EAC, BattlEye, Vanguard, FACEIT AC, kernel callbacks, handle protection",
       "category": "game",
       "license": "MIT",
@@ -74,11 +74,11 @@
     },
     {
       "name": "auto-reply",
-      "title": "Auto-reply",
+      "title": "Auto Reply",
       "description": "Reply to a contact's notifications via the messaging app on screen.",
       "category": "automation",
       "license": "Apache-2.0",
-      "size_kb": 4,
+      "size_kb": 3,
       "compatibility": "any",
       "is_bundled": true
     },
@@ -128,8 +128,8 @@
       "description": "Compute the SHA-1 hash of a given text via the WebView's WebCrypto API.",
       "category": "demo",
       "license": "Apache-2.0",
-      "size_kb": 12,
-      "compatibility": "js",
+      "size_kb": 5,
+      "compatibility": "any",
       "is_bundled": true
     },
     {
@@ -144,17 +144,17 @@
     },
     {
       "name": "ctf-kb",
-      "title": "CTF 全方向知识库",
+      "title": "Ctf Kb",
       "description": "CTF 竞赛全方向知识库技能。基于 Hello CTF 知识技能树整理，覆盖 13 个方向： Web 安全、密码学、安全杂项、二进制安全、逆向工程、人工智能安全、云安全、 数据安全、区块链安全、工控安全、物联网安全、应急响应、渗透测试。 当用户提到以下任意关键词时必须触发本技能：CTF、夺旗赛、ctf 题目、解题、 比赛题、writeup、re 题、pwn ",
       "category": "security",
       "license": "See skill LICENSE",
-      "size_kb": 650,
+      "size_kb": 649,
       "compatibility": "any",
       "is_bundled": true
     },
     {
-      "name": "dma-attack-techniques",
-      "title": "Dma Attack Techniques",
+      "name": "dma-attack",
+      "title": "Dma Attack",
       "description": "Guide for PCIe DMA threat modeling, FPGA-based memory access, and defensive implications in game security. Use this skill when researching pcileech, BAR and TLP behavior, page-table walking, IOMMU or ",
       "category": "security",
       "license": "MIT",
@@ -204,7 +204,7 @@
     },
     {
       "name": "eight-honors",
-      "title": "AI 编码八荣八耻",
+      "title": "Eight Honors",
       "description": "AI编码同志精神纲领——\"八荣八耻\"。这是一套价值观体系， 旨在从根本上塑造 Claude Code、Codex 等 AI 编码智能体的工作品格与责任意识。 在以下场景中必须触发此技能：任何涉及代码生成、代码修改、接口调用、架构变更、 bug修复、重构、技术方案设计的任务。当 AI 准备动手写代码时，先完成精神自检， 让每一行代码都承载对人类信任的敬畏。 即",
       "category": "coding",
       "license": "MIT",
@@ -263,8 +263,8 @@
       "is_bundled": true
     },
     {
-      "name": "game-engine-resources",
-      "title": "Game Engine Resources",
+      "name": "game-engine",
+      "title": "Game Engine",
       "description": "Guide for game-engine internals, source trees, plugins, and engine-specific security research. Use this skill when researching Unreal, Unity, Source, Godot, custom engines, engine detectors, engine ex",
       "category": "game",
       "license": "MIT",
@@ -273,8 +273,8 @@
       "is_bundled": true
     },
     {
-      "name": "game-hacking-techniques",
-      "title": "Game Hacking Techniques",
+      "name": "game-hacking",
+      "title": "Game Hacking",
       "description": "Guide for game-hacking technique taxonomy and threat modeling relevant to game security. Use this skill when researching memory access, code injection, overlays, input simulation, engine-specific atta",
       "category": "game",
       "license": "MIT",
@@ -283,8 +283,8 @@
       "is_bundled": true
     },
     {
-      "name": "graphics-api-hooking",
-      "title": "Graphics Api Hooking",
+      "name": "graphics-api",
+      "title": "Graphics Api",
       "description": "Guide for graphics API interception, overlay rendering, and render-pipeline analysis across DirectX, OpenGL, and Vulkan. Use this skill when working with Present or SwapBuffers hooks, DXGI swap chains",
       "category": "game",
       "license": "MIT",
@@ -318,8 +318,8 @@
       "description": "Embed a Google Maps view for a location. Returns a webview URL.",
       "category": "demo",
       "license": "Apache-2.0",
-      "size_kb": 8,
-      "compatibility": "js",
+      "size_kb": 2,
+      "compatibility": "any",
       "is_bundled": true
     },
     {
@@ -338,7 +338,7 @@
       "description": "Text-based RPG where every kitchen appliance is a sentient character. Pure prompt skill.",
       "category": "demo",
       "license": "Apache-2.0",
-      "size_kb": 4,
+      "size_kb": 2,
       "compatibility": "any",
       "is_bundled": true
     },
@@ -428,8 +428,8 @@
       "description": "Log daily 1-10 mood scores and view trend dashboards. Stores in WebView localStorage.",
       "category": "demo",
       "license": "Apache-2.0",
-      "size_kb": 36,
-      "compatibility": "js",
+      "size_kb": 234,
+      "compatibility": "any",
       "is_bundled": true
     },
     {
@@ -438,7 +438,7 @@
       "description": "Reads weather, calendar, and unread email at wake-up.",
       "category": "productivity",
       "license": "Apache-2.0",
-      "size_kb": 4,
+      "size_kb": 3,
       "compatibility": "any",
       "is_bundled": true
     },
@@ -454,11 +454,11 @@
     },
     {
       "name": "notification-summarise-and-act",
-      "title": "Notification Summary",
+      "title": "Notification Summarise And Act",
       "description": "Read recent notifications, group by app, summarise, suggest actions.",
       "category": "productivity",
       "license": "Apache-2.0",
-      "size_kb": 5,
+      "size_kb": 3,
       "compatibility": "any",
       "is_bundled": true
     },
@@ -554,12 +554,12 @@
     },
     {
       "name": "qr-code",
-      "title": "QR Code",
+      "title": "Qr Code",
       "description": "Generate a 512x512 QR code PNG for any URL. Requires internet (cdnjs qrcode.js).",
       "category": "demo",
       "license": "Apache-2.0",
-      "size_kb": 8,
-      "compatibility": "js",
+      "size_kb": 23,
+      "compatibility": "any",
       "is_bundled": true
     },
     {
@@ -568,8 +568,8 @@
       "description": "Fuzzy-search Wikipedia for a topic and return the introduction plus infobox.",
       "category": "demo",
       "license": "Apache-2.0",
-      "size_kb": 12,
-      "compatibility": "js",
+      "size_kb": 7,
+      "compatibility": "any",
       "is_bundled": true
     },
     {
@@ -603,10 +603,10 @@
       "is_bundled": true
     },
     {
-      "name": "game-security-research-rigor",
-      "title": "Game Security Research Rigor",
+      "name": "research-rigor",
+      "title": "Research Rigor",
       "description": "Guide for evidence-grounded game-security research, citation verification, uncertainty, reproducible analysis, and detector evaluation. Use when validating technical claims, synthesizing README or wik",
-      "category": "game",
+      "category": "security",
       "license": "MIT",
       "size_kb": 8,
       "compatibility": "any",
@@ -798,17 +798,17 @@
       "description": "Catch a notification, summarise, forward to another contact.",
       "category": "automation",
       "license": "Apache-2.0",
-      "size_kb": 4,
+      "size_kb": 3,
       "compatibility": "any",
       "is_bundled": true
     },
     {
       "name": "src-bughunt",
-      "title": "SRC 挖洞与白盒审计",
+      "title": "Src Bughunt",
       "description": "SRC 漏洞挖掘 + 白盒 0day 审计全流程技能。覆盖国内大厂、中小企业、 政府/教育/医疗等目标类型。包含：JS 逆向接口发现、越权/注入/逻辑漏洞测试、 WAF 绕过、白盒代码审计（Linux Kernel/Chromium/Laravel/Spring/Django）、以及中文 SRC 报告生成。 当用户提到以下任意关键词时必须触发本技能： SRC",
       "category": "security",
       "license": "MIT",
-      "size_kb": 747,
+      "size_kb": 734,
       "compatibility": "any",
       "is_bundled": true
     },
@@ -818,8 +818,8 @@
       "description": "Render a 3D-spinning text label inside a webview embed.",
       "category": "demo",
       "license": "Apache-2.0",
-      "size_kb": 16,
-      "compatibility": "js",
+      "size_kb": 3,
+      "compatibility": "any",
       "is_bundled": true
     },
     {
@@ -828,13 +828,13 @@
       "description": "Playable 88-key piano with sampled note audio. Bundles ~7.7 MB of MP3 samples.",
       "category": "demo",
       "license": "Apache-2.0",
-      "size_kb": 7884,
-      "compatibility": "js",
+      "size_kb": 12,
+      "compatibility": "any",
       "is_bundled": true
     },
     {
-      "name": "windows-kernel-security",
-      "title": "Windows Kernel Security",
+      "name": "windows-kernel",
+      "title": "Windows Kernel",
       "description": "Guide for Windows kernel internals and security mechanisms used in game protection and low-level research. Use this skill when working with drivers, IRQL-sensitive callbacks, EPROCESS, ETHREAD, MMVAD ",
       "category": "security",
       "license": "MIT",

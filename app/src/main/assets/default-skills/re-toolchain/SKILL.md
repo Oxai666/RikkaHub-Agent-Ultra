@@ -105,6 +105,9 @@ curl -L -o /usr/local/bin/baksmali.jar \
 mkdir -p /opt/rev
 curl -L -o /opt/rev/jadx-headless-mcp.jar \
   https://github.com/atxx/jadx-headless-mcp/releases/download/v0.7.1/jadx-headless-mcp-0.7.1-all.jar
+# ↑ 这个仓库地址是照原始包里的 jar 文件名推的，没有实际验证过。
+#   404 的话先 `curl -s https://api.github.com/search/repositories?q=jadx-headless-mcp`
+#   找到真实仓库再换 URL。
 
 # 自检
 java -jar /opt/rev/jadx-headless-mcp.jar --help
@@ -150,8 +153,11 @@ frida-server 是**设备端**二进制，必须在 `/data/local/tmp` 跑，不�
 getprop ro.product.cpu.abi     # 期望 arm64-v8a
 
 # 2. 下载对应版本（Python 端 frida 版本必须和它一致）
-curl -L -o /data/local/tmp/frida-server \
-  https://github.com/frida/frida/releases/download/17.23.3/frida-server-17.23.3-android-arm64
+# release 是 .xz 压缩包，不是裸二进制
+curl -L -o /data/local/tmp/fs.xz \
+  https://github.com/frida/frida/releases/download/17.23.3/frida-server-17.23.3-android-arm64.xz
+xz -d /data/local/tmp/fs.xz
+mv /data/local/tmp/fs /data/local/tmp/frida-server
 chmod 755 /data/local/tmp/frida-server
 
 # 3. 起（要 root）
