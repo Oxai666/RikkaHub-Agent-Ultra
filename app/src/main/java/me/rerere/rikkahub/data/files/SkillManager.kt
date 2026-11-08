@@ -266,6 +266,14 @@ class SkillManager(
         skillName: String,
         title: String?,
         category: String?,
+        /**
+         * 新的描述。为 null 表示不动。
+         *
+         * 为什么要有这个参数：description 决定技能**什么时候被自动触发**，
+         * 是最需要随时微调的字段。之前只支持改 title / category，
+         * 模型单独改 description 时会被静默丢弃——工具说改好了，实际没改。
+         */
+        description: String? = null,
     ): Boolean {
         val skillDir = resolveSkillDir(skillName) ?: return false
         val file = File(skillDir, "SKILL.md")
@@ -295,6 +303,7 @@ class SkillManager(
 
         setKey("title", title)
         setKey("category", category)
+        setKey("description", description)
 
         val updated = "---" + lines.joinToString("\n") + body
         val ok = runCatching { file.writeText(updated) }.isSuccess

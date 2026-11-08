@@ -29,11 +29,17 @@ fun createSnapshotTools(context: Context, workspaceId: String?): List<Tool> = li
 private fun snapshotListTool(context: Context, workspaceId: String?): Tool = Tool(
     name = "snapshot_list",
     description = """
-        List file snapshots taken before irreversible operations. Use this to verify
-        that a risky operation was actually backed up, or to find the right snapshot
-        to restore after something went wrong.
-        Returns id, when it was taken, which tool triggered it, and how many files
-        were captured (plus how many were skipped and why).
+        List file snapshots taken before irreversible operations on the bound workspace.
+        Call this when: (a) the user asks whether something was backed up, (b) a destructive
+        operation went wrong and you need to pick the snapshot to restore, or (c) you are
+        about to retry a destructive command and want to know whether the previous attempt
+        already captured the target files.
+        Returns id, taken_at_ms, the tool that triggered it, captured_files, skipped_files,
+        total_bytes, and the file paths inside each snapshot.
+        Snapshots live under /workspace/.snapshots/ — you can also `ls` that path with
+        workspace_shell instead of calling this tool.
+        This tool only exists when the assistant is bound to a workspace; without one there
+        is nothing to snapshot and the tool is not registered at all.
     """.trimIndent().replace("\n", " "),
     parameters = { InputSchema.Obj(properties = buildJsonObject { }, required = emptyList()) },
     execute = { _ ->
@@ -62,8 +68,9 @@ private fun snapshotListTool(context: Context, workspaceId: String?): Tool = Too
                 put(
                     "note",
                     "还没有任何快照。快照只在「不可逆操作」通过审批时才会拍——" +
-                        "普通的写文件不触发。快照目录在 /workspace/.snapshots/，" +
-                        "也可以用 workspace_shell 直接 ls 它。"
+                        "普通的写文件不触发，只读操作也不触发。" +
+                        "快照目录在 /workspace/.snapshots/，可以用 workspace_shell 直接 ls 它。" +
+                        "如果这次本来就不该触发（比如只是 cat 一个文件），列表为空是正常的。"
                 )
             }
         }
@@ -74,10 +81,13 @@ private fun snapshotListTool(context: Context, workspaceId: String?): Tool = Too
 private fun snapshotRestoreTool(context: Context, workspaceId: String?): Tool = Tool(
     name = "snapshot_restore",
     description = """
-        Restore files from a snapshot. Files that existed when the snapshot was taken are
-        copied back over the current version; files that did NOT exist then are deleted,
-        returning to the state before the operation.
-        Only use this when the user asks to undo — it overwrites whatever is there now.
+        Restore files from a snapshot, returning the workspace to its state right before the
+        recorded operation. Files that existed at capture time are copied back over the current
+        version; files that did not exist at capture time are deleted.
+        Only call this when the user explicitly asks to undo. It overwrites whatever is there
+        now, so get the snapshot id from snapshot_list first and confirm it is the right one
+        (check taken_at_ms and the file paths, not just the timestamp).
+        Returns ok, restored count, deleted count, and the list of failures.
     """.trimIndent().replace("\n", " "),
     parameters = {
         InputSchema.Obj(

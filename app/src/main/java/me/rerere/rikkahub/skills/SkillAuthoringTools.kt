@@ -287,6 +287,11 @@ private fun skillUpdateTool(skillManager: SkillManager): Tool = Tool(
                 skillName = name,
                 title = newTitle.ifBlank { null },
                 category = newCategory.ifBlank { null },
+                // 只有调用方真传了 description 才改——不传时 newDescription
+                // 回退成了 existing.description，原样写回等于没改，但会把
+                // 一个有引号的描述重新转义一遍。用 obj 里有没有这个键来判断。
+                description = obj["description"]?.jsonPrimitive?.contentOrNull
+                    ?.trim()?.takeIf { it.isNotEmpty() },
             )
             if (!ok) return@Tool err("SAVE_FAILED")
         }

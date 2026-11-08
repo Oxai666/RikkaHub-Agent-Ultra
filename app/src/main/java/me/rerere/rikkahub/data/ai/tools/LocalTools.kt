@@ -1160,16 +1160,23 @@ class LocalTools(
 
         // 快照查看与恢复。
         // 快照放工作区里（/workspace/.snapshots/），AI 用 workspace_shell 能看到，
-        // 用户也能在「文件」页看到。所以这里要把 workspaceId 传给工具，
-        // 让它们算对快照根目录。
+        // 用户也能在「文件」页看到。
+        //
+        // **没绑工作区就不注册这两个工具。**
+        // 原因：快照必须落在工作区的文件区才有意义——不放那儿的话 AI 的沙箱
+        // 看不到、用户也进不去，工具给了也是空转，模型还会以为「没有快照」
+        // 然后自己去 find 全盘找（这一幕真发生过）。没工作区就没有可拍的路径，
+        // 干脆别给，模型也就不会问。
         val snapshotWorkspaceId = runCatching {
             settingsStore.settingsFlow.value.assistants
                 .firstOrNull { it.id.toString() == invocationContext.callerAssistantId }
                 ?.workspaceId?.toString()
         }.getOrNull()
-        tools.addAll(
-            me.rerere.rikkahub.safety.createSnapshotTools(context, snapshotWorkspaceId)
-        )
+        if (!snapshotWorkspaceId.isNullOrBlank()) {
+            tools.addAll(
+                me.rerere.rikkahub.safety.createSnapshotTools(context, snapshotWorkspaceId)
+            )
+        }
 
         // ── 技能创作：同样常驻 ──
         // 但只有「列出来」是常驻的——模型得先能看见有哪些技能和分类。
