@@ -898,6 +898,8 @@
   <string name="setting_page_extensions_desc">Manage prompt injections, skills and more</string>
   <string name="setting_page_general_settings">General Settings</string>
   <string name="setting_page_interaction_notification_settings">Interaction &amp;amp; Notifications</string>
+  <string name="setting_page_snapshots">Safety snapshots</string>
+  <string name="setting_page_snapshots_desc">Automatic backups taken before irreversible operations</string>
   <string name="setting_page_mcp">MCP</string>
   <string name="setting_page_mcp_desc">Configure MCP Servers</string>
   <string name="setting_page_message_display_settings">Message Display</string>

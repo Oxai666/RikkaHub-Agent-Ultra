@@ -61,6 +61,7 @@ import me.rerere.hugeicons.stroke.GlobalSearch
 import me.rerere.hugeicons.stroke.ImageUpload
 import me.rerere.hugeicons.stroke.InLove
 import me.rerere.hugeicons.stroke.LookTop
+import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.McpServer
 import me.rerere.hugeicons.stroke.Megaphone01
 import me.rerere.hugeicons.stroke.Package
@@ -272,6 +273,14 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.McpServer, null) },
                         supportingContent = { Text(stringResource(R.string.setting_page_mcp_desc)) },
                         headlineContent = { Text(stringResource(R.string.setting_page_mcp)) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingSnapshots) },
+                        leadingContent = { Icon(HugeIcons.Folder01, null) },
+                        supportingContent = {
+                            Text(stringResource(R.string.setting_page_snapshots_desc))
+                        },
+                        headlineContent = { Text(stringResource(R.string.setting_page_snapshots)) },
                     )
                     item(
                         onClick = { navController.navigate(Screen.SettingSubAgents) },

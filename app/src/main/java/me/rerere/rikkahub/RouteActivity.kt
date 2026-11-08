@@ -501,6 +501,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingSpeechPage()
                             }
 
+                            entry<Screen.SettingSnapshots> {
+                                me.rerere.rikkahub.ui.pages.setting.safety.SettingSnapshotsPage()
+                            }
+
                             entry<Screen.SettingMcp> {
                                 SettingMcpPage()
                             }
@@ -795,6 +799,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingSpeech : Screen
+
+    @Serializable
+    data object SettingSnapshots : Screen
 
     @Serializable
     data object SettingMcp : Screen
