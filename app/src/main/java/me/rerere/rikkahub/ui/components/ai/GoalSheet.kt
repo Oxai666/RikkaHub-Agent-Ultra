@@ -118,21 +118,39 @@ fun GoalSheet(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     MetricCell("状态", goal.status.displayName())
-                    MetricCell("消耗", "${goal.tokensUsed} tokens")
-                    MetricCell("耗时", "${goal.timeUsedSeconds}s")
+                    MetricCell(
+                        "消耗",
+                        if (goal.tokensUsed > 0) "${goal.tokensUsed} tokens" else "—",
+                    )
+                    MetricCell(
+                        "耗时",
+                        // 耗时实时算，不从存储里读：目标暂停期间不该继续涨，
+                        // 而且存下来的数字一旦进程被杀就停了，反而不准
+                        readableDuration(
+                            if (goal.status.isLive) {
+                                System.currentTimeMillis() - goal.createdAtMs
+                            } else {
+                                goal.updatedAtMs - goal.createdAtMs
+                            }
+                        ),
+                    )
                 }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                 ) {
-                    // 恢复 / 暂停：只有这两个状态互转是有意义的
+                    // 按状态给不同的操作。已完成/已受阻的还给「放弃」很奇怪——
+                    // 它已经不是活的了，该给的是「结束」。
                     when (goal.status) {
                         GoalStatus.ACTIVE -> TextButton(
                             onClick = {
                                 GoalStore.set(
                                     goalKey,
-                                    goal.copy(status = GoalStatus.PAUSED),
+                                    goal.copy(
+                                        status = GoalStatus.PAUSED,
+                                        updatedAtMs = System.currentTimeMillis(),
+                                    ),
                                 )
                             }
                         ) { Text("暂停") }
@@ -141,28 +159,73 @@ fun GoalSheet(
                             onClick = {
                                 GoalStore.set(
                                     goalKey,
-                                    goal.copy(status = GoalStatus.ACTIVE),
+                                    goal.copy(
+                                        status = GoalStatus.ACTIVE,
+                                        updatedAtMs = System.currentTimeMillis(),
+                                    ),
                                 )
                                 GoalStore.clearBlocked(goalKey)
                             }
                         ) { Text("继续") }
 
-                        else -> Unit
+                        GoalStatus.BLOCKED -> TextButton(
+                            onClick = {
+                                GoalStore.set(
+                                    goalKey,
+                                    goal.copy(
+                                        status = GoalStatus.ACTIVE,
+                                        updatedAtMs = System.currentTimeMillis(),
+                                    ),
+                                )
+                                GoalStore.clearBlocked(goalKey)
+                                GoalStore.resetContinuation(goalKey)
+                            }
+                        ) { Text("再试一次") }
+
+                        GoalStatus.COMPLETE -> TextButton(
+                            onClick = {
+                                GoalStore.clear(goalKey)
+                                onDismiss()
+                            }
+                        ) {
+                            Text("结束目标", color = MaterialTheme.colorScheme.primary)
+                        }
+
+                        GoalStatus.USAGE_LIMITED,
+                        GoalStatus.BUDGET_LIMITED,
+                        -> TextButton(
+                            onClick = {
+                                GoalStore.clear(goalKey)
+                                onDismiss()
+                            }
+                        ) {
+                            Text("结束目标", color = MaterialTheme.colorScheme.primary)
+                        }
                     }
 
-                    TextButton(
-                        onClick = {
-                            GoalStore.clear(goalKey)
-                            onDismiss()
+                    // 「放弃」只在还活着的时候有意义
+                    if (goal.status.isLive || goal.status == GoalStatus.PAUSED) {
+                        TextButton(
+                            onClick = {
+                                GoalStore.clear(goalKey)
+                                onDismiss()
+                            }
+                        ) {
+                            Text("放弃目标", color = MaterialTheme.colorScheme.error)
                         }
-                    ) {
-                        Text("放弃目标", color = MaterialTheme.colorScheme.error)
                     }
                 }
 
                 if (goal.status == GoalStatus.BLOCKED) {
                     Text(
-                        text = "连续三轮没进展，已经停下。要继续的话点「继续」，阻塞计数会清零重新算。",
+                        text = "连续三轮没进展，已经停下。点「再试一次」会从零开始数阻塞次数。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (goal.status == GoalStatus.COMPLETE) {
+                    Text(
+                        text = "目标已达成。点「结束目标」把它从列表里清掉，再立新的。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -181,5 +244,19 @@ private fun MetricCell(label: String, value: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(text = value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+/** 毫秒转成人看得懂的时长。超过一小时就只报小时和分钟，秒没意义。 */
+private fun readableDuration(ms: Long): String {
+    if (ms <= 0) return "0s"
+    val totalSeconds = ms / 1000
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return when {
+        hours > 0 -> "${hours}h${minutes}m"
+        minutes > 0 -> "${minutes}m${seconds}s"
+        else -> "${seconds}s"
     }
 }

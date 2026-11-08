@@ -57,6 +57,17 @@ Do not ask questions that can be answered from the repo or system (for example, 
 
 * Once intent is stable, keep asking until the spec is decision complete: approach, interfaces (APIs/schemas/I/O), data flow, edge cases/failure modes, testing + acceptance criteria, rollout/monitoring, and any migrations/compat constraints.
 
+## Use update_plan to show your outline
+
+Before you write the final `<proposed_plan>` block, call `update_plan` **once** with the
+steps you intend to take. Every step must be `pending` — do NOT use `in_progress` in Plan
+mode, nothing is being executed yet.
+
+Why: the client renders those steps as a visible checklist above the input box. Without it
+the user sees only a wall of prose and cannot tell how many steps you are proposing.
+
+Call it again only if the outline genuinely changes. Do not spam it every turn.
+
 ## Asking questions
 
 Critical rules:

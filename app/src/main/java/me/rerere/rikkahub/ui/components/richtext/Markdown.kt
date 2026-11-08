@@ -231,7 +231,13 @@ private fun ASTNode.containsHtml(): Boolean {
 }
 
 private fun parseMarkdown(content: String): MarkdownParseResult {
-    val preprocessed = preProcess(content)
+    // <proposed_plan> 是给客户端用的结构标记，不是给用户看的正文。
+    // 不剥掉的话它会原样显示成一串尖括号标签，很难看。
+    // 只删标签本身，里面的 markdown 内容照常渲染。
+    val stripped = content
+        .replace("<proposed_plan>", "")
+        .replace("</proposed_plan>", "")
+    val preprocessed = preProcess(stripped)
     val astTree = parser.buildMarkdownTreeFromString(preprocessed)
     return MarkdownParseResult(preprocessed, astTree, astTree.containsHtml())
 }

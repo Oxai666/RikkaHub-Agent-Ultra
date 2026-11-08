@@ -88,13 +88,18 @@ private fun createGoalTool(key: String): Tool = Tool(
             )
         }
         val existing = GoalStore.get(key)
-        if (existing != null && !existing.isFinished()) {
+        // 只拦「正在进行中」的。暂停 / 受阻 / 已完成都允许新建——
+        // 拦着不放的话，用户做完一个目标就永远立不了下一个。
+        if (existing != null && existing.status.isLive) {
             return@Tool listOf(
                 UIMessagePart.Text(
                     buildJsonObject {
                         put("ok", false)
                         put("error", "GOAL_ALREADY_ACTIVE")
-                        put("message", "there is already an unfinished goal; update its status instead")
+                        put(
+                            "message",
+                            "there is already a live goal; finish it (or pause it) before starting another"
+                        )
                         put("objective", existing.objective)
                         put("status", existing.status.name.lowercase())
                     }.toString()

@@ -597,6 +597,9 @@ class ChatService(
                         session.messageQueue.failReplyWaiters(context.getString(R.string.chat_page_voice_tool_approval))
                     }
                     appScope.launch { dispatchNextQueuedMessage(id) }
+                    // 目标消耗累加：这一轮花了多少 token 记到目标上。
+                    // 之前这个函数从没被调用过，所以面板里永远是 0 tokens。
+                    appScope.launch { accumulateGoalTokens(id) }
                     // 目标自动续跑：这轮完了，如果还有活着的目标就接着推。
                     // 放在 dispatchNextQueuedMessage 之后，保证队列优先。
                     appScope.launch { maybeStartGoalContinuation(id) }
@@ -606,6 +609,26 @@ class ChatService(
                 Log.i(TAG, "createSession: $id (total: ${sessions.size + 1})")
             }
         }
+    }
+
+    /**
+     * 把这一轮的 token 消耗记到目标上。
+     *
+     * 从会话最后一条助手消息的 usage 里读——provider 报的比自己估的准。
+     * 之前 GoalStore.accumulate 从来没被调用，所以面板里永远是 0 tokens。
+     */
+    private suspend fun accumulateGoalTokens(conversationId: Uuid) {
+        val key = conversationId.toString()
+        if (me.rerere.rikkahub.data.goal.GoalStore.get(key) == null) return
+
+        val tokens = runCatching {
+            getConversationFlow(conversationId).value.currentMessages
+                .lastOrNull { it.role == me.rerere.ai.core.MessageRole.ASSISTANT }
+                ?.usage?.totalTokens?.toLong()
+        }.getOrNull() ?: 0L
+        if (tokens <= 0) return
+
+        me.rerere.rikkahub.data.goal.GoalStore.accumulate(key, tokens, 0L)
     }
 
     /**

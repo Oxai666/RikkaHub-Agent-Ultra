@@ -51,12 +51,10 @@ class PlanModePolicyTest {
     }
 
     @Test
-    fun `update_plan is always rejected in plan mode`() {
-        assertFalse(PlanModePolicy.isAllowedInPlan(PlanToolCatalog.UPDATE_PLAN))
-        assertTrue(
-            PlanModePolicy.rejectionCode(PlanToolCatalog.UPDATE_PLAN) ==
-                PlanModePolicy.PLAN_MODE_TOOL_FORBIDDEN
-        )
+    fun `update_plan is allowed in plan mode but only for outlining`() {
+        // 行为改过：原本一律拒绝，但那样界面上的步骤条永远是空的。
+        // 现在放行，靠提示词约束「不许标 in_progress」。
+        assertTrue(PlanModePolicy.isAllowedInPlan(PlanToolCatalog.UPDATE_PLAN))
     }
 
     @Test

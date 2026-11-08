@@ -29,15 +29,27 @@ object PlanModePolicy {
      * 读目标、建目标、把目标标成受阻。
      */
     private val PLAN_ALLOWED_SYSTEM_TOOLS: Set<String> = setOf(
+        // Plan 模式下也放行：用来列出「打算分几步走」，界面上的步骤条靠它。
+        // 提示词里会写清楚这里不许标 in_progress。
+        PlanToolCatalog.UPDATE_PLAN,
         "ask_user",
         "get_goal",
         "create_goal",
         "update_goal",
     )
 
-    /** 这个工具在 Plan 模式下能不能用。 */
+    /**
+     * 这个工具在 Plan 模式下能不能用。
+     *
+     * `update_plan` 原本一律拒绝——它是执行期的检查表，规划阶段调它会让
+     * 模型一边规划一边开干。但实际用下来发现：Plan 模式下模型只会吐一段
+     * `<proposed_plan>` 文本，界面上的步骤条永远是空的，用户完全看不到
+     * 它打算分几步走。
+     *
+     * 所以放开：Plan 模式下允许 update_plan，但提示词里写清楚它在这里
+     * 是「列提纲」用的，不许标 in_progress（那才叫边规划边执行）。
+     */
     fun isAllowedInPlan(toolName: String): Boolean {
-        if (toolName == PlanToolCatalog.UPDATE_PLAN) return false
         if (toolName in PLAN_ALLOWED_SYSTEM_TOOLS) return true
         return ToolAccess.isReadOnly(toolName)
     }
