@@ -35,12 +35,57 @@ class SkillDetailVM(
     private val _tree = MutableStateFlow<List<SkillFileNode>>(emptyList())
     val tree = _tree.asStateFlow()
 
+    /** 当前技能的元信息，详情页顶部的卡片和编辑区都读它。 */
+    private val _meta = MutableStateFlow<SkillMetadata?>(null)
+    val meta = _meta.asStateFlow()
+
+    /** 已有分类，给分类选择器做候选。 */
+    private val _categories = MutableStateFlow<List<String>>(emptyList())
+    val categories = _categories.asStateFlow()
+
     private var skillName = ""
 
     fun init(name: String) {
         if (skillName == name) return
         skillName = name
         loadFiles()
+        loadMeta()
+    }
+
+    fun loadMeta() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val all = skillManager.listSkills()
+            _meta.value = all.firstOrNull { it.name == skillName }
+            _categories.value = all
+                .mapNotNull { it.category?.takeIf { c -> c.isNotBlank() } }
+                .distinct()
+                .sorted()
+        }
+    }
+
+    /**
+     * 改中文名和分类。
+     *
+     * 只动 SKILL.md 的 frontmatter 里的两行，别的键原样保留。
+     * 空串表示清掉这个键（中文名为空时列表会回退显示英文名）。
+     */
+    fun updateMeta(title: String, category: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val ok = skillManager.updateSkillMeta(
+                skillName = skillName,
+                title = title.trim().ifBlank { null },
+                category = category.trim().ifBlank { null },
+            )
+            if (ok) {
+                val all = skillManager.listSkills()
+                _meta.value = all.firstOrNull { it.name == skillName }
+                _categories.value = all
+                    .mapNotNull { it.category?.takeIf { c -> c.isNotBlank() } }
+                    .distinct()
+                    .sorted()
+            }
+            withContext(Dispatchers.Main) { onResult(ok) }
+        }
     }
 
     fun loadFiles() {

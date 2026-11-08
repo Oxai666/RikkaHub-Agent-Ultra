@@ -250,6 +250,66 @@ class SkillManager(
         return true
     }
 
+    /**
+     * 改写 SKILL.md frontmatter 里的 `title` 和 `category`，其他行原样保留。
+     *
+     * 为什么不整体重写：用户或别的工具可能在 frontmatter 里写了
+     * `args_schema`、`auto_load`、`compatibility` 这些键，重建整个
+     * frontmatter 会把它们丢掉。这里只按行替换目标键。
+     *
+     * 传 null 或空串表示删掉这个键。
+     */
+    fun updateSkillMeta(
+        skillName: String,
+        title: String?,
+        category: String?,
+    ): Boolean {
+        val skillDir = resolveSkillDir(skillName) ?: return false
+        val file = File(skillDir, "SKILL.md")
+        if (!file.isFile) return false
+
+        val raw = runCatching { file.readText() }.getOrNull() ?: return false
+        if (!raw.startsWith("---")) return false
+        val end = raw.indexOf("\n---", 3)
+        if (end < 0) return false
+
+        val frontmatter = raw.substring(3, end)
+        val body = raw.substring(end)
+        val lines = frontmatter.split("\n").toMutableList()
+
+        fun setKey(key: String, value: String?) {
+            val idx = lines.indexOfFirst { it.trimStart().startsWith("$key:") }
+            if (value.isNullOrBlank()) {
+                if (idx >= 0) lines.removeAt(idx)
+            } else {
+                // 值里可能有冒号（「逆向（HTTP/2）: 说明」这种），不处理会破坏 YAML。
+                // 但 title / category 是短文本，用双引号包起来最稳。
+                val escaped = value.replace("\"", "\\\"")
+                val line = "$key: \"$escaped\""
+                if (idx >= 0) lines[idx] = line else lines.add(line)
+            }
+        }
+
+        setKey("title", title)
+        setKey("category", category)
+
+        val updated = "---" + lines.joinToString("\n") + body
+        return runCatching { file.writeText(updated) }.isSuccess
+    }
+
+    /**
+     * 所有技能用过的分类，去重后给 UI 做候选列表。
+     *
+     * 让用户能复用已有分类名，而不是每次手打——手打容易打错，
+     * 一旦打错就变成两个看起来一样的分组。
+     */
+    fun knownCategories(): List<String> = runCatching {
+        listSkills()
+            .mapNotNull { it.category?.takeIf { c -> c.isNotBlank() } }
+            .distinct()
+            .sorted()
+    }.getOrDefault(emptyList())
+
     fun saveSkillFilesAtomically(skillName: String, files: Map<String, String>): Boolean {
         return saveSkillFileBytesAtomically(
             skillName = skillName,

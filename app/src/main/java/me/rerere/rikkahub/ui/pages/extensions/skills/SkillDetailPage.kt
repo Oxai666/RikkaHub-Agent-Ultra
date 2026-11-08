@@ -7,19 +7,27 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
@@ -46,14 +54,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.files.SkillMetadata
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
@@ -63,6 +74,7 @@ import com.composables.icons.lucide.Folder
 import com.composables.icons.lucide.FolderOpen
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Play
+import com.composables.icons.lucide.Pencil
 import com.composables.icons.lucide.Plus
 import com.composables.icons.lucide.Trash2
 import com.composables.icons.lucide.X
@@ -74,6 +86,9 @@ import me.rerere.rikkahub.skills.SkillTestRunner
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Puzzle
+import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
@@ -85,6 +100,8 @@ fun SkillDetailPage(skillName: String) {
     LaunchedEffect(skillName) { vm.init(skillName) }
 
     val tree by vm.tree.collectAsStateWithLifecycle()
+    val meta by vm.meta.collectAsStateWithLifecycle()
+    val categories by vm.categories.collectAsStateWithLifecycle()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val toaster = LocalToaster.current
 
@@ -92,6 +109,7 @@ fun SkillDetailPage(skillName: String) {
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<SkillFile?>(null) }
     var showTester by rememberSaveable { mutableStateOf(false) }
+    var showMetaEditor by rememberSaveable { mutableStateOf(false) }
     val deleteFailedMsg = stringResource(R.string.skill_detail_page_delete_failed)
 
     val scrollState = rememberScrollState()
@@ -107,9 +125,16 @@ fun SkillDetailPage(skillName: String) {
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text(skillName) },
+                // 标题用中文名，英文标识符在下面的卡片里显示
+                title = { Text(meta?.title?.takeIf { it.isNotBlank() } ?: skillName) },
                 navigationIcon = { BackButton() },
                 actions = {
+                    IconButton(onClick = { showMetaEditor = true }) {
+                        Icon(
+                            imageVector = Lucide.Pencil,
+                            contentDescription = "编辑名称与分类",
+                        )
+                    }
                     IconButton(onClick = { showTester = true }) {
                         Icon(
                             imageVector = Lucide.Play,
@@ -140,7 +165,13 @@ fun SkillDetailPage(skillName: String) {
                 .fillMaxSize()
                 .verticalScroll(scrollState)
                 .padding(innerPadding + PaddingValues(8.dp)),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            SkillHeaderCard(
+                meta = meta,
+                fallbackName = skillName,
+                onEdit = { showMetaEditor = true },
+            )
             FileTree(
                 nodes = tree,
                 depth = 0,
@@ -195,6 +226,24 @@ fun SkillDetailPage(skillName: String) {
     }
 
     if (showTester) {
+    if (showMetaEditor) {
+        SkillMetaEditorDialog(
+            initialTitle = meta?.title.orEmpty(),
+            initialCategory = meta?.category.orEmpty(),
+            knownCategories = categories,
+            onDismiss = { showMetaEditor = false },
+            onSave = { title, category ->
+                vm.updateMeta(title, category) { ok ->
+                    showMetaEditor = false
+                    toaster.show(
+                        message = if (ok) "已保存" else "保存失败",
+                        type = if (ok) ToastType.Success else ToastType.Error,
+                    )
+                }
+            },
+        )
+    }
+
         SkillTesterSheet(
             skillName = skillName,
             onDismiss = { showTester = false },
@@ -203,6 +252,169 @@ fun SkillDetailPage(skillName: String) {
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
+/**
+ * 详情页顶部的技能信息卡。
+ *
+ * 显示中文名、英文标识符、分类徽章和描述。点右侧铅笔能改名字和分类。
+ */
+@Composable
+private fun SkillHeaderCard(
+    meta: SkillMetadata?,
+    fallbackName: String,
+    onEdit: () -> Unit,
+) {
+    val title = meta?.title?.takeIf { it.isNotBlank() } ?: fallbackName
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                // 图标用主色圆底，比光秃秃一个图标有分量
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.Puzzle,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = fallbackName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    )
+                }
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        imageVector = Lucide.Pencil,
+                        contentDescription = "编辑名称与分类",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            meta?.category?.takeIf { it.isNotBlank() }?.let { category ->
+                // 分类徽章：小圆角块，主色描边，一眼能扫到
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                ) {
+                    Text(
+                        text = category,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+
+            meta?.description?.takeIf { it.isNotBlank() }?.let { desc ->
+                Text(
+                    text = desc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 改中文名和分类。
+ *
+ * 分类既能从已有列表里点，也能手打新的——手打的会写成新分类，
+ * 下次别的技能就能从候选里选到它。
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SkillMetaEditorDialog(
+    initialTitle: String,
+    initialCategory: String,
+    knownCategories: List<String>,
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Unit,
+) {
+    var title by remember { mutableStateOf(initialTitle) }
+    var category by remember { mutableStateOf(initialCategory) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("名称与分类") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("中文名") },
+                    placeholder = { Text("留空就显示英文标识符") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = category,
+                    onValueChange = { category = it },
+                    label = { Text("分类") },
+                    placeholder = { Text("填新的就是新分类") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (knownCategories.isNotEmpty()) {
+                    Text(
+                        text = "已有分类",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        knownCategories.forEach { c ->
+                            AssistChip(
+                                onClick = { category = c },
+                                label = { Text(c, style = MaterialTheme.typography.labelSmall) },
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(title, category) }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
+
 @Composable
 private fun SkillTesterSheet(skillName: String, onDismiss: () -> Unit) {
     val runner = koinInject<SkillTestRunner>()
