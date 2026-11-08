@@ -12,6 +12,104 @@ title: 逆向工具链安装（沙箱搭环境）
 
 全部命令都按「先检查、后安装」写：已经有的跳过，避免重复下载几十 MB。
 
+
+## 一键安装（不想逐条跑的时候用这个）
+
+先写脚本文件，再用后台任务跑。比一条条粘命令稳——网络抖一下不会断在半路，
+而且出问题能看日志。
+
+第一步，写脚本：
+
+```sh
+# 用 workspace_write_file 写到 /workspace/install-re.sh
+```
+
+脚本内容就是下面这一整段（已经按 Ubuntu 24.04 arm64 实测过）：
+
+```sh
+#!/bin/sh
+set -eu
+export DEBIAN_FRONTEND=noninteractive
+LOG=/workspace/install-re.log
+exec > "$LOG" 2>&1
+
+echo "=== [1/6] apt 基础包 ==="
+apt-get update
+apt-get install -y --no-install-recommends \
+  git file unzip zip xz-utils upx-ucl patchelf strace ltrace binutils gdb xxd \
+  netcat-openbsd socat nmap tcpdump tshark binwalk wabt yq jq ripgrep fd-find \
+  vim nano less htop procps coreutils util-linux diffutils patch make gcc g++ \
+  python3-dev python3-pip python3-venv libffi-dev libssl-dev squashfs-tools cpio \
+  p7zip-full sqlmap musl yara bind9-dnsutils whois net-tools tcpflow ffuf gobuster \
+  adb sigrok-cli python3-capstone python3-unicorn python3-pyelftools \
+  aapt apktool radare2 openjdk-21-jdk-headless curl ca-certificates
+
+echo "=== [2/6] Python 安全栈 ==="
+python3 -m pip install --break-system-packages \
+  -i https://pypi.tuna.tsinghua.edu.cn/simple \
+  frida frida-tools androguard pwntools pyelftools "capstone>=5,<6" unicorn \
+  ropgadget jsbeautifier yara-python r2pipe
+
+echo "=== [3/6] Node 22 ==="
+if ! command -v node >/dev/null 2>&1; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+  apt-get install -y nodejs
+fi
+
+echo "=== [4/6] jadx / apktool / smali ==="
+mkdir -p /opt/rev && cd /opt/rev
+curl -L -o jadx.zip https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip
+unzip -oq jadx.zip -d /opt/rev/jadx
+ln -sf /opt/rev/jadx/bin/jadx /usr/local/bin/jadx
+curl -L -o /usr/local/bin/apktool.jar \
+  https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+printf '#!/bin/sh\nexec java -jar /usr/local/bin/apktool.jar "$@"\n' > /usr/local/bin/apktool
+chmod +x /usr/local/bin/apktool
+curl -L -o /usr/local/bin/smali.jar \
+  https://github.com/baksmali/smali/releases/download/v3.0.10/smali-3.0.10-fat-release.jar
+curl -L -o /usr/local/bin/baksmali.jar \
+  https://github.com/baksmali/smali/releases/download/v3.0.10/baksmali-3.0.10-fat-release.jar
+
+echo "=== [5/6] jadx-headless-mcp ==="
+curl -L -o /opt/rev/jadx-headless-mcp.jar \
+  https://github.com/atxx/jadx-headless-mcp/releases/download/v0.7.1/jadx-headless-mcp-0.7.1-all.jar
+
+echo "=== [6/6] 自检 ==="
+git --version
+python3 -c "import capstone, pwn, elftools, unicorn, androguard; print('py ok')"
+node --version
+jadx --version
+apktool --version
+r2 -v | head -1
+java -version 2>&1 | head -1
+echo "=== DONE ==="
+```
+
+第二步，写文件：
+
+```
+workspace_write_file { "path": "/workspace/install-re.sh", "text": "<上面那段>" }
+```
+
+第三步，后台跑（这个要跑十几分钟）：
+
+```
+workspace_run_background { "command": "sh /workspace/install-re.sh" }
+```
+
+**跑完之后**：
+
+```
+workspace_background_status { "id": "<上一步返回的 id>" }
+```
+
+日志在 `/workspace/install-re.log`，可以用 `workspace_read_file` 看。
+
+**中途断了怎么办**：脚本从头跑会重复装。apt 和 pip 都是幂等的，
+只是慢。要跳过已装的部分，用下面第二节的逐条命令。
+
+---
+
 ## 一、先看现状
 
 ```sh
