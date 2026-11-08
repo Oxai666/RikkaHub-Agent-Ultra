@@ -3,6 +3,8 @@ name: calculate-hash
 description: Calculate the SHA-1 hash of a given text via the WebView's WebCrypto API.
 compatibility: js
 auto_load: false
+category: original
+
 ---
 
 # Calculate hash

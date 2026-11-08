@@ -13,6 +13,8 @@ triggers:
   - detection bypass
   - defense validation
   - red team payload
+category: pentest
+
 ---
 
 # Seagull Evasion — Detection Engineering Research

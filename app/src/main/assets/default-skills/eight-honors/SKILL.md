@@ -9,6 +9,8 @@ description: >
   即使用户没有明确提及此技能，只要任务涉及编码行为，就应自觉遵守。
   关键词触发：编码、开发、写代码、改bug、重构、API调用、接口对接、
   架构设计、代码审查、技术方案、feature开发、hotfix。
+category: original
+
 ---
 
 # Claude Code 八荣八耻

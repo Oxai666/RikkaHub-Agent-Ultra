@@ -17,6 +17,8 @@ triggers:
   - CTF红队覆盖
   - 红队模式
   - CTF全局
+category: pentest
+
 ---
 
 # 海鸥全域专家模式

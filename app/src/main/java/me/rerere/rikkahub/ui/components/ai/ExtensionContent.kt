@@ -17,8 +17,10 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -109,6 +111,24 @@ fun LorebooksContent(
     }
 }
 
+/**
+ * 技能分类的展示顺序与中文名。
+ *
+ * `original` 排最前：那是 RikkaHub 自带的，用户最熟悉；
+ * 后面按「攻击面 → 防御 → 其他」递减排列，破甲/逆向/渗透这类
+ * 靠前是因为装了这套技能的人多半是冲它们来的。
+ */
+private val SKILL_CATEGORY_ORDER = listOf(
+    "original" to "内置",
+    "reverse" to "逆向",
+    "crack" to "破甲",
+    "pentest" to "渗透",
+    "game" to "游戏安全",
+    "gray" to "敏感",
+    "creative" to "创作",
+    "other" to "其他",
+)
+
 @Composable
 fun SkillsContent(
     skills: List<SkillMetadata>,
@@ -117,35 +137,95 @@ fun SkillsContent(
     modifier: Modifier = Modifier,
     onManage: (() -> Unit)? = null,
 ) {
+    // 按 category 分组；没写 category 的归 other，老的自建技能不会消失
+    val grouped = remember(skills) {
+        skills.groupBy { it.category?.lowercase() ?: "other" }
+    }
+    val orderedKeys = remember(grouped) {
+        val known = SKILL_CATEGORY_ORDER.map { it.first }.filter { it in grouped }
+        val unknown = grouped.keys.filter { key -> SKILL_CATEGORY_ORDER.none { it.first == key } }.sorted()
+        known + unknown
+    }
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        items(skills, key = { it.skillDir.absolutePath }) { skill ->
-            ListItem(
-                headlineContent = { Text(skill.name) },
-                supportingContent = if (skill.description.isNotBlank()) {
-                    {
+        orderedKeys.forEach { key ->
+            val items = grouped[key].orEmpty().sortedBy { it.name }
+            if (items.isEmpty()) return@forEach
+
+            val label = SKILL_CATEGORY_ORDER.firstOrNull { it.first == key }?.second ?: key
+            val enabledInGroup = items.count { enabledSkills.contains(it.name) }
+
+            item(key = "header-$key") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp, bottom = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            text = skill.description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            text = label,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = if (enabledInGroup > 0) {
+                                "$enabledInGroup/${items.size}"
+                            } else {
+                                items.size.toString()
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                } else null,
-                trailingContent = {
-                    Switch(
-                        checked = enabledSkills.contains(skill.name),
-                        onCheckedChange = { checked -> onToggle(skill.name, checked) }
-                    )
-                },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-            )
+                    // 整组开关：22 条渗透技能一条条点太累
+                    TextButton(
+                        onClick = {
+                            val allOn = items.all { enabledSkills.contains(it.name) }
+                            items.forEach { onToggle(it.name, !allOn) }
+                        }
+                    ) {
+                        Text(
+                            text = if (items.all { enabledSkills.contains(it.name) }) "全不选" else "全选",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
+
+            items(items, key = { it.skillDir.absolutePath }) { skill ->
+                ListItem(
+                    headlineContent = { Text(skill.name) },
+                    supportingContent = if (skill.description.isNotBlank()) {
+                        {
+                            Text(
+                                text = skill.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    } else null,
+                    trailingContent = {
+                        Switch(
+                            checked = enabledSkills.contains(skill.name),
+                            onCheckedChange = { checked -> onToggle(skill.name, checked) }
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                )
+            }
         }
         if (onManage != null) {
-            item {
-                ManageButton(onClick = onManage)
-            }
+            item { ManageButton(onClick = onManage) }
         }
     }
 }

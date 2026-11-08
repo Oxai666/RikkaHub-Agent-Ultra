@@ -2,6 +2,8 @@
 name: openclaw-converter
 description: Convert OpenClaw skills from ClawHub (or raw markdown) into RikkaHub-compatible skills. Use whenever the user gives you an OpenClaw skill URL, a GitHub link to an OpenClaw skill, or raw OpenClaw skill markdown to convert.
 auto_load: false
+category: original
+
 ---
 
 # OpenClaw to RikkaHub Skill Converter

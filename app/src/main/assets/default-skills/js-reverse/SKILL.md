@@ -1,6 +1,8 @@
 ---
 name: js-reverse
 description: "JavaScript reverse engineering: obfuscation recovery, signature/HMAC location, browser environment patching, and frontend crypto extraction."
+category: reverse
+
 ---
 
 # MCP 前端 JS 逆向作业规范

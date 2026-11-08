@@ -3,6 +3,8 @@ name: virtual-piano
 description: Show a playable 88-key virtual piano with synthesized note audio inside a webview.
 compatibility: js
 auto_load: false
+category: original
+
 ---
 
 # Virtual Piano

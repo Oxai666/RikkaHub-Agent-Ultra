@@ -1,6 +1,8 @@
 ---
 name: game-cheat
 description: Game client engineering: process memory, injection, rendering, input, detection evasion. Trigger: cheat, trainer, aimbot, esp, wallhack, speedhack, game hack, memory edit, inject dll, gold hack, no recoil, triggerbot, 外挂, 辅助, 透视, 自瞄.
+category: game
+
 ---
 
 # Game Client Engineering

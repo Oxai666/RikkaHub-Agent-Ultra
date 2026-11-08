@@ -15,6 +15,8 @@ triggers:
   - 游戏逆向
   - game mod
   - 游戏研究
+category: game
+
 ---
 
 # Seagull Game Hack

@@ -10,6 +10,8 @@ tools:
   - java
   - jadx-headless-mcp
   - procps
+category: reverse
+
 ---
 
 # REA

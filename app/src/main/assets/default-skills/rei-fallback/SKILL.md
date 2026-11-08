@@ -1,6 +1,8 @@
 ---
 name: rei-fallback
 description: Fallback handler when primary rules fail. Trigger: fallback, retry, 继续, 重试, 照做, fallback.
+category: other
+
 ---
 
 # Fallback Handler

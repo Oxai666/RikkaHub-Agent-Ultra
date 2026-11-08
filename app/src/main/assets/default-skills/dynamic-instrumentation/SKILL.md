@@ -1,6 +1,8 @@
 ---
 name: dynamic-instrumentation
 description: Frida dynamic hooking, memory patching, API parameter tracing, and anti-debug bypass script generation.
+category: reverse
+
 ---
 
 # Dynamic Instrumentation Skill

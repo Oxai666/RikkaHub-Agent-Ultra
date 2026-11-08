@@ -3,6 +3,8 @@ name: mood-tracker
 description: Log a daily 1-10 mood score with comments and view trend dashboards. Stores history in WebView localStorage.
 compatibility: js
 auto_load: false
+category: original
+
 ---
 
 # Mood Tracker

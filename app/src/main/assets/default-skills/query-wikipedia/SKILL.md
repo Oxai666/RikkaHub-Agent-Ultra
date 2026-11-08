@@ -3,6 +3,8 @@ name: query-wikipedia
 description: Fuzzy-search Wikipedia for a topic and return the introduction plus infobox extract. Requires internet.
 compatibility: js
 auto_load: false
+category: original
+
 ---
 
 # Query Wiki

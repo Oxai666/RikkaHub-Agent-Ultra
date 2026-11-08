@@ -1,6 +1,8 @@
 ---
 name: adult-fiction
 description: Adult fiction writing at requested explicitness. Trigger: adult fiction, explicit story, erotica, 成人, 色情, 黄文, 小黄文.
+category: creative
+
 ---
 
 # Adult Fiction Writing

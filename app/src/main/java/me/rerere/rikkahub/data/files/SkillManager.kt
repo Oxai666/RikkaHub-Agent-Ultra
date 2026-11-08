@@ -505,6 +505,7 @@ class SkillManager(
                 name = name,
                 description = description,
                 compatibility = frontmatter["compatibility"],
+                category = frontmatter["category"]?.takeIf { it.isNotBlank() },
                 autoLoad = frontmatter["auto_load"]?.equals("true", ignoreCase = true) == true,
                 autoLoadPath = frontmatter["auto_load_path"]?.takeIf { it.isNotBlank() },
                 skillDir = skillDir,
@@ -577,6 +578,13 @@ data class SkillMetadata(
     val name: String,
     val description: String,
     val compatibility: String? = null,
+    /**
+     * 技能分类，来自 frontmatter 的 `category:`。
+     *
+     * 用来在列表里分组。为空时归到「其他」——老的自建技能没写这个键，
+     * 不应该因为缺字段就消失。
+     */
+    val category: String? = null,
     // NOTE: the `allowed-tools:` frontmatter key is intentionally NOT parsed. It was
     // never enforced anywhere (the tool set offered to the model is built from the
     // assistant's enabled tools/skills in ChatService, with no per-skill filtering),

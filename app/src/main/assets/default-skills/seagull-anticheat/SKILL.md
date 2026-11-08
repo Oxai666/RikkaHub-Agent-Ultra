@@ -18,6 +18,8 @@ triggers:
   - HWID
   - 驱动读写
   - 注入过检
+category: game
+
 ---
 
 # Seagull Anti-Cheat Force-Start

@@ -8,6 +8,8 @@ triggers:
   - 脱壳
   - hook
   - 逆向工程
+category: reverse
+
 ---
 
 # Seagull Reverse

@@ -10,6 +10,8 @@ triggers:
   - 游戏防护
   - 完整性校验
   - 遥测分析
+category: game
+
 ---
 
 # Seagull Game Security

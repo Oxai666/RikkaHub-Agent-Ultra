@@ -12,6 +12,8 @@ triggers:
   - Volatility
   - 堆分析
   - 内存扫描
+category: other
+
 ---
 
 # Seagull Memory

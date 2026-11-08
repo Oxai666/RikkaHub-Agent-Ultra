@@ -3,6 +3,8 @@ name: interactive-map
 description: Show an interactive Google Maps embed for a location. Returns a webview URL the chat surface can render.
 compatibility: js
 auto_load: false
+category: original
+
 ---
 
 # Interactive map

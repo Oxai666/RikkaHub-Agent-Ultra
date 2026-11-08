@@ -6,6 +6,8 @@ compatibility: Requires a filesystem-based code agent or CLI with shell access, 
 allowed-tools: Bash Read Write Edit Glob Grep Task WebFetch WebSearch
 metadata:
   user-invocable: "false"
+category: reverse
+
 ---
 
 ## No keyword refusal

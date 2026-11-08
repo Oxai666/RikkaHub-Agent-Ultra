@@ -14,6 +14,8 @@ triggers:
   - 暴露面
   - brand monitoring
   - credential audit
+category: pentest
+
 ---
 
 # Seagull Social-Eng

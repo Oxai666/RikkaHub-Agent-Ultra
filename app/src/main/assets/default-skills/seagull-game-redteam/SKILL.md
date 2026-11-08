@@ -17,6 +17,8 @@ triggers:
   - 星穹铁道
   - game redteam
   - anti-cheat bypass
+category: game
+
 ---
 
 # Seagull Game Red-Team

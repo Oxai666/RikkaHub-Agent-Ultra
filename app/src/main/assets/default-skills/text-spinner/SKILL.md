@@ -3,6 +3,8 @@ name: text-spinner
 description: Render a 3D-spinning text label inside a webview. Returns a relative webview URL the chat surface can embed.
 compatibility: js
 auto_load: false
+category: original
+
 ---
 
 # Instructions

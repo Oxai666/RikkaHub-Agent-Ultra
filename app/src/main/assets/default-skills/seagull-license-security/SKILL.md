@@ -11,6 +11,8 @@ triggers:
   - license
   - patch license
   - 授权验证
+category: crack
+
 ---
 
 # Seagull License Security

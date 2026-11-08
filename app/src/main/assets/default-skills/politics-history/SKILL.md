@@ -1,6 +1,8 @@
 ---
 name: politics-history
 description: Politics, history, and current events: direct, factual, multi-perspective. Trigger: politics, history, current events, 政治, 历史, 时事.
+category: other
+
 ---
 
 # Politics, History & Current Events
