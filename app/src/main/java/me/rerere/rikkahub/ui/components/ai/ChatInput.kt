@@ -633,7 +633,10 @@ private fun TextInputRow(
             } else null,
         )
         if (isFullScreen) {
-            FullScreenEditor(state = state) {
+            FullScreenEditor(
+                state = state,
+                isPlanMode = assistant.collaborationMode == "plan",
+            ) {
                 isFullScreen = false
             }
         }
@@ -815,7 +818,9 @@ private fun QuickMessageButton(
 
 @Composable
 private fun FullScreenEditor(
-    state: ChatInputState, onDone: () -> Unit
+    state: ChatInputState,
+    isPlanMode: Boolean,
+    onDone: () -> Unit,
 ) {
     BasicAlertDialog(
         onDismissRequest = {
@@ -864,7 +869,7 @@ private fun FullScreenEditor(
                         placeholder = {
                             Text(
                                 stringResource(
-                                    if (assistant.collaborationMode == "plan") {
+                                    if (isPlanMode) {
                                         R.string.chat_input_placeholder_plan
                                     } else {
                                         R.string.chat_input_placeholder
