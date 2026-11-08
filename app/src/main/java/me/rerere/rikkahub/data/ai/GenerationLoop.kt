@@ -825,7 +825,38 @@ class GenerationLoop(
                         argsJson = tool.input,
                         workspaceRoot = workspaceCwd,
                     )
+                    // 真的拍快照。之前只产出 SnapshotPlan 就完事了，
+                    // 等于告诉用户「已备份」但一个字节都没存。
+                    val snapshotRecord = runCatching {
+                        if (safetyVerdict.snapshotPlan.required) {
+                            withContext(Dispatchers.IO) {
+                                me.rerere.rikkahub.safety.FileSnapshotManager.capture(
+                                    context = context,
+                                    plan = safetyVerdict.snapshotPlan,
+                                    toolName = tool.toolName,
+                                )
+                            }
+                        } else {
+                            null
+                        }
+                    }.getOrNull()
                     val transformed = when {
+                        // 声明必须备份、结果一个文件都没拍到 → 不执行。
+                        // 这条比「直接放行」严格，比「无脑拒绝」宽松：
+                        // 目标文件本来就不存在（没什么可备份）也会走到这里，
+                        // 所以额外判断一下 targets 里有没有真存在的文件。
+                        safetyVerdict.snapshotPlan.required &&
+                            snapshotRecord == null &&
+                            safetyVerdict.snapshotPlan.targets.any { File(it.path).exists() } -> {
+                            Log.w(TAG, "snapshot-required-but-failed ${tool.toolName}")
+                            tool.copy(
+                                approvalState = ToolApprovalState.Denied(
+                                    "这个操作不可撤销，需要先备份目标文件，但备份失败了。" +
+                                        "已拒绝执行，避免造成无法恢复的改动。"
+                                )
+                            )
+                        }
+
                         safetyVerdict.blocked && tool.approvalState is ToolApprovalState.Auto -> {
                             Log.w(
                                 TAG,

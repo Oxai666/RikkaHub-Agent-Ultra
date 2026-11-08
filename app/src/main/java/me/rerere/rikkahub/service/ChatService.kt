@@ -600,6 +600,9 @@ class ChatService(
                     // 目标消耗累加：这一轮花了多少 token 记到目标上。
                     // 之前这个函数从没被调用过，所以面板里永远是 0 tokens。
                     appScope.launch { accumulateGoalTokens(id) }
+                    // 续跑规程用完就清。不清的话它会留在 ConversationSystemAddendum 里，
+                    // 用户下一句普通消息也会带上整段「继续推进目标」的规程。
+                    me.rerere.rikkahub.data.ai.tools.ConversationSystemAddendum.clear(id)
                     // 目标自动续跑：这轮完了，如果还有活着的目标就接着推。
                     // 放在 dispatchNextQueuedMessage 之后，保证队列优先。
                     appScope.launch { maybeStartGoalContinuation(id) }
@@ -663,12 +666,24 @@ class ChatService(
             return
         }
 
+        // 注入续跑规程。
+        // 不注的话模型只收到一句「继续推进目标。」——它不知道自己在续跑、
+        // 不知道已经烧了多少、也不知道该怎么判断「这一轮有没有进展」。
+        // GOAL_CONTINUATION.md 里那三套审计（无进展/完成/受阻）全靠这段。
+        me.rerere.rikkahub.data.ai.tools.ConversationSystemAddendum.set(
+            conversationId,
+            me.rerere.rikkahub.data.goal.GoalTemplates.renderContinuation(
+                context = context,
+                objective = goal.objective,
+                tokensUsed = goal.tokensUsed,
+            ),
+        )
+
         sendMessage(
             conversationId = conversationId,
             content = listOf(UIMessagePart.Text("继续推进目标。")),
         )
     }
-
     private fun removeSession(conversationId: Uuid) {
         val session = sessions[conversationId] ?: return
         if (session.isInUse) {
