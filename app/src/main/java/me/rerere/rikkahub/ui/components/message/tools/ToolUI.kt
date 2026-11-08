@@ -107,6 +107,7 @@ object ToolUIRegistry {
         ReadFileToolUI,
         WriteFileToolUI,
         ShellToolUI,
+        RootShellToolUI,
         RunJsToolUI,
         CreateCalendarEventToolUI,
         CreateContactToolUI,

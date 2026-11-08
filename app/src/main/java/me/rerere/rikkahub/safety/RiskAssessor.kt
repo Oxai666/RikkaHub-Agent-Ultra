@@ -110,6 +110,42 @@ object RiskAssessor {
 
         val analysis = ShellCommandRiskAnalyzer.analyze(command, workspaceRoot)
 
+        // ── root_shell：能跑，但不备份、不预拒，也不许绕过审批 ──
+        //
+        // 为什么单独处理：
+        //  1. 快照对它没意义。快照的路径映射是「沙箱 /workspace/x →
+        //     filesDir/workspaces/<id>/files/x」，root 命令操作的是真机路径
+        //     （/system、/data/data/…），映射过去一概不存在，拍了也是空目录。
+        //     而且 root 能改的东西本来也不是「复制一份就能回滚」的。
+        //  2. 越界预拒对它是反的。root 的用途就是动工作区外的东西——
+        //     写 /system、读别的 App 私有数据。按越界一律拒等于把 root 用废。
+        //  3. 但它必须是**每一颗命令都亲自确认**，所以 requiresApproval 恒为 true，
+        //     而且配合 ToolApprovalDefaults 里的 NO_ALWAYS_ALLOW（挡住 ∞ 按钮和
+        //     旧授权）+ GenerationLoop 里的 YOLO 例外（挡住全自动模式）。
+        //     三道锁缺一不可，光靠 ALWAYS_ASK 只能保证「第一次会问」。
+        if (toolName == "root_shell") {
+            return RiskAssessment(
+                toolName = toolName,
+                baseTier = RiskTier.C_IRREVERSIBLE,
+                tier = RiskTier.C_IRREVERSIBLE,
+                reasons = analysis.reasons + "root 权限，每次执行都需要你亲自确认",
+                targets = analysis.targets,
+                reversible = false,
+                dryRunPlan = DryRunPlan(
+                    kind = DryRunKind.SHELL_COMMAND,
+                    summary = buildShellSummary(analysis),
+                    commandText = command,
+                    targetPaths = analysis.targets,
+                    riskyFlags = analysis.riskyFlags,
+                    details = analysis.subcommands.map { "${it.name} → ${it.tier.name}" },
+                ),
+                // 明确不备份：见上面第 1 条
+                snapshotPlan = SnapshotPlan.NONE,
+                requiresApproval = true,
+                outsideWorkspaceTargets = analysis.outsideWorkspaceTargets.isNotEmpty(),
+            )
+        }
+
         // 工作区外 + 不可逆 = 直接拒，不给审批的机会
         if (analysis.outsideWorkspaceTargets.isNotEmpty() &&
             analysis.tier == RiskTier.C_IRREVERSIBLE

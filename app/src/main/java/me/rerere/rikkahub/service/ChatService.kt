@@ -1720,6 +1720,21 @@ class ChatService(
                     if (toolName == "ask_user") {
                         me.rerere.rikkahub.data.ai.tools.HeadlessConversations
                             .shouldAutoApprove(conversationId)
+                    } else if (toolName == "root_shell") {
+                        // root 是唯一一个「任何自动批准模式都无效」的工具。
+                        //
+                        // 三道闸必须同时存在才有意义：
+                        //   ToolApprovalDefaults.ALWAYS_ASK      → 第一次会问
+                        //   ToolApprovalDefaults.NO_ALWAYS_ALLOW → ∞ 按钮不出现，
+                        //                                          旧授权在下面被排除
+                        //   这里                                  → YOLO / headless 也不免
+                        //
+                        // 少了这一条，用户开了 YOLO 就等于把 su 交出去；
+                        // headless（cron / 子智能体）没有确认窗口，让它「自动批准」
+                        // 等于绕过审批直接执行 root 命令——那比拒绝更糟。
+                        // 所以 headless 里 root_shell 一律不自动批准，工具会停在
+                        // Pending，本轮自然结束，不会误执行。
+                        false
                     } else {
                         toolApprovalPreferences.currentYolo() ||
                             me.rerere.rikkahub.data.ai.tools.HeadlessConversations
