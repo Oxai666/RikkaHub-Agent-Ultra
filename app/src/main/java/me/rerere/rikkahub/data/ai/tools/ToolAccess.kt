@@ -59,7 +59,7 @@ object ToolAccess {
         "conversation_search", "recent_chats", "history_search",
 
         // ── 技能（读） ──
-        "skill_get_content", "use_skill",
+        "skill_get_content", "use_skill", "skill_list",
 
         // ── 密钥库（只读操作） ──
         "keystore_list_keys", "keystore_verify",

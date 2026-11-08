@@ -65,6 +65,11 @@ class ChatToolFactory(
             addAll(createConversationTools(conversationRepository, assistant.id))
         }
         addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), workspaceCwd))
+        // 技能创作：跟助手开了哪些技能无关，始终可用。
+        // 模型得先能列表、能建，才谈得上「做完一个项目把它沉淀成技能」。
+        addAll(
+            me.rerere.rikkahub.skills.createSkillAuthoringTools(skillManager)
+        )
         if (assistant.enabledSkills.isNotEmpty()) {
             addAll(
                 createSkillTools(

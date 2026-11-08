@@ -1142,6 +1142,11 @@ class LocalTools(
         tools.addAll(me.rerere.rikkahub.data.plan.planTools(planningKey))
         tools.addAll(me.rerere.rikkahub.data.goal.goalTools(planningKey))
 
+        // ── 技能创作：同样常驻 ──
+        // 做完一个逆向/渗透项目之后要让模型能把过程沉淀成技能，
+        // 所以这几个工具不能挂在「已启用技能」的开关下面。
+        tools.addAll(me.rerere.rikkahub.skills.createSkillAuthoringTools(skillManager))
+
         // Centralised opt-in to needsApproval. Tool factories themselves don't have to know
         // whether their op is destructive — ToolApprovalDefaults is the single source of
         // truth, and the GenerationHandler / Telegram/in-app prompt path keys off needsApproval.

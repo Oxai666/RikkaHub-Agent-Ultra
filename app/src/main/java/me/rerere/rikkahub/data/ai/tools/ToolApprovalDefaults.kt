@@ -190,6 +190,12 @@ object ToolApprovalDefaults {
         "skill_install_from_url",
         "skill_install_from_text",
 
+        // AI 自己写技能：改磁盘、能覆盖已有内容，跟导入同级。
+        // 删除尤其危险——模型自作主张清理会直接丢用户做好的东西。
+        "skill_create",
+        "skill_update",
+        "skill_delete",
+
         // JS skills (Phase 18) — run a skill's JavaScript inside a hidden WebView.
         // The script can issue arbitrary network requests on behalf of the user, so
         // every invocation gets per-call approval. Eligible for "Always allow" once a

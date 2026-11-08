@@ -87,6 +87,13 @@ class SystemPromptBuilder {
                     append(toolPrompt)
                 }
             }
+
+            // 技能沉淀引导。只在模型真的能写技能时才加——
+            // 工具不在还让它「建议用户保存」，只会得到一句没法兑现的空话。
+            if ("skill_create" in toolNames) {
+                if (isNotEmpty()) appendLine()
+                append(SKILL_CAPTURE_HINT)
+            }
         }.trim()
 
         val volatile = buildString {
@@ -119,3 +126,34 @@ class SystemPromptBuilder {
         return listOf(stable, volatile).filter { it.isNotBlank() }.joinToString("\n")
     }
 }
+
+/**
+ * 技能沉淀引导。
+ *
+ * 只在 `skill_create` 真的注册进工具表时才拼进系统提示词（见 buildSections）。
+ *
+ * 写的三条判断标准是刻意具体的：不写「有价值的任务」这种没法执行的说法，
+ * 而是给可对照的信号。否则模型要么见什么都想存，要么从来想不起来存。
+ */
+private val SKILL_CAPTURE_HINT = """
+## Capturing reusable work as a skill
+
+When a task took real effort to figure out — a reverse-engineering target, a pentest
+workflow, a debugging sequence that finally worked — end your reply with ONE short
+question asking whether the user wants it saved as a reusable skill.
+
+Worth capturing:
+- it took 5+ steps before you found the right path
+- the failures taught you something specific (a check that fired, a format that broke)
+- next time the same target class shows up, the steps would be the same
+
+Not worth capturing: one-shot simple operations, plain lookups, ad-hoc commands that
+only make sense for this one file.
+
+If the user says yes, call `skill_list` first to see existing categories, then
+`skill_create`. In `content`, write the commands you ACTUALLY ran and what each step
+told you — not generic advice. Note the dead ends too; that is usually the most useful
+part.
+
+Never create a skill without asking first, and never clean up skills on your own.
+""".trimIndent()
