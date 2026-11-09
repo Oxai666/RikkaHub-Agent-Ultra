@@ -57,7 +57,9 @@ fun PetHost(
     val tier = remember(mood) { mood.tier() }
 
     // 一次性反应会临时盖住基础状态，播完自动退回
-    var reaction by remember { mutableStateOf<PetAnimation?>(null) }
+    // reaction 也要跟 packId 绑：切包时旧包的动画对象必须丢掉，
+    // 否则播的可能是上一个包的一段动画，尺寸对不上一样会崩
+    var reaction by remember(packId) { mutableStateOf<PetAnimation?>(null) }
     var reactionToken by remember { mutableIntStateOf(0) }
 
     fun playReaction(anim: PetAnimation?) {
@@ -73,7 +75,17 @@ fun PetHost(
     }
 
     // 该播哪一段：反应优先，否则按状态 + 分档挑。
-    val stateAnim = remember(baseState, tier) { pack.primary(baseState.serial, tier) }
+    //
+    // **key 里必须有 pack**。之前是 remember(baseState, tier)——
+    // 切包时 baseState 和 tier 都没变（都是 idle / 1），remember 不重算，
+    // stateAnim 还是上一个包的动画对象。
+    //
+    // 于是：pack 是 Deepy（画布 52×52、格子 180×120），
+    // anim 是鲸娘的（格子 52×49）→ src 取 52×49、dst 算成 52*5 × 49*5，
+    // 整张图被拉伸 5 倍还错位。用户看到的就是"崩坏"。
+    val stateAnim = remember(pack, baseState, tier) {
+        pack.primary(baseState.serial, tier)
+    }
     val anim = reaction ?: stateAnim
 
     // 拖动偏移。**松手回零**，不记位置。
