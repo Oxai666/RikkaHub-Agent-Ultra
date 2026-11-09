@@ -56,6 +56,13 @@ fun Pet(
     // 会把它遮蔽掉，`size.width` 就变成在 PetSize 上找 width——找不到。
     // 那两行 Unresolved reference 'width' / 'height' 就是这么来的。
     petSize: PetSize,
+    /**
+     * 要不要在右上角画一个红色的像素 X。
+     *
+     * 只在「出错 / 用户喊停」时为 true。素材自带的 error 动画是垂头冒汗，
+     * 没有明确的「失败」符号——补一个 X，让人余光扫一眼就知道这轮没成。
+     */
+    showErrorBadge: Boolean = false,
     modifier: Modifier = Modifier,
     onTap: (leftHalf: Boolean) -> Unit = {},
     onLongPress: () -> Unit = {},
@@ -192,6 +199,64 @@ fun Pet(
             filterQuality = FilterQuality.None,
         )
 
+        if (showErrorBadge) {
+            // 像素 X 放在身体框右上角，不压住脸。
+            // 每格取 k 的 1.2 倍——跟素材同网格，又比 1 个美术像素略粗，
+            // 小号档也看得清。
+            val badgePixel = k * 1.2f
+            val badgeX = box.right * k - badgePixel * 2f
+            val badgeY = box.y * k + badgePixel * 3f
+            drawPixelCross(badgeX, badgeY, badgePixel)
+        }
+    }
+}
+
+/**
+ * 画一个 7×7 的像素风红色 X。
+ *
+ * 用 drawRect 一格一格拼，不画任何斜线——素材是像素画，
+ * 混一条抗锯齿的斜线进去会非常突兀。
+ *
+ * 图案：
+ *   X.....X
+ *   .X...X.
+ *   ..X.X..
+ *   ...X...
+ *   ..X.X..
+ *   .X...X.
+ *   X.....X
+ */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawPixelCross(
+    cx: Float,
+    cy: Float,
+    px: Float,
+) {
+    // 用字符串写图案，比位运算直观——Kotlin 也没有 0b 字面量
+    val pattern = listOf(
+        "X.....X",
+        ".X...X.",
+        "..X.X..",
+        "...X...",
+        "..X.X..",
+        ".X...X.",
+        "X.....X",
+    )
+    // 深红：跟素材里那种偏暗的配色接近，不用纯红，会太扎眼
+    val color = androidx.compose.ui.graphics.Color(0xFFD32F2F)
+    val half = px * 3f
+    pattern.forEachIndexed { y, row ->
+        row.forEachIndexed { x, ch ->
+            if (ch != '.') {
+                drawRect(
+                    color = color,
+                    topLeft = androidx.compose.ui.geometry.Offset(
+                        cx - half + x * px,
+                        cy - half + y * px,
+                    ),
+                    size = androidx.compose.ui.geometry.Size(px, px),
+                )
+            }
+        }
     }
 }
 

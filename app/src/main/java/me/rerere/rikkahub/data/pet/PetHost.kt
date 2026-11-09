@@ -217,6 +217,7 @@ fun PetHost(
             sprites = sprites,
             anim = anim,
             petSize = size,
+            showErrorBadge = baseState == PetState.ERROR,
             // 外层 Box 的尺寸严格等于画布尺寸，fillMaxSize 正好铺满，
             // Pet 里画布原点就是 (0,0)，不需要任何居中或 baseline 计算。
             modifier = Modifier.fillMaxSize(),
