@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -138,12 +140,29 @@ fun PetHost(
     }
     val anim = reaction ?: stateAnim
 
-    // 拖动偏移。**松手回零**，不记位置。
+    // 横向位置要跨页面保留——拖到右边、去设置看一眼回来，它得还在右边。
+    // 存进 PreferencesStore，key 是 petOffsetX。
+    // 预览页（mood 传了非 null）不做持久化，那里只是看大小用的。
     //
-    // 之前做过"记住位置"，但宠物是站在输入框上沿的状态指示器，
-    // 让它能停在半空或者跑进输入框里没有意义，而且用户看到"往上滑能停在上面
-    // 不往下掉"会以为是 bug。拖动只用来触发被拎起来的反应。
-    var dragX by remember(packId) { mutableStateOf(0f) }
+    // 纵向**不持久化**：垂直是"被拎起来"的临时状态，松手就该落地。
+    val settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore =
+        org.koin.compose.koinInject()
+    val persistScope = rememberCoroutineScope()
+    val persistX = mood == null
+    val liveSettings by if (persistX) {
+        settingsStore.settingsFlow.collectAsStateWithLifecycle()
+    } else {
+        remember {
+            kotlinx.coroutines.flow.MutableStateFlow(
+                me.rerere.rikkahub.data.datastore.Settings.dummy()
+            )
+        }.collectAsStateWithLifecycle()
+    }
+    val savedOffsetX = if (persistX) liveSettings.petOffsetX else 0f
+
+    // remember(packId, savedOffsetX)：首次进入和切回页面时都用存下来的值初始化。
+    // 之前是 remember(packId) 固定从 0 开始，所以每次回页面都弹回中间。
+    var dragX by remember(packId, savedOffsetX) { mutableStateOf(savedOffsetX) }
     var dragY by remember(packId) { mutableStateOf(0f) }
 
     // 连点计数。1.1 秒内点满 3 下 → 挠痒痒。
@@ -260,6 +279,14 @@ fun PetHost(
                 dragY = (dragY + dy).coerceIn(-maxUp, 0f)
             },
             onDragEnd = {
+                // 横向位置写回持久化。放在这里而不是 onDrag 里，
+                // 是因为拖动过程中每一帧都写 DataStore 太重。
+                if (persistX && dragX != savedOffsetX) {
+                    val target = dragX
+                    persistScope.launch {
+                        settingsStore.update { it.copy(petOffsetX = target) }
+                    }
+                }
                 // 垂直回弹：提起来是"被拎住"的临时状态，松手就该落地。
                 // 留着悬空会让人以为它挂住了。
                 dragY = 0f

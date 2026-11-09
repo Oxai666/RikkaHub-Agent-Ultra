@@ -15,6 +15,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,7 +42,27 @@ fun PlanStepsBar(
     plan: PlanSnapshot,
     modifier: Modifier = Modifier,
 ) {
-    AnimatedVisibility(visible = !plan.isEmpty) {
+    // 全部做完之后，这条东西没用了——它占着输入框上方一块地方，
+    // 而 AI 已经把 2/7 变成 7/7 了，留着只是噪音。
+    //
+    // 但也不能做完就立刻抽走：最后一步刚打勾的那一瞬间，用户可能正
+    // 看着它，突然消失会让人怀疑是不是没做完。停 3 秒再收。
+    //
+    // 依赖 steps.size 而不是整个 plan：新计划（步数变了）要重新显示，
+    // 而 explanation 之类的小改动不该打断倒计时。
+    val allDone = !plan.isEmpty && plan.steps.all { it.status == PlanStepStatus.COMPLETED }
+    var visibleAfterDone by remember(plan.steps.size) { mutableStateOf(true) }
+    LaunchedEffect(allDone, plan.steps.size) {
+        if (allDone) {
+            visibleAfterDone = true
+            kotlinx.coroutines.delay(3_000L)
+            visibleAfterDone = false
+        } else {
+            visibleAfterDone = true
+        }
+    }
+
+    AnimatedVisibility(visible = !plan.isEmpty && visibleAfterDone) {
         Column(
             modifier = modifier
                 .fillMaxWidth()
