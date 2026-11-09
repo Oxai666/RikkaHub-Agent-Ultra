@@ -232,24 +232,28 @@ fun ChatInput(
                 .padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 宠物：站在输入框上沿。没选宠物时整个 Composable 直接 return，
-            // 不占高度也不吃触摸。
-            me.rerere.rikkahub.data.pet.PetHost(
-                packId = settings.petPackId,
-                size = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize),
-                // 不传 mood → 订阅 PetSignal 的全局状态。
-                // 跑/完成/等确认/睡觉四个信号由 ChatPage 和各处上报。
-            )
-
-            // 续写：上一轮被打断（喊停 / 没钱 / 断联）时出现。
-            // 点它不会发一条新消息，而是让模型接着上一条 assistant 往下写。
-            if (canContinue) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Start,
-                ) {
+            // 宠物 + 续写按钮放在**同一层**。
+            //
+            // 之前是 Column 里上下排：宠物在上、按钮在下，按钮把宠物顶高了，
+            // 宠物离输入框隔了一个按钮的高度。用户看到的就是"有续写时宠物悬着"。
+            //
+            // 现在用 Box 叠起来：宠物照常贴着输入框，按钮浮在左下角，
+            // 两者互不占位。宠物默认水平居中，跟左下角的按钮不打架。
+            Box(modifier = Modifier.fillMaxWidth()) {
+                me.rerere.rikkahub.data.pet.PetHost(
+                    packId = settings.petPackId,
+                    size = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize),
+                    // 不传 mood → 订阅 PetSignal 的全局状态。
+                    // 跑/完成/等确认/睡觉四个信号由 ChatPage 和各处上报。
+                )
+                // 续写：上一轮被打断（喊停 / 没钱 / 断联）时出现。
+                // 点它不会发一条新消息，而是让模型接着上一条 assistant 往下写。
+                if (canContinue) {
                     androidx.compose.material3.FilledTonalButton(
                         onClick = onContinueClick,
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 4.dp, bottom = 6.dp),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
                             horizontal = 14.dp,
                             vertical = 6.dp,
