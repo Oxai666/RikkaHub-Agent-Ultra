@@ -129,54 +129,48 @@ fun Pet(
 
     Canvas(
         modifier = modifier
-            // 手势：**一个** pointerInput 手动处理，不用 detectTapGestures +
-            // detectDragGestures 那套。
+            // 手势。
             //
-            // 为什么：detectDragGestures 在等待拖动阈值的时候就已经把 down 事件
-            // 拦下来了，不管起点在不在宠物身上。结果是宠物那一块矩形内，
-            // 上下滑动屏幕完全失效——只有从旁边（不压着画布的地方）划才能滚。
+            // 两个必须同时满足的要求：
+            //   1) 画布区域内上下滑动要能滚消息列表（不能有死区）
+            //   2) 在宠物身上左右拖要能移动它
             //
-            // 改成手动：down 的时候先判断起点在不在命中区，不在就直接
-            // return，事件自然落到下面的消息列表上。
+            // 关键在 PointerEventPass：
+            //   Main  pass —— 父级（LazyColumn 的滚动）在这里先看到事件
+            //   Final pass —— 父级已经决定完要不要消费，才轮到我们
             //
-            // 写法参考 VirtualScreenWindowPage 里那段（同样是在一张图上
-            // 区分点击和拖动），那套在项目里验证过。
+            // 用 Final：父级不消费（不是滚动）时才处理宠物自己的手势。
+            // 这样整块画布区域内上下滑都能滚，不用去猜"是不是宠物"——
+            // 之前用 Main pass + 命中区判断，命中区之外的 down 仍然会被
+            // awaitFirstDown 抓住，父级错过了手势起始点，滑动就废了。
             .pointerInput(pack) {
                 awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val down = awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = androidx.compose.ui.input.pointer.PointerEventPass.Final,
+                    )
                     val hit = hitRectPx(pack, latestAnim, k)
+                    // 父级已经消费了（比如在滚动）→ 别抢
+                    if (down.isConsumed) return@awaitEachGesture
+                    // 点在身体之外 → 不归宠物
                     if (!hit.contains(down.position)) return@awaitEachGesture
 
                     val startedAt = System.currentTimeMillis()
                     var last = down.position
                     var dragging = false
-                    // 方向判定：第一次超过阈值时看是横着还是竖着。
-                    // 竖着为主 → 这是想滚列表，直接把事件让出去。
-                    var decided = false
-                    var isVertical = false
 
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull { it.id == down.id } ?: break
                         if (!change.pressed) break
+                        // 中途被父级拿走（开始滚动）→ 放弃拖动
+                        if (change.isConsumed && !dragging) break
                         val delta = change.position - last
                         last = change.position
-
-                        if (!decided) {
-                            val total = change.position - down.position
-                            if (total.getDistance() > 12f) {
-                                decided = true
-                                // 谁的位移大就算谁的方向
-                                isVertical = kotlin.math.abs(total.y) > kotlin.math.abs(total.x)
-                                if (isVertical) {
-                                    // 竖着滑 = 想滚消息列表，这里立刻撒手
-                                    return@awaitEachGesture
-                                }
-                                dragging = true
-                                onDragStart()
-                            }
+                        if (!dragging && (change.position - down.position).getDistance() > 12f) {
+                            dragging = true
+                            onDragStart()
                         }
-
                         if (dragging) {
                             onDrag(delta.x, delta.y)
                             change.consume()
@@ -186,7 +180,6 @@ fun Pet(
                     if (dragging) {
                         onDragEnd()
                     } else if (System.currentTimeMillis() - startedAt < 500) {
-                        // 没拖动、按得不久 → 单击
                         onTap(down.position.x < (pack.canvasW * k) / 2f)
                     }
                 }
