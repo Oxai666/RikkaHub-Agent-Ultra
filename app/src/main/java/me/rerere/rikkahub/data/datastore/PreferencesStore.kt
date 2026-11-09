@@ -1074,7 +1074,6 @@ enum class ChatFontFamily {
 data class DisplaySetting(
     val userAvatar: Avatar = Avatar.Dummy,
     val userNickname: String = "",
-    val useAppIconStyleLoadingIndicator: Boolean = true,
     val showUserAvatar: Boolean = true,
     val showAssistantBubble: Boolean = false,
     val bubbleOpacity: Float = 1.0f,

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,7 +29,6 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Deferred
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
-import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 
 @Composable
 fun CompressContextDialog(
@@ -76,7 +76,7 @@ fun CompressContextDialog(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        RabbitLoadingIndicator(
+                        ContainedLoadingIndicator(
                             modifier = Modifier.size(32.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
