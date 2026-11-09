@@ -53,6 +53,7 @@ import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.Select
 import me.rerere.rikkahub.ui.context.LocalToaster
+import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.ui.theme.rememberChatFontFamily
 import me.rerere.rikkahub.utils.plus
@@ -123,6 +124,21 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
             contentPadding = contentPadding + PaddingValues(8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // 宠物是外观功能里最显眼的一项（会在聊天页常驻），单独成组放最前面
+            item {
+                CardGroup(modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        onClick = {
+                            LocalNavController.current.navigate(me.rerere.rikkahub.Screen.SettingPet)
+                        },
+                        leadingContent = {
+                            Icon(me.rerere.hugeicons.HugeIcons.FavouriteCircle, null)
+                        },
+                        supportingContent = { Text("站在输入框上的小宠物，用动作表示 agent 在干什么") },
+                        headlineContent = { Text("宠物") },
+                    )
+                }
+            }
             item {
                 CardGroup(
                     modifier = Modifier.padding(horizontal = 8.dp),

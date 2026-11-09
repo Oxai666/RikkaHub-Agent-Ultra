@@ -907,6 +907,17 @@ data class Settings(
      * still respecting a later deliberate user-disable - once a name is recorded here it is
      * never re-added, so toggling it off sticks across launches.
      */
+    /**
+     * 当前显示的宠物包 id（`assets/pets/<id>/`）。
+     *
+     * null 表示不显示——默认就是这样。宠物是个可选的外观组件，
+     * 不该默认糊在每个人脸上。
+     */
+    val petPackId: String? = null,
+
+    /** 宠物尺寸档：`small` / `medium` / `large`，按身体高度分。 */
+    val petSize: String = "medium",
+
     val autoEnabledDefaultSkills: Set<String> = emptySet(),
 
     /**

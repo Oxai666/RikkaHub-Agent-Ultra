@@ -228,6 +228,16 @@ fun ChatInput(
                 .padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // 宠物：站在输入框上沿。没选宠物时整个 Composable 直接 return，
+            // 不占高度也不吃触摸。
+            me.rerere.rikkahub.data.pet.PetHost(
+                packId = settings.petPackId,
+                size = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize),
+                // 先接最基础的一路：这一轮在不在跑。等你确认、出错、做完了
+                // 这些信号第二期再接——它们要改 ChatPage 的状态传参链。
+                mood = me.rerere.rikkahub.data.pet.PetMood(running = loading),
+            )
+
             PlanStepsBar(plan = currentPlan)
 
             MessageQueuePanel(
