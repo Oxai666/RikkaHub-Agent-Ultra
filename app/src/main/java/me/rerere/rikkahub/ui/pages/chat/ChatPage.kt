@@ -115,27 +115,27 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     //
     // 判断依据是 Job 的终态。loadingJob 变成 null 之后就取不到了，
     // 所以先存住上一个 Job。
-    var lastJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     LaunchedEffect(loadingJob) {
-        val job = loadingJob
-        if (job != null) {
-            me.rerere.rikkahub.data.pet.PetSignal.onGenerationStart()
-            lastJob = job
-        } else {
-            val prev = lastJob ?: return@LaunchedEffect
-            lastJob = null
-            // 用户按停止 → Job 处于 cancelled
-            if (prev.isCancelled) {
-                me.rerere.rikkahub.data.pet.PetSignal.onGenerationStopped()
-            } else {
-                // 正常完成取不到异常；异常完成会取到。
-                // getCompletionExceptionOrNull 对未完成的 Job 会抛，包一层。
-                val cause = runCatching { prev.getCompletionExceptionOrNull() }.getOrNull()
-                if (cause != null) {
-                    me.rerere.rikkahub.data.pet.PetSignal.onGenerationError()
-                } else {
+        val job = loadingJob ?: return@LaunchedEffect
+        me.rerere.rikkahub.data.pet.PetSignal.onGenerationStart()
+        // 用 invokeOnCompletion 拿终态。
+        //
+        // Job 上没有 getCompletionExceptionOrNull——那是 Deferred 的方法。
+        // invokeOnCompletion 的回调参数就是结束原因：
+        //   null              → 正常完成
+        //   CancellationException → 用户喊停（或者页面销毁）
+        //   其他              → 真出错（余额、网络、模型）
+        //
+        // 回调可能在任意线程，PetSignal 用的是 @Volatile + MutableStateFlow，
+        // 跨线程写是安全的。
+        job.invokeOnCompletion { cause ->
+            when {
+                cause == null ->
                     me.rerere.rikkahub.data.pet.PetSignal.onGenerationFinish()
-                }
+                cause is kotlinx.coroutines.CancellationException ->
+                    me.rerere.rikkahub.data.pet.PetSignal.onGenerationStopped()
+                else ->
+                    me.rerere.rikkahub.data.pet.PetSignal.onGenerationError()
             }
         }
     }
