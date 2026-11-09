@@ -330,7 +330,15 @@ private const val LOOP_GUARD_REPEAT_THRESHOLD = 3
  * pattern that produced the 27-step / 141K-token disaster: one trip means the model is
  * confused; six trips means it's not coming back.
  */
-private const val MAX_LOOP_GUARD_TRIPS_PER_TURN = 6
+/**
+ * 同一轮里同一个工具被 loop guard 拦了几次就强制结束。
+ *
+ * 原来 6。长任务（解包 → 改 smali → 回编 → 验链）里模型有时会连续撞几次
+ * 才找对路，6 次不够用，被当成 flailing 掐掉。
+ *
+ * 调到 30：真要死循环 30 次也够判断出来了，但不至于误伤正常的试错。
+ */
+private const val MAX_LOOP_GUARD_TRIPS_PER_TURN = 30
 
 /**
  * Number of most-recent tool-result-bearing messages whose `Image` parts are kept

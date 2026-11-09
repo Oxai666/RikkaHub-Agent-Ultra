@@ -1,8 +1,8 @@
 package me.rerere.rikkahub.data.pet
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+androidx.compose.foundation.gestures.awaitEachGesture
+androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -129,37 +129,52 @@ fun Pet(
 
     Canvas(
         modifier = modifier
-            // 点击和拖动分成两个 pointerInput 块是必须的——
-            // 合成一个的话 detectTapGestures 和 detectDragGestures 会互相抢，
-            // 拖动永远触发不了。
+            // 手势：**一个** pointerInput 手动处理，不用 detectTapGestures +
+            // detectDragGestures 那套。
             //
-            // key 里不放 anim：动画每换一次就重建手势处理器，
-            // 正在拖的时候正好换动画，拖动就断了。手势只跟 pack 有关。
+            // 为什么：detectDragGestures 在等待拖动阈值的时候就已经把 down 事件
+            // 拦下来了，不管起点在不在宠物身上。结果是宠物那一块矩形内，
+            // 上下滑动屏幕完全失效——只有从旁边（不压着画布的地方）划才能滚。
+            //
+            // 改成手动：down 的时候先判断起点在不在命中区，不在就直接
+            // return，事件自然落到下面的消息列表上。
+            //
+            // 写法参考 VirtualScreenWindowPage 里那段（同样是在一张图上
+            // 区分点击和拖动），那套在项目里验证过。
             .pointerInput(pack) {
-                detectTapGestures(
-                    onTap = { offset ->
-                        val hit = hitRectPx(pack, latestAnim, k)
-                        // Rect.contains 只收 Offset，不收 (x, y) 两个 Float
-                        if (hit.contains(offset)) {
-                            onTap(offset.x < (pack.canvasW * k) / 2f)
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val hit = hitRectPx(pack, latestAnim, k)
+                    if (!hit.contains(down.position)) return@awaitEachGesture
+
+                    val startedAt = System.currentTimeMillis()
+                    var last = down.position
+                    var dragging = false
+
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) break
+                        val delta = change.position - last
+                        last = change.position
+                        // 超过 12px 才算拖动，跟系统 touch slop 一个量级
+                        if (!dragging && (change.position - down.position).getDistance() > 12f) {
+                            dragging = true
+                            onDragStart()
                         }
-                    },
-                    onLongPress = { offset ->
-                        val hit = hitRectPx(pack, latestAnim, k)
-                        if (hit.contains(offset)) onLongPress()
-                    },
-                )
-            }
-            .pointerInput(pack) {
-                detectDragGestures(
-                    onDragStart = { onDragStart() },
-                    onDrag = { change, drag ->
-                        change.consume()
-                        onDrag(drag.x, drag.y)
-                    },
-                    onDragEnd = { onDragEnd() },
-                    onDragCancel = { onDragEnd() },
-                )
+                        if (dragging) {
+                            onDrag(delta.x, delta.y)
+                            change.consume()
+                        }
+                    }
+
+                    if (dragging) {
+                        onDragEnd()
+                    } else if (System.currentTimeMillis() - startedAt < 500) {
+                        // 没拖动、按得不久 → 单击
+                        onTap(down.position.x < (pack.canvasW * k) / 2f)
+                    }
+                }
             },
     ) {
         val s = sheet ?: return@Canvas

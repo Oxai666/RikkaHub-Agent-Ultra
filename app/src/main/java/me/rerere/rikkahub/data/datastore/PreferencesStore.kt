@@ -239,6 +239,7 @@ class SettingsStore(
         // 所以用空串表示「不显示」，读的时候再转回 null。
         val PET_PACK_ID = stringPreferencesKey("pet_pack_id")
         val PET_SIZE = stringPreferencesKey("pet_size")
+        val PET_OFFSET_X = floatPreferencesKey("pet_offset_x")
 
         // 目标续跑。这两个之前也没持久化——加开关那次只改了内存，
         // persistSettings 的白名单没跟上，重启直接恢复默认。
@@ -353,6 +354,7 @@ class SettingsStore(
                     preferences[PET_PACK_ID] = petId
                 }
                 preferences[PET_SIZE] = settings.petSize
+                preferences[PET_OFFSET_X] = settings.petOffsetX
 
                 preferences[ENABLE_GOAL_AUTO_CONTINUATION] = settings.enableGoalAutoContinuation
                 preferences[GOAL_CONTINUATION_LIMIT] = settings.goalContinuationLimit.coerceIn(1, 50)
@@ -553,6 +555,7 @@ class SettingsStore(
                 sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
                 petPackId = preferences[PET_PACK_ID]?.takeIf { it.isNotBlank() },
                 petSize = preferences[PET_SIZE] ?: "medium",
+                petOffsetX = preferences[PET_OFFSET_X] ?: 0f,
                 enableGoalAutoContinuation =
                     preferences[ENABLE_GOAL_AUTO_CONTINUATION] == true,
                 goalContinuationLimit =
@@ -963,6 +966,15 @@ data class Settings(
 
     /** 宠物尺寸档：`small` / `medium` / `large`，按身体高度分。 */
     val petSize: String = "medium",
+
+    /**
+     * 宠物相对输入框中心的横向偏移（像素）。
+     *
+     * 拖到哪就记到哪，切页面 / 重启都保持。0 表示居中。
+     * 实际值在渲染时会 coerce 回合法范围——换设备或换尺寸档之后
+     * 旧值可能超出新的可用宽度。
+     */
+    val petOffsetX: Float = 0f,
 
     val autoEnabledDefaultSkills: Set<String> = emptySet(),
 
