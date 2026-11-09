@@ -240,12 +240,22 @@ fun ChatInput(
             // 现在用 Box 叠起来：宠物照常贴着输入框，按钮浮在左下角，
             // 两者互不占位。宠物默认水平居中，跟左下角的按钮不打架。
             Box(modifier = Modifier.fillMaxWidth()) {
-                me.rerere.rikkahub.data.pet.PetHost(
-                    packId = settings.petPackId,
-                    size = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize),
-                    // 不传 mood → 订阅 PetSignal 的全局状态。
-                    // 跑/完成/等确认/睡觉四个信号由 ChatPage 和各处上报。
-                )
+                val customPetPath = settings.customPetPath
+                if (customPetPath != null) {
+                    // 用户自己那张图。没有状态、没有素材包，只有一个动作：
+                    // 被按的时候压一下。
+                    me.rerere.rikkahub.data.pet.ImagePetHost(
+                        imagePath = customPetPath,
+                        size = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize),
+                    )
+                } else {
+                    me.rerere.rikkahub.data.pet.PetHost(
+                        packId = settings.petPackId,
+                        size = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize),
+                        // 不传 mood → 订阅 PetSignal 的全局状态。
+                        // 跑/完成/等确认/睡觉四个信号由 ChatPage 和各处上报。
+                    )
+                }
                 // 续写：上一轮被打断（喊停 / 没钱 / 断联）时出现。
                 // 点它不会发一条新消息，而是让模型接着上一条 assistant 往下写。
                 if (canContinue) {

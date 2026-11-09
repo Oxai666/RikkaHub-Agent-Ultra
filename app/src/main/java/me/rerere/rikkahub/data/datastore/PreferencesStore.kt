@@ -240,6 +240,7 @@ class SettingsStore(
         val PET_PACK_ID = stringPreferencesKey("pet_pack_id")
         val PET_SIZE = stringPreferencesKey("pet_size")
         val PET_OFFSET_X = floatPreferencesKey("pet_offset_x")
+        val CUSTOM_PET_PATH = stringPreferencesKey("custom_pet_path")
 
         // 目标续跑。这两个之前也没持久化——加开关那次只改了内存，
         // persistSettings 的白名单没跟上，重启直接恢复默认。
@@ -355,6 +356,8 @@ class SettingsStore(
                 }
                 preferences[PET_SIZE] = settings.petSize
                 preferences[PET_OFFSET_X] = settings.petOffsetX
+                settings.customPetPath?.let { preferences[CUSTOM_PET_PATH] = it }
+                    ?: preferences.remove(CUSTOM_PET_PATH)
 
                 preferences[ENABLE_GOAL_AUTO_CONTINUATION] = settings.enableGoalAutoContinuation
                 preferences[GOAL_CONTINUATION_LIMIT] = settings.goalContinuationLimit.coerceIn(1, 50)
@@ -556,6 +559,7 @@ class SettingsStore(
                 petPackId = preferences[PET_PACK_ID]?.takeIf { it.isNotBlank() },
                 petSize = preferences[PET_SIZE] ?: "medium",
                 petOffsetX = preferences[PET_OFFSET_X] ?: 0f,
+                customPetPath = preferences[CUSTOM_PET_PATH]?.takeIf { it.isNotBlank() },
                 enableGoalAutoContinuation =
                     preferences[ENABLE_GOAL_AUTO_CONTINUATION] == true,
                 goalContinuationLimit =
@@ -975,6 +979,17 @@ data class Settings(
      * 旧值可能超出新的可用宽度。
      */
     val petOffsetX: Float = 0f,
+
+    /**
+     * 用户自己那张图当宠物时，图片在 App 私有目录里的绝对路径。
+     *
+     * 为什么不存 content:// URI：相册给的那个 URI 权限是一次性的，
+     * 重启之后就读不到了。选图时复制一份到 files/pets/custom/ 下，
+     * 存自己的路径才活得久。
+     *
+     * null = 用内置素材包（[petPackId]）。
+     */
+    val customPetPath: String? = null,
 
     val autoEnabledDefaultSkills: Set<String> = emptySet(),
 

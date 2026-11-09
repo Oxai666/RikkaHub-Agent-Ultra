@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.setting
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -67,6 +70,22 @@ fun SettingPetPage() {
     // settingsStore.update 是 suspend —— 必须从协程里调，不能直接写在 onClick 里
     val scope = rememberCoroutineScope()
     val sprites = remember { PetSprites(context) }
+
+    // 选图。PickVisualMedia 是系统相册最省的入口——不需要权限，
+    // 用户选哪张我们就拿哪张的一次性读权限。
+    val pickImage = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val saved = copyCustomPetImage(context, uri)
+            if (saved != null) {
+                settingsStore.update {
+                    it.copy(customPetPath = saved, petPackId = null)
+                }
+            }
+        }
+    }
     // 有哪些包：写死两个。以后加了包再改成扫 assets/pets/
     val packs = remember {
         listOf("deepy-whale", "whale-girl").mapNotNull { id ->
@@ -107,21 +126,38 @@ fun SettingPetPage() {
             item {
                 PetChoiceRow(
                     label = "不显示",
-                    selected = settings.petPackId == null,
-                    onClick = { scope.launch { settingsStore.update { it.copy(petPackId = null) } } },
+                    selected = settings.petPackId == null && settings.customPetPath == null,
+                    onClick = {
+                        scope.launch { settingsStore.update { it.copy(petPackId = null, customPetPath = null) } }
+                    },
                 )
             }
             items(packs.size) { index ->
                 val (id, name) = packs[index]
                 PetChoiceRow(
                     label = name,
-                    selected = settings.petPackId == id,
-                    onClick = { scope.launch { settingsStore.update { it.copy(petPackId = id) } } },
+                    selected = settings.petPackId == id && settings.customPetPath == null,
+                    onClick = {
+                        scope.launch { settingsStore.update { it.copy(petPackId = id, customPetPath = null) } }
+                    },
+                )
+            }
+
+            // ── 用一张自己的图 ──
+            //
+            // 跟素材包互斥：选了图就把 petPackId 清掉，选了素材包就把图清掉。
+            // 两个都能设的话渲染那边得有个优先级，用户看到的就是"我选了图但它
+            // 还是显示原来那只"。
+            item {
+                PetChoiceRow(
+                    label = if (settings.customPetPath != null) "我的图片（点击更换）" else "用我自己的图片…",
+                    selected = settings.customPetPath != null,
+                    onClick = { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
                 )
             }
 
             // ── 尺寸 ──
-            if (settings.petPackId != null) {
+            if (settings.petPackId != null || settings.customPetPath != null) {
                 item {
                     Text("大小", style = MaterialTheme.typography.titleSmall)
                 }
@@ -186,12 +222,21 @@ fun SettingPetPage() {
                                 .padding(vertical = 8.dp),
                             contentAlignment = Alignment.BottomCenter,
                         ) {
-                            PetHost(
-                                packId = settings.petPackId,
-                                size = PetSize.fromName(settings.petSize),
-                                mood = PetMood(running = false),
-                                modifier = Modifier.fillMaxWidth(),
-                            )
+                            val customPath = settings.customPetPath
+                            if (customPath != null) {
+                                me.rerere.rikkahub.data.pet.ImagePetHost(
+                                    imagePath = customPath,
+                                    size = PetSize.fromName(settings.petSize),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else {
+                                PetHost(
+                                    packId = settings.petPackId,
+                                    size = PetSize.fromName(settings.petSize),
+                                    mood = PetMood(running = false),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
                         }
                     }
                 }
@@ -240,4 +285,33 @@ private fun PetChoiceRow(
             )
         }
     }
+}
+
+/**
+ * 把相册选中的图复制一份到 App 私有目录，返回绝对路径。
+ *
+ * 为什么必须复制，不能直接存 URI：
+ * `PickVisualMedia` 给的是**一次性读权限**，进程重启或被回收之后那个
+ * content:// 就打不开了。宠物图要活很久，只能落到自己能读的地方。
+ *
+ * 目录固定是 `files/pets/custom/`，每次覆盖：
+ * 只留一张图，换一张就等于删旧的，不会攒垃圾。
+ */
+private suspend fun copyCustomPetImage(
+    context: android.content.Context,
+    uri: android.net.Uri,
+): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    runCatching {
+        val dir = java.io.File(context.filesDir, "pets/custom").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+
+        // 保留原扩展名对解码没影响（BitmapFactory 看文件头），
+        // 但别写成 .png——万一是 jpg，系统相册里点开可能认错。
+        val dest = java.io.File(dir, "sprite.img")
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            dest.outputStream().use { output -> input.copyTo(output) }
+        } ?: return@runCatching null
+
+        if (dest.length() <= 0L) null else dest.absolutePath
+    }.getOrNull()
 }
