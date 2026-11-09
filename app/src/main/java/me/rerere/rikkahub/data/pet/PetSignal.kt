@@ -34,23 +34,54 @@ object PetSignal {
     /** 用户发了消息。重置睡觉计时，并清掉「刚做完」的庆祝状态。 */
     fun onUserMessage() {
         lastUserMessageAt = System.currentTimeMillis()
+        clearOutcomeWindows()
         _mood.value = _mood.value.copy(justFinished = false, justFailed = false)
     }
 
     /** 一轮开始跑。 */
     fun onGenerationStart() {
+        clearOutcomeWindows()
         _mood.value = _mood.value.copy(running = true, justFinished = false, justFailed = false)
     }
 
-    /** 一轮正常结束。 */
+    /**
+     * 一轮正常结束。
+     *
+     * 记时间戳而不是存一个布尔：庆祝是有时效的。
+     *
+     * 之前用 `justFinished = true` 一直挂到下一轮，于是 happy 动画（循环的）
+     * 会无限跳下去，直到用户发下一句话。实际想要的是「跳一两下就回去待机」。
+     */
     fun onGenerationFinish() {
-        _mood.value = _mood.value.copy(running = false, justFinished = true)
+        justFinishedAt = System.currentTimeMillis()
+        _mood.value = _mood.value.copy(running = false, justFinished = false, justFailed = false)
     }
 
-    /** 一轮以错误结束。 */
+    /** 一轮以错误结束。错误比完成更需要被看见，所以停留时间更长。 */
     fun onGenerationError() {
-        _mood.value = _mood.value.copy(running = false, justFailed = true)
+        justFailedAt = System.currentTimeMillis()
+        _mood.value = _mood.value.copy(running = false, justFinished = false, justFailed = false)
     }
+
+    /** 是否还在「刚做完」的庆祝窗口内。 */
+    fun isCelebrating(nowMs: Long = System.currentTimeMillis()): Boolean =
+        justFinishedAt > 0L && nowMs - justFinishedAt < CELEBRATE_MS
+
+    /** 是否还在「刚出错」的提示窗口内。 */
+    fun isFailing(nowMs: Long = System.currentTimeMillis()): Boolean =
+        justFailedAt > 0L && nowMs - justFailedAt < FAIL_HOLD_MS
+
+    /** 新一轮开始 / 用户说话时把两个窗口都清掉。 */
+    private fun clearOutcomeWindows() {
+        justFinishedAt = 0L
+        justFailedAt = 0L
+    }
+
+    @Volatile
+    private var justFinishedAt: Long = 0L
+
+    @Volatile
+    private var justFailedAt: Long = 0L
 
     /**
      * 有没有工具停在等审批。
@@ -73,4 +104,13 @@ object PetSignal {
         (lastUserMessageAt + SLEEP_AFTER_MS - nowMs).coerceAtLeast(0L)
 
     private const val SLEEP_AFTER_MS = 60_000L
+
+    /**
+     * 庆祝窗口。happy 一轮约 2.6 秒（Deepy）/ 1.5 秒（鲸娘），
+     * 5 秒刚好播两遍——「跳一两下」的量，再多就腻了。
+     */
+    private const val CELEBRATE_MS = 5_000L
+
+    /** 出错窗口。比庆祝长一点：错误更值得看一眼。 */
+    private const val FAIL_HOLD_MS = 6_000L
 }

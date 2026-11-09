@@ -85,8 +85,21 @@ fun PetHost(
             !effectiveMood.awaitingApproval
     }
 
-    val finalMood = remember(effectiveMood, shouldSleep) {
-        effectiveMood.copy(idleForAWhile = shouldSleep)
+    // 「刚做完 / 刚出错」也是有窗口的，过了就回待机。
+    // 跟 shouldSleep 一样每秒现算，不存缓存——缓存会失步。
+    val celebrating = remember(clockTick, effectiveMood) {
+        mood == null && me.rerere.rikkahub.data.pet.PetSignal.isCelebrating()
+    }
+    val failing = remember(clockTick, effectiveMood) {
+        mood == null && me.rerere.rikkahub.data.pet.PetSignal.isFailing()
+    }
+
+    val finalMood = remember(effectiveMood, shouldSleep, celebrating, failing) {
+        effectiveMood.copy(
+            idleForAWhile = shouldSleep,
+            justFinished = celebrating,
+            justFailed = failing,
+        )
     }
 
     // 基础状态
