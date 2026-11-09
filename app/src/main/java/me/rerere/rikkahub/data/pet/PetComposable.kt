@@ -168,7 +168,7 @@ fun Pet(
         drawImage(
             image = img,
             srcOffset = IntOffset(src.left, src.top),
-            srcSize = IntSize(src.width(), src.height()),
+            srcSize = IntSize(src.right - src.left, src.bottom - src.top),
             dstOffset = IntOffset(
                 (originX + box.x * k).roundToInt(),
                 (originY + box.y * k).roundToInt(),
