@@ -172,13 +172,13 @@ fun PetHost(
     // 之前容器是 fillMaxWidth（整个屏幕宽），Pet 在里面居中算 originX。
     // 现在容器宽 = 画布宽，画布原点就是容器左上角，originX 这个概念消失。
     val canvasWidthDp = with(density) { (pack.canvasW * k).toDp() }
-    // 能把自己提多高。**容器高度不含这个值**——
-    // 之前把容器算成「画布 + 抬升余量」，等于高度凭空多了 50%，
-    // 输入框被顶上去，宠物看起来悬在消息中间。实际绘制区域就该只有画布那么大。
-    // 提起来的时候用 offset 往上偏移、超出容器顶部，Compose 的 Box 不裁剪，
-    // 视觉上就是「拎起来了」，不占额外布局空间。
+    // 能把自己提多高。容器高度 = 画布高 + 这个值，
+    // 画布平时停在容器底部，提起来最多顶到容器顶部——不会被裁。
+    //
+    // 中间有一版把它改成「容器只占画布高、靠 offset 超出容器」，那是错的：
+    // 宠物确实能提起来了，但正常位置也偏了。改回来。
     val liftMax = pack.canvasH * k * 0.5f
-    val containerHeightDp = with(density) { (pack.canvasH * k).toDp() }
+    val containerHeightDp = with(density) { (pack.canvasH * k + liftMax).toDp() }
     // 容器宽度用屏宽近似。宠物是放在输入框那一行里的，
     // 实际可用宽度会窄一点（左右各 8dp padding），拿它算拖动边界差几个像素无所谓。
     // LocalConfiguration.current 是 @Composable 属性，必须直接写在
@@ -193,13 +193,13 @@ fun PetHost(
     // 外层：占满可用宽度，高度 = 画布 + 抬升余量。
     //
     // **对齐必须是 TopCenter，不能是 BottomCenter**：
-    // 内层的 offset 里已经含了 liftMax 作为"平时贴底"的基线，
+    // 内层的 offset 里已经含了 liftMax 作为「平时贴底」的基线，
     // 再用 BottomCenter 等于把 liftMax 加两次，画布会被推到容器外面。
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(containerHeightDp),
-        contentAlignment = Alignment.BottomCenter,
+        contentAlignment = Alignment.TopCenter,
     ) {
     // 内层：尺寸**正好等于画布**，画布原点就是 (0,0)。
     // 正常状态（dragY=0）时靠 liftMax 的偏移贴住容器底部，
@@ -211,7 +211,7 @@ fun PetHost(
             .offset {
                 androidx.compose.ui.unit.IntOffset(
                     animatedX.roundToInt(),
-                    animatedY.roundToInt(),
+                    (animatedY + liftMax).roundToInt(),
                 )
             },
     ) {
