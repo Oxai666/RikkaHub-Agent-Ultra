@@ -24,6 +24,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -143,28 +144,6 @@ fun SettingPetPage() {
                 )
             }
 
-            // ── 鲸鱼娘女仆 ──
-            //
-            // 不是素材包：一张抠好的立绘 + 一套专属交互。
-            // 点一下会吐气泡显示当前模型余额，这条只有它有。
-            item {
-                PetChoiceRow(
-                    label = "鲸鱼娘女仆（点一下查余额）",
-                    selected = settings.petPackId == me.rerere.rikkahub.data.pet.MAID_PET_ID &&
-                        settings.customPetPath == null,
-                    onClick = {
-                        scope.launch {
-                            settingsStore.update {
-                                it.copy(
-                                    petPackId = me.rerere.rikkahub.data.pet.MAID_PET_ID,
-                                    customPetPath = null,
-                                )
-                            }
-                        }
-                    },
-                )
-            }
-
             // ── 用一张自己的图 ──
             //
             // 跟素材包互斥：选了图就把 petPackId 清掉，选了素材包就把图清掉。
@@ -178,8 +157,43 @@ fun SettingPetPage() {
                 )
             }
 
+            // ── 鲸鱼娘女仆 ──
+            //
+            // 独立开关，**跟上面选的互不排斥**。这是它跟素材包最大的区别：
+            // 素材包只能站一只，她可以跟任意一只并排。
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable {
+                            scope.launch {
+                                settingsStore.update { it.copy(maidPetEnabled = !it.maidPetEnabled) }
+                            }
+                        }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("鲸鱼娘女仆", style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "点一下查当前模型的余额。可以跟上面选的宠物同时站着。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = settings.maidPetEnabled,
+                        onCheckedChange = {
+                            scope.launch { settingsStore.update { c -> c.copy(maidPetEnabled = it) } }
+                        },
+                    )
+                }
+            }
+
             // ── 尺寸 ──
-            if (settings.petPackId != null || settings.customPetPath != null) {
+            if (settings.petPackId != null || settings.customPetPath != null || settings.maidPetEnabled) {
                 item {
                     Text("大小", style = MaterialTheme.typography.titleSmall)
                 }
@@ -245,14 +259,7 @@ fun SettingPetPage() {
                             contentAlignment = Alignment.BottomCenter,
                         ) {
                             val customPath = settings.customPetPath
-                            if (settings.petPackId == me.rerere.rikkahub.data.pet.MAID_PET_ID && customPath == null) {
-                                me.rerere.rikkahub.data.pet.MaidPetHost(
-                                    size = PetSize.fromName(settings.petSize),
-                                    providerSetting = null,
-                                    modelLabel = "预览",
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            } else if (customPath != null) {
+                            if (customPath != null) {
                                 me.rerere.rikkahub.data.pet.ImagePetHost(
                                     imagePath = customPath,
                                     size = PetSize.fromName(settings.petSize),
