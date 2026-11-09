@@ -104,6 +104,34 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val setting by vm.settings.collectAsStateWithLifecycle()
     val conversation by vm.conversation.collectAsStateWithLifecycle()
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
+
+    // ── 给宠物上报状态 ──
+    // 这三个信号分散在这一个文件里，宠物那边订阅 PetSignal 读。
+    //
+    // 「在跑 / 刚结束」：loadingJob 从 null 变非 null 是开始，反过来是结束。
+    var wasRunning by remember { mutableStateOf(false) }
+    LaunchedEffect(loadingJob) {
+        val running = loadingJob != null
+        if (running && !wasRunning) {
+            me.rerere.rikkahub.data.pet.PetSignal.onGenerationStart()
+        } else if (!running && wasRunning) {
+            me.rerere.rikkahub.data.pet.PetSignal.onGenerationFinish()
+        }
+        wasRunning = running
+    }
+
+    // 「等你确认」：只在真的有工具停在 Pending 时才亮牌子。
+    // YOLO / 无审核模式下工具自动通过，这里根本不会有 Pending，
+    // 所以不用额外判断模式——没 Pending 就不亮。
+    LaunchedEffect(conversation.messageNodes.size, loadingJob) {
+        val awaiting = conversation.messageNodes.lastOrNull()?.currentMessage?.parts
+            ?.any { part ->
+                part is me.rerere.ai.ui.UIMessagePart.Tool &&
+                    part.approvalState is me.rerere.ai.ui.ToolApprovalState.Pending
+            } == true
+        me.rerere.rikkahub.data.pet.PetSignal.setAwaitingApproval(awaiting)
+    }
+
     val processingStatus by vm.processingStatus.collectAsStateWithLifecycle()
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
@@ -409,6 +437,8 @@ private fun ChatPageContent(
                             )
                         } else {
                             vm.handleMessageSend(inputState.getContents())
+                            // 主人说话了：叫醒鱼鱼，同时清掉「刚做完」的庆祝
+                            me.rerere.rikkahub.data.pet.PetSignal.onUserMessage()
                             scope.launch {
                                 delay(100.milliseconds)
                                 chatListState.requestScrollToItem(conversation.currentMessages.size + 5)

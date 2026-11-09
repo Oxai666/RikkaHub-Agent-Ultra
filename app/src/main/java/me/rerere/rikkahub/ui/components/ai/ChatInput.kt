@@ -233,9 +233,8 @@ fun ChatInput(
             me.rerere.rikkahub.data.pet.PetHost(
                 packId = settings.petPackId,
                 size = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize),
-                // 先接最基础的一路：这一轮在不在跑。等你确认、出错、做完了
-                // 这些信号第二期再接——它们要改 ChatPage 的状态传参链。
-                mood = me.rerere.rikkahub.data.pet.PetMood(running = loading),
+                // 不传 mood → 订阅 PetSignal 的全局状态。
+                // 跑/完成/等确认/睡觉四个信号由 ChatPage 和各处上报。
             )
 
             PlanStepsBar(plan = currentPlan)

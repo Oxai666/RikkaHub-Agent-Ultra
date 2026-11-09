@@ -21,6 +21,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -41,7 +42,11 @@ import kotlin.math.roundToInt
 fun PetHost(
     packId: String?,
     size: PetSize,
-    mood: PetMood,
+    /**
+     * 外部给的 mood。传 null 表示订阅 [PetSignal] 的全局状态——
+     * 聊天页用 null，设置页的预览区传一个固定值（只想看动画，不想受真实状态影响）。
+     */
+    mood: PetMood? = null,
     modifier: Modifier = Modifier,
 ) {
     if (packId == null) return
@@ -52,9 +57,33 @@ fun PetHost(
     val pack = remember(packId) { sprites.loadPack(packId) }
     if (pack == null) return
 
+    // 没传 mood 就订阅全局信号
+    val liveMood by me.rerere.rikkahub.data.pet.PetSignal.mood.collectAsStateWithLifecycle()
+    val effectiveMood = mood ?: liveMood
+
+    // 「睡觉」的计时器：60 秒没回消息就睡。
+    // 用一个自增 token 触发重组——到点把 asleep 置 true。
+    var asleep by remember(packId) { mutableStateOf(false) }
+    LaunchedEffect(packId, effectiveMood.running, liveMood) {
+        if (mood != null) return@LaunchedEffect  // 预览不该睡觉
+        while (true) {
+            val until = me.rerere.rikkahub.data.pet.PetSignal.untilSleep()
+            delay(until)
+            asleep = me.rerere.rikkahub.data.pet.PetSignal.shouldSleep()
+            // 睡了就隔 1 秒再看一次，醒了立刻恢复
+            delay(1_000L)
+        }
+    }
+    // 有任何活动（在跑、等你点）就不该睡
+    val shouldSleep = asleep && !effectiveMood.running && !effectiveMood.awaitingApproval
+
+    val finalMood = remember(effectiveMood, shouldSleep) {
+        effectiveMood.copy(idleForAWhile = shouldSleep)
+    }
+
     // 基础状态
-    val baseState = remember(mood) { mood.state() }
-    val tier = remember(mood) { mood.tier() }
+    val baseState = remember(finalMood) { finalMood.state() }
+    val tier = remember(finalMood) { finalMood.tier() }
 
     // 一次性反应会临时盖住基础状态，播完自动退回
     // reaction 也要跟 packId 绑：切包时旧包的动画对象必须丢掉，
@@ -98,9 +127,6 @@ fun PetHost(
 
     // 连点计数。1.1 秒内点满 3 下 → 挠痒痒。
     // 阈值取 1.1 秒是原版的数字：手机上目标很小，间隔再长一点连点容易点偏。
-    // ⚠ 临时调试：Pet 在 draw 里报上来的实际数值
-    var debugLine by remember(packId) { mutableStateOf("") }
-
     var tapCount by remember { mutableIntStateOf(0) }
     var lastTapAt by remember { mutableLongStateOf(0L) }
     val animatedX by animateFloatAsState(dragX, label = "petDragX")
@@ -140,16 +166,6 @@ fun PetHost(
     androidx.compose.foundation.layout.Column(
         modifier = modifier.fillMaxWidth(),
     ) {
-    // ⚠ 临时：把 Pet 报上来的数值显示出来
-    if (debugLine.isNotEmpty()) {
-        androidx.compose.material3.Text(
-            text = debugLine,
-            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-            color = androidx.compose.ui.graphics.Color.Red,
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-
     // 外层：占满可用宽度，高度 = 画布 + 抬升余量。
     //
     // **对齐必须是 TopCenter，不能是 BottomCenter**：
@@ -218,7 +234,6 @@ fun PetHost(
                 dragX = (dragX + dx).coerceIn(-maxX, maxX)
                 dragY = (dragY + dy).coerceIn(-maxUp, 0f)
             },
-            onDebug = { line -> if (line != debugLine) debugLine = line },
             onDragEnd = {
                 // 垂直回弹：提起来是"被拎住"的临时状态，松手就该落地。
                 // 留着悬空会让人以为它挂住了。
