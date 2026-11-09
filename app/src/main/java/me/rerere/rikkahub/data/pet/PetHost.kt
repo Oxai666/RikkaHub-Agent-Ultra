@@ -118,7 +118,7 @@ fun PetHost(
             pack = pack,
             sprites = sprites,
             anim = anim,
-            size = size,
+            petSize = size,
             // **必须 fillMaxSize**。Canvas 内部是 Spacer + drawBehind，
             // 只给 fillMaxWidth 的话高度约束是无界的，它会 collapse 到 0——
             // containerSize.height 变成 0，originY 算出来是负数，

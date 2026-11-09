@@ -40,7 +40,7 @@ import kotlin.math.roundToInt
  * @param pack 当前宠物包
  * @param sprites 素材加载器
  * @param anim 正在播的动画
- * @param size 尺寸档
+ * @param petSize 尺寸档
  * @param pixelSize 本组件的像素尺寸，由调用方给（用来算缩放）
  * @param onTap 点了身体。参数是「点的左半边还是右半边」
  * @param onLongPress 长按
@@ -52,7 +52,11 @@ fun Pet(
     pack: PetPack,
     sprites: PetSprites,
     anim: PetAnimation,
-    size: PetSize,
+    // **不能叫 size**。Canvas 的 draw lambda 是 DrawScope.() -> Unit，
+    // 里面有个 `size: Size`（当前绘制区域尺寸）。参数也叫 size 的话
+    // 会把它遮蔽掉，`size.width` 就变成在 PetSize 上找 width——找不到。
+    // 那两行 Unresolved reference 'width' / 'height' 就是这么来的。
+    petSize: PetSize,
     modifier: Modifier = Modifier,
     onTap: (leftHalf: Boolean) -> Unit = {},
     onLongPress: () -> Unit = {},
@@ -63,7 +67,7 @@ fun Pet(
 ) {
     val density = LocalDensity.current
     // 每个美术像素占多少物理像素。像素画包这里是整数。
-    val k = remember(pack, size, density) { pack.screenScale(size, density.density) }
+    val k = remember(pack, petSize, density) { pack.screenScale(petSize, density.density) }
 
     // 画布尺寸（物理像素）：包的画布 × k
     val drawnW = (pack.canvasW * k).roundToInt()
@@ -151,10 +155,12 @@ fun Pet(
 
         // 画布原点：脚线（pack.baseline）贴在容器底部，水平居中。
         // 用 DrawScope 自己的 size 而不是 onSizeChanged 记的那个——
-        // 两者理论上一致，但 size 是当前这一帧的实测值，不会晚一层。
+        // 两者理论上一致，但 this.size 是当前这一帧的实测值，不会晚一层。
+        // 显式写 this. 是因为 draw lambda 的接收者是 DrawScope，
+        // 不写的话万一外层有同名变量又会遮蔽。
         val drawnW = (pack.canvasW * k).roundToInt().toFloat()
-        val originX = ((size.width - drawnW) / 2f).roundToInt().toFloat()
-        val originY = size.height - pack.baseline * k
+        val originX = ((this.size.width - drawnW) / 2f).roundToInt().toFloat()
+        val originY = this.size.height - pack.baseline * k
 
         val src = sprites.srcRect(anim, cell, s)
         val box = anim.box
