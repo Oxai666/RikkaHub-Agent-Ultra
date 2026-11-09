@@ -215,7 +215,7 @@ class PetPack(
             if (animations.isEmpty()) bad("no animations")
 
             fun ref(e: JsonElement?, where: String): String {
-                val n = (e as? JsonPrimitive)?.contentOrNull()
+                val n = (e as? JsonPrimitive)?.contentOrNull
                 return if (n != null && n in animations) n else bad("$where names a missing animation")
             }
 
@@ -315,7 +315,7 @@ class PetPack(
         }
 
         private fun JsonObject.str(key: String): String? =
-            (this[key] as? JsonPrimitive)?.contentOrNull()
+            (this[key] as? JsonPrimitive)?.contentOrNull
 
         private fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
 

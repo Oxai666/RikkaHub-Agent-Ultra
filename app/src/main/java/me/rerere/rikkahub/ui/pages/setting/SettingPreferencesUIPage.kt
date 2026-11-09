@@ -66,6 +66,10 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     var displaySetting by remember(settings) { mutableStateOf(settings.displaySetting) }
     val context = LocalContext.current
+    // LocalNavController.current 是 @Composable 属性——只能在 Composable 上下文读，
+    // 塞进 onClick 的 lambda 里会报「@Composable invocations can only happen from
+    // the context of a @Composable function」。所以在顶层取一次。
+    val navCtrl = LocalNavController.current
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
     val chatFontFamily = rememberChatFontFamily(displaySetting)
@@ -128,11 +132,9 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
             item {
                 CardGroup(modifier = Modifier.padding(horizontal = 8.dp)) {
                     item(
-                        onClick = {
-                            LocalNavController.current.navigate(me.rerere.rikkahub.Screen.SettingPet)
-                        },
+                        onClick = { navCtrl.navigate(me.rerere.rikkahub.Screen.SettingPet) },
                         leadingContent = {
-                            Icon(me.rerere.hugeicons.HugeIcons.FavouriteCircle, null)
+                            Icon(me.rerere.hugeicons.HugeIcons.Favourite, null)
                         },
                         supportingContent = { Text("站在输入框上的小宠物，用动作表示 agent 在干什么") },
                         headlineContent = { Text("宠物") },

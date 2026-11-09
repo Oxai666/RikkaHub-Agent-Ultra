@@ -26,6 +26,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.pet.PetHost
 import me.rerere.rikkahub.data.pet.PetMood
@@ -62,6 +64,8 @@ fun SettingPetPage() {
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
+    // settingsStore.update 是 suspend —— 必须从协程里调，不能直接写在 onClick 里
+    val scope = rememberCoroutineScope()
     val sprites = remember { PetSprites(context) }
     // 有哪些包：写死两个。以后加了包再改成扫 assets/pets/
     val packs = remember {
@@ -104,7 +108,7 @@ fun SettingPetPage() {
                 PetChoiceRow(
                     label = "不显示",
                     selected = settings.petPackId == null,
-                    onClick = { settingsStore.update { it.copy(petPackId = null) } },
+                    onClick = { scope.launch { settingsStore.update { it.copy(petPackId = null) } } },
                 )
             }
             items(packs.size) { index ->
@@ -112,7 +116,7 @@ fun SettingPetPage() {
                 PetChoiceRow(
                     label = name,
                     selected = settings.petPackId == id,
-                    onClick = { settingsStore.update { it.copy(petPackId = id) } },
+                    onClick = { scope.launch { settingsStore.update { it.copy(petPackId = id) } } },
                 )
             }
 
@@ -148,8 +152,10 @@ fun SettingPetPage() {
                                         shape = RoundedCornerShape(10.dp),
                                     )
                                     .clickable {
-                                        settingsStore.update {
-                                            it.copy(petSize = size.name.lowercase())
+                                        scope.launch {
+                                            settingsStore.update {
+                                                it.copy(petSize = size.name.lowercase())
+                                            }
                                         }
                                     }
                                     .padding(vertical = 10.dp),
