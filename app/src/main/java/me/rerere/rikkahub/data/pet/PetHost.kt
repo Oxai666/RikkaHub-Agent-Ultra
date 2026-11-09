@@ -88,7 +88,17 @@ fun PetHost(
     var tapCount by remember { mutableIntStateOf(0) }
     var lastTapAt by remember { mutableLongStateOf(0L) }
     val animatedX by animateFloatAsState(dragX, label = "petDragX")
-    val animatedY by animateFloatAsState(dragY, label = "petDragY")
+    // 松手落地用带一点回弹的弹簧，不是瞬间归位。
+    // mediaBouncy + 低刚度 = 落下去的时候有一点下沉回弹，
+    // 比 LinearEasing 直接滑回去更像"掉下来"。
+    val animatedY by animateFloatAsState(
+        targetValue = dragY,
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+            stiffness = androidx.compose.animation.core.Spring.StiffnessLow,
+        ),
+        label = "petDragY",
+    )
 
     val k = remember(pack, size, density) { pack.screenScale(size, density.density) }
     // 容器高度必须按**画布**算，不能按身体算：
@@ -99,6 +109,10 @@ fun PetHost(
     // 之前容器是 fillMaxWidth（整个屏幕宽），Pet 在里面居中算 originX。
     // 现在容器宽 = 画布宽，画布原点就是容器左上角，originX 这个概念消失。
     val canvasWidthDp = with(density) { (pack.canvasW * k).toDp() }
+    // 能把自己提多高。容器高度 = 画布高 + 这个值，
+    // 画布平时停在容器底部，提起来最多顶到容器顶部——不会被裁。
+    val liftMax = pack.canvasH * k * 0.5f
+    val containerHeightDp = with(density) { (pack.canvasH * k + liftMax).toDp() }
     // 容器宽度用屏宽近似。宠物是放在输入框那一行里的，
     // 实际可用宽度会窄一点（左右各 8dp padding），拿它算拖动边界差几个像素无所谓。
     // LocalConfiguration.current 是 @Composable 属性，必须直接写在
@@ -106,12 +120,20 @@ fun PetHost(
     val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
     val containerWidthPx = with(density) { screenWidthDp.dp.toPx() }
 
-    // 外层：占满可用宽度，把内层水平居中
+    // 外层：占满可用宽度，高度 = 画布 + 抬升余量。
+    //
+    // **对齐必须是 TopCenter，不能是 BottomCenter**：
+    // 内层的 offset 里已经含了 liftMax 作为"平时贴底"的基线，
+    // 再用 BottomCenter 等于把 liftMax 加两次，画布会被推到容器外面。
     Box(
-        modifier = modifier.fillMaxWidth(),
-        contentAlignment = Alignment.BottomCenter,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(containerHeightDp),
+        contentAlignment = Alignment.TopCenter,
     ) {
-    // 内层：尺寸**正好等于画布**，这样 Pet 里画布原点就是 (0,0)
+    // 内层：尺寸**正好等于画布**，画布原点就是 (0,0)。
+    // 正常状态（dragY=0）时靠 liftMax 的偏移贴住容器底部，
+    // 提起来（dragY 负到 -liftMax）时正好顶到容器顶部。
     Box(
         modifier = Modifier
             .width(canvasWidthDp)
@@ -119,7 +141,7 @@ fun PetHost(
             .offset {
                 androidx.compose.ui.unit.IntOffset(
                     animatedX.roundToInt(),
-                    animatedY.roundToInt(),
+                    (animatedY + liftMax).roundToInt(),
                 )
             },
     ) {
@@ -160,13 +182,9 @@ fun PetHost(
                 // 用容器宽一半的话，宠物会被拖到一半还在屏幕外。
                 val theoreticalWidthPx = pack.canvasW * k
                 val maxX = ((containerWidthPx - theoreticalWidthPx) / 2f).coerceAtLeast(0f)
-                // 纵向只能往上一点点。
-                //
-                // 容器高度正好等于画布高，往上提多少，顶部就裁掉多少。
-                // 之前给 0.5 倍画布高，提起来头就被切掉——
-                // 用户看到的是"提起来头没了"。
-                // 0.12 倍是能看出"被拎起来"又不裁到身体的量。
-                val maxUp = theoreticalHeightPx * 0.12f
+                // 纵向能提的最大高度 = 容器给画布留的抬升余量。
+                // 再多就会顶出容器被裁。
+                val maxUp = liftMax
                 dragX = (dragX + dx).coerceIn(-maxX, maxX)
                 dragY = (dragY + dy).coerceIn(-maxUp, 0f)
             },
