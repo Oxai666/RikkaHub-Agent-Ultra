@@ -69,7 +69,7 @@ fun ImagePetHost(
     val aspect = bitmap.width.toFloat() / bitmap.height.toFloat().coerceAtLeast(1f)
 
     // 尺寸跟素材包宠物对齐：PetSize.dp 是**身体高度**，不是画布高。
-    val bodyH = with(density) { size.dp.toPx() }
+    val bodyH = with(density) { size.dp.dp.toPx() }
     val bodyW = bodyH * aspect
     // 抬升余量。素材包宠物能"被拎起来"，单图宠物不挪位置，
     // 但留同样的空白，切换两种宠物时跟输入框的距离不会变。

@@ -1,8 +1,5 @@
 package me.rerere.rikkahub.data.pet
 
-/** 老版本放在 petPackId 里的值，现在只用于升级迁移。 */
-const val MAID_PET_ID = "maid-deepseek"
-
 import android.graphics.BitmapFactory
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -53,6 +50,9 @@ import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.ui.components.ai.ProviderBalanceText
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
+
+/** 老版本放在 petPackId 里的值，现在只用于升级迁移。 */
+const val MAID_PET_ID = "maid-deepseek"
 
 /**
  * 哦鲸鲸（鲸鱼娘女仆）。名字取自立绘里那个思考气泡的三个字。
@@ -106,7 +106,7 @@ fun MaidPetHost(
     if (bitmap == null) return
 
     val aspect = bitmap.width.toFloat() / bitmap.height.toFloat()
-    val bodyH = with(density) { size.dp.toPx() }
+    val bodyH = with(density) { size.dp.dp.toPx() }
     val bodyW = bodyH * aspect
     // 跟另外两种宠物保持同样的容器高度：身体 + 一半的抬升余量。
     // 切换宠物的时候宠物跟输入框的距离不会跳。
