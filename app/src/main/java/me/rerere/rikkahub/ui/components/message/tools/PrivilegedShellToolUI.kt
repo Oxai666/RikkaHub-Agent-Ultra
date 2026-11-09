@@ -73,23 +73,45 @@ class PrivilegedShellToolUI(override val toolName: String) : ToolUIRenderer {
     /** 折叠时也展示——命令是这条调用最重要的信息，藏起来等于不给看。 */
     override fun hasSummary(context: ToolUIContext): Boolean = true
 
+    /**
+     * 消息流里的摘要。
+     *
+     * **只在一件事上放全文：等审批的时候。** 那时候用户需要看清楚要跑什么命令，
+     * 是唯一「必须当场看到命令」的时刻。
+     *
+     * 执行完就收起来——完整命令和 stdout/stderr 都在点开后的详情页里，
+     * 在消息流里再铺一遍只会把对话冲得七零八落。
+     */
     @Composable
     override fun Summary(context: ToolUIContext) {
         val command = context.arguments.getStringContent("command").orEmpty()
         if (command.isBlank()) return
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+
+        val awaitingApproval =
+            context.tool.approvalState is me.rerere.ai.ui.ToolApprovalState.Pending
+
+        if (awaitingApproval) {
+            // 审批中：完整命令，不能省
             CommandBox(command = command, loading = context.loading)
-            // 已经执行完的把 stdout / stderr 也带上，方便对照
-            val content = context.content
-            if (content != null) {
-                val stdout = content.getStringContent("stdout").orEmpty().trim()
-                val stderr = content.getStringContent("stderr").orEmpty().trim()
-                if (stdout.isNotEmpty()) {
-                    OutputBox(label = "stdout", text = stdout, isError = false)
-                }
-                if (stderr.isNotEmpty()) {
-                    OutputBox(label = "stderr", text = stderr, isError = true)
-                }
+        } else {
+            // 已执行：一行摘要，点开看详情
+            val firstLine = command.lineSequence().firstOrNull().orEmpty().trim()
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainer)
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+            ) {
+                Text(
+                    text = if (firstLine.length > 60) "$firstLine…" else firstLine,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                    ),
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
             }
         }
     }
@@ -179,32 +201,4 @@ class PrivilegedShellToolUI(override val toolName: String) : ToolUIRenderer {
         }
     }
 
-    @Composable
-    private fun OutputBox(label: String, text: String, isError: Boolean) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = if (isError) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(6.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainer)
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-            ) {
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
-                )
-            }
-        }
-    }
 }
