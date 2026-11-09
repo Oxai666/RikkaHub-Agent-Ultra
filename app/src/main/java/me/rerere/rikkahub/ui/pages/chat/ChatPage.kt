@@ -517,6 +517,7 @@ private fun ChatPageContent(
             },
             containerColor = Color.Transparent,
         ) { innerPadding ->
+            Box(modifier = Modifier.fillMaxSize()) {
             ChatList(
                 innerPadding = innerPadding,
                 conversation = conversation,
@@ -595,6 +596,20 @@ private fun ChatPageContent(
                     vm.saveConversationAsync()
                 },
             )
+                // 宠物浮在消息列表之上。
+                //
+                // 放在这里而不是 ChatInput 的 bottomBar 里，是因为 bottomBar
+                // 占的布局空间是实打实的——那块矩形里没有消息列表，
+                // 从那儿往上滑自然滑不动。
+                //
+                // 叠在 content 里之后，宠物浮着不占位，垂直滑动会穿透到
+                // 下面的 ChatList（宠物的手势只认水平方向）。
+                me.rerere.rikkahub.data.pet.PetHost(
+                    packId = setting.petPackId,
+                    size = me.rerere.rikkahub.data.pet.PetSize.fromName(setting.petSize),
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            }
         }
 
         if (showFilesSheet) {

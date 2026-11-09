@@ -232,20 +232,18 @@ fun ChatInput(
                 .padding(bottom = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // 宠物 + 续写按钮放在**同一层**。
+            // 宠物**不在这里**——它在 ChatPageContent 的 content 里浮着。
             //
-            // 之前是 Column 里上下排：宠物在上、按钮在下，按钮把宠物顶高了，
-            // 宠物离输入框隔了一个按钮的高度。用户看到的就是"有续写时宠物悬着"。
+            // 为什么挪走：ChatInput 是 Scaffold 的 bottomBar，它占的高度是
+            // 实打实的布局空间。宠物放在这儿，那块矩形就变成"输入框的一部分"——
+            // 从那儿往上滑是在滑 bottomBar，底下根本没有消息列表。
+            // 用户看到的就是"宠物区域上下滑不动"。
             //
-            // 现在用 Box 叠起来：宠物照常贴着输入框，按钮浮在左下角，
-            // 两者互不占位。宠物默认水平居中，跟左下角的按钮不打架。
+            // 挪到 content 里用 Box 叠在 ChatList 上方之后：
+            //   · 宠物浮着，不占布局空间
+            //   · 垂直滑动被 detectHorizontalDragGestures 放行，落到下面的列表
+            //   · 水平拖动归宠物自己
             Box(modifier = Modifier.fillMaxWidth()) {
-                me.rerere.rikkahub.data.pet.PetHost(
-                    packId = settings.petPackId,
-                    size = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize),
-                    // 不传 mood → 订阅 PetSignal 的全局状态。
-                    // 跑/完成/等确认/睡觉四个信号由 ChatPage 和各处上报。
-                )
                 // 续写：上一轮被打断（喊停 / 没钱 / 断联）时出现。
                 // 点它不会发一条新消息，而是让模型接着上一条 assistant 往下写。
                 if (canContinue) {
