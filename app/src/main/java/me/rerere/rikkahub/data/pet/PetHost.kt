@@ -14,7 +14,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,7 +23,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /**
@@ -140,30 +138,12 @@ fun PetHost(
     }
     val anim = reaction ?: stateAnim
 
-    // 横向位置要跨页面保留——拖到右边、去设置看一眼回来，它得还在右边。
-    // 存进 PreferencesStore，key 是 petOffsetX。
-    // 预览页（mood 传了非 null）不做持久化，那里只是看大小用的。
-    val settingsStore: me.rerere.rikkahub.data.datastore.SettingsStore =
-        org.koin.compose.koinInject()
-    val persistScope = rememberCoroutineScope()
-    val persistX = mood == null
-    val liveSettings by if (persistX) {
-        settingsStore.settingsFlow.collectAsStateWithLifecycle()
-    } else {
-        remember { kotlinx.coroutines.flow.MutableStateFlow(
-            me.rerere.rikkahub.data.datastore.Settings.dummy()
-        ) }.collectAsStateWithLifecycle()
-    }
-    val savedOffsetX = if (persistX) liveSettings.petOffsetX else 0f
-
-    // 拖动偏移。
+    // 拖动偏移。**松手回零**，不记位置。
     //
     // 之前做过"记住位置"，但宠物是站在输入框上沿的状态指示器，
     // 让它能停在半空或者跑进输入框里没有意义，而且用户看到"往上滑能停在上面
     // 不往下掉"会以为是 bug。拖动只用来触发被拎起来的反应。
-    // remember(packId, savedOffsetX)：首次进入和切回页面时都用存下来的值初始化。
-    // 之前是 remember(packId) 固定从 0 开始，所以每次回页面都弹回中间。
-    var dragX by remember(packId, savedOffsetX) { mutableStateOf(savedOffsetX) }
+    var dragX by remember(packId) { mutableStateOf(0f) }
     var dragY by remember(packId) { mutableStateOf(0f) }
 
     // 连点计数。1.1 秒内点满 3 下 → 挠痒痒。
@@ -205,11 +185,6 @@ fun PetHost(
     // Composable 函数体里，不能塞进 with(density) 块——提出来读一次。
     val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
     val containerWidthPx = with(density) { screenWidthDp.dp.toPx() }
-    // 外层 Box 的实际宽度。screenWidth 是整块屏幕，而 PetHost 放在
-    // ChatInput 的 Column 里、左右各有 8dp padding——拿屏宽算拖动边界会偏大
-    // 16dp，拖到最左/最右时画布已经出界但 dragX 还在合法范围内，松手一 coerce
-    // 就是"飞过去"的感觉。
-    var hostWidthPx by remember(packId) { mutableStateOf(0f) }
 
     // Composable 只能有一个根节点，调试文字 + 宠物框要包进 Column
     androidx.compose.foundation.layout.Column(
@@ -223,8 +198,7 @@ fun PetHost(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(containerHeightDp)
-            .onSizeChanged { hostWidthPx = it.width.toFloat() },
+            .height(containerHeightDp),
         contentAlignment = Alignment.TopCenter,
     ) {
     // 内层：尺寸**正好等于画布**，画布原点就是 (0,0)。
@@ -277,17 +251,8 @@ fun PetHost(
                 //
                 // 横向余量 = (容器宽 - 画布宽) / 2，正好是居中位置左右各能挪多远。
                 // 用容器宽一半的话，宠物会被拖到一半还在屏幕外。
-                // 横向边界：画布在容器里居中，左右各能挪 (容器宽 - 画布宽)/2。
-                // 但宠物的外层 Box 是 fillMaxWidth，而内层画布只有 canvasW*k 宽，
-                // 所以真正可挪的距离是「外层宽 - 画布宽」的一半。
-                //
-                // 之前用「屏宽 - 画布宽」，屏宽比外层宽（左右各有 8dp padding），
-                // 算出来的余量偏大——拖到最左边时画布有一截已经出界，
-                // 但 dragX 还在合法范围内，松手后 coerce 回落，看起来就是"飞过去"。
                 val theoreticalWidthPx = pack.canvasW * k
-                // 优先用实测宽度，没测到再退回屏宽
-                val effectiveWidth = if (hostWidthPx > 0f) hostWidthPx else containerWidthPx
-                val maxX = ((effectiveWidth - theoreticalWidthPx) / 2f).coerceAtLeast(0f)
+                val maxX = ((containerWidthPx - theoreticalWidthPx) / 2f).coerceAtLeast(0f)
                 // 纵向能提的最大高度 = 容器给画布留的抬升余量。
                 // 再多就会顶出容器被裁。
                 val maxUp = liftMax
@@ -295,14 +260,6 @@ fun PetHost(
                 dragY = (dragY + dy).coerceIn(-maxUp, 0f)
             },
             onDragEnd = {
-                // 横向位置写回持久化。放在这里而不是 onDrag 里，
-                // 是因为拖动过程中每一帧都写 DataStore 太重。
-                if (persistX && dragX != savedOffsetX) {
-                    val target = dragX
-                    persistScope.launch {
-                        settingsStore.update { it.copy(petOffsetX = target) }
-                    }
-                }
                 // 垂直回弹：提起来是"被拎住"的临时状态，松手就该落地。
                 // 留着悬空会让人以为它挂住了。
                 dragY = 0f

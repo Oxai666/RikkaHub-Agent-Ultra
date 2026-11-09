@@ -1,7 +1,7 @@
 package me.rerere.rikkahub.data.pet
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -129,19 +129,17 @@ fun Pet(
 
     Canvas(
         modifier = modifier
-            // 手势。回到 ff14f71f 时的结构（detectTapGestures + detect*DragGestures
-            // 两个 pointerInput），只把垂直拖动换成水平专用。
+            // 点击和拖动分成两个 pointerInput 块是必须的——
+            // 合成一个的话 detectTapGestures 和 detectDragGestures 会互相抢，
+            // 拖动永远触发不了。
             //
-            // 为什么这么做：
-            //   detectDragGestures     拦所有方向 —— 上下滑动被吃掉（死区）
-            //   awaitEachGesture 手写  能区分方向但会拖坏拖动（上一版实测：
-            //                          拖动中不跟手，松手才跳到目标点）
-            //   detectHorizontalDrag  **只认水平**，垂直事件自动 cancel 掉、
-            //                          父级的滚动接管。正是要的语义。
+            // key 里不放 anim：动画每换一次就重建手势处理器，
+            // 正在拖的时候正好换动画，拖动就断了。手势只跟 pack 有关。
             .pointerInput(pack) {
                 detectTapGestures(
                     onTap = { offset ->
                         val hit = hitRectPx(pack, latestAnim, k)
+                        // Rect.contains 只收 Offset，不收 (x, y) 两个 Float
                         if (hit.contains(offset)) {
                             onTap(offset.x < (pack.canvasW * k) / 2f)
                         }
@@ -153,15 +151,12 @@ fun Pet(
                 )
             }
             .pointerInput(pack) {
-                detectHorizontalDragGestures(
+                detectDragGestures(
                     onDragStart = { onDragStart() },
-                    onHorizontalDrag = { change, dragAmount ->
+                    onDrag = { change, drag ->
                         change.consume()
-                        onDrag(dragAmount, 0f)
+                        onDrag(drag.x, drag.y)
                     },
-                    // 参数名是 onDragEnd / onDragCancel，不是 onHorizontalDragEnd。
-                    // 只有 onHorizontalDrag 带 Horizontal 前缀——那是唯一一个
-                    // 表述"拖的是哪个轴"的回调，首尾两个是通用的。
                     onDragEnd = { onDragEnd() },
                     onDragCancel = { onDragEnd() },
                 )
