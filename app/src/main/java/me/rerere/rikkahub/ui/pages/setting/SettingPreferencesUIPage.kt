@@ -41,6 +41,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.Favourite
 import me.rerere.hugeicons.stroke.Delete02
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.rikkahub.R
@@ -134,7 +135,7 @@ fun SettingPreferencesUIPage(vm: SettingVM = koinViewModel()) {
                     item(
                         onClick = { navCtrl.navigate(me.rerere.rikkahub.Screen.SettingPet) },
                         leadingContent = {
-                            Icon(me.rerere.hugeicons.HugeIcons.Favourite, null)
+                            Icon(HugeIcons.Favourite, null)
                         },
                         supportingContent = { Text("站在输入框上的小宠物，用动作表示 agent 在干什么") },
                         headlineContent = { Text("宠物") },
