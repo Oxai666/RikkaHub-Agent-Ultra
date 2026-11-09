@@ -77,17 +77,6 @@ import kotlin.uuid.Uuid
 private const val TAG = "GenerationHandler"
 private const val MAX_TOOL_OUTPUT_CHARS = 32 * 1024
 private const val TOOL_OUTPUT_PREVIEW_CHARS = 4 * 1024
-/**
- * 流式更新的最小间隔。
- *
- * 33ms ≈ 30fps。人眼读流式文本这个频率完全够，打字机效果不会变卡，
- * 但「全量变换 + emit」的 CPU 开销降到原来的 1/6 左右。
- *
- * 原版 AgentLoop 的 preview 只传当前这一条消息，不存在这个问题；
- * 我们的 GenerationChunk.Messages 是全量接口，只能靠降频。
- */
-private const val EMIT_INTERVAL_MS = 33L
-
 private const val GENERATION_STREAM_RETRY_INITIAL_DELAY_MS = 750L
 private const val GENERATION_STREAM_RETRY_MAX_DELAY_MS = 4_000L
 
@@ -569,10 +558,6 @@ class GenerationLoop(
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
     ): Flow<GenerationChunk> = flow {
-        // 流式更新的节流状态。见 onUpdateMessages 里的注释。
-        var lastEmitAtMs = 0L
-        var hasPendingEmit = false
-
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
 
@@ -687,20 +672,6 @@ class GenerationLoop(
                         systemAddendum = systemAddendum,
                         messages = messages,
                         onUpdateMessages = {
-                            // 每个流式 chunk 都会进来一次。transforms 和 visualTransforms
-                            // 都是**全量遍历消息列表**（30 条消息就是 60 次对象处理），
-                            // 而 DeepSeek 满速能到 200 tok/s——等于每秒上万次消息对象处理。
-                            //
-                            // 这是跟原版最大的性能差距：原版 AgentLoop 的 preview 只传
-                            // 「当前这一条消息 + 新 part 起始下标」，不动整个列表。
-                            // 我们的 GenerationChunk.Messages 接口是全量的，改不动，
-                            // 那就把**发送频率**压下来。
-                            //
-                            // 33ms ≈ 30fps：人眼读流式文本这个频率完全够，
-                            // 打字机效果不会变卡，但 CPU 开销降到 1/6 左右。
-                            //
-                            // 注意 messages 本身仍然每次都更新——那是数据，不是渲染。
-                            // 只省掉「变换 + emit」这一步。
                             messages = it.transforms(
                                 transformers = outputTransformers,
                                 context = context,
@@ -708,26 +679,17 @@ class GenerationLoop(
                                 assistant = assistant,
                                 settings = settings
                             )
-                            val now = System.currentTimeMillis()
-                            if (now - lastEmitAtMs >= EMIT_INTERVAL_MS) {
-                                lastEmitAtMs = now
-                                hasPendingEmit = false
-                                emit(
-                                    GenerationChunk.Messages(
-                                        messages.visualTransforms(
-                                            transformers = outputTransformers,
-                                            context = context,
-                                            model = model,
-                                            assistant = assistant,
-                                            settings = settings
-                                        )
+                            emit(
+                                GenerationChunk.Messages(
+                                    messages.visualTransforms(
+                                        transformers = outputTransformers,
+                                        context = context,
+                                        model = model,
+                                        assistant = assistant,
+                                        settings = settings
                                     )
                                 )
-                            } else {
-                                // 这一帧被节流掉了。记一笔，流结束时补发，
-                                // 否则最后几十毫秒的内容会永远不显示。
-                                hasPendingEmit = true
-                            }
+                            )
                         },
                         transformers = inputTransformers,
                         model = model,
@@ -744,22 +706,6 @@ class GenerationLoop(
                         conversationLorebookIds = conversationLorebookIds,
                         workspaceCwd = workspaceCwd,
                     )
-                    // 流结束了。如果最后一帧被节流掉，补发一次，
-                    // 否则最后几十毫秒的内容永远不显示。
-                    if (hasPendingEmit) {
-                        hasPendingEmit = false
-                        emit(
-                            GenerationChunk.Messages(
-                                messages.visualTransforms(
-                                    transformers = outputTransformers,
-                                    context = context,
-                                    model = model,
-                                    assistant = assistant,
-                                    settings = settings
-                                )
-                            )
-                        )
-                    }
                 } catch (t: Throwable) {
                     // CancellationException is honoured verbatim — stopGeneration has its
                     // own cancelToolByUser path that marks tools cancelled. We only need
