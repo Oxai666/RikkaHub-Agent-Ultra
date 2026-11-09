@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -94,7 +95,11 @@ fun PetHost(
     // 思考云、跳起来的帧、Zzz 都会超出 contentBox，
     // 按身体高留空间的话这些全被裁掉。
     val canvasHeightDp = with(density) { (pack.canvasH * k).toDp() }
-    val canvasHeightPx = pack.canvasH * k
+    // 理论高度：pack 的画布高 × 缩放。给 onSizeChanged 还没回调的第一帧兜底。
+    val theoreticalHeightPx = pack.canvasH * k
+    // Box 的实际像素尺寸。Pet 拿它算绘制原点——
+    // DrawScope.size 在 LazyColumn item 里可能是 0（见 Pet 的参数注释）。
+    var boxSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
     // 容器宽度用屏宽近似。宠物是放在输入框那一行里的，
     // 实际可用宽度会窄一点（左右各 8dp padding），拿它算拖动边界差几个像素无所谓。
     // LocalConfiguration.current 是 @Composable 属性，必须直接写在
@@ -106,6 +111,7 @@ fun PetHost(
         modifier = modifier
             .fillMaxWidth()
             .height(canvasHeightDp)
+            .onSizeChanged { boxSize = it }
             .offset {
                 androidx.compose.ui.unit.IntOffset(
                     animatedX.roundToInt(),
@@ -119,6 +125,12 @@ fun PetHost(
             sprites = sprites,
             anim = anim,
             petSize = size,
+            // 首次布局前 boxSize 还是 Zero，用理论值兜底——
+            // 不兜的话第一帧会按高度 0 画，闪一下才恢复。
+            canvasWidthPx = boxSize.width.toFloat()
+                .takeIf { it > 0f } ?: containerWidthPx,
+            canvasHeightPx = boxSize.height.toFloat()
+                .takeIf { it > 0f } ?: theoreticalHeightPx,
             // **必须 fillMaxSize**。Canvas 内部是 Spacer + drawBehind，
             // 只给 fillMaxWidth 的话高度约束是无界的，它会 collapse 到 0——
             // containerSize.height 变成 0，originY 算出来是负数，
@@ -159,7 +171,7 @@ fun PetHost(
                 // 之前给 0.5 倍画布高，提起来头就被切掉——
                 // 用户看到的是"提起来头没了"。
                 // 0.12 倍是能看出"被拎起来"又不裁到身体的量。
-                val maxUp = canvasHeightPx * 0.12f
+                val maxUp = theoreticalHeightPx * 0.12f
                 dragX = (dragX + dx).coerceIn(-maxX, maxX)
                 dragY = (dragY + dy).coerceIn(-maxUp, 0f)
             },

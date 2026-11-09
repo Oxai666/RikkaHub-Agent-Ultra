@@ -18,7 +18,6 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import kotlin.math.roundToInt
@@ -57,6 +56,19 @@ fun Pet(
     // 会把它遮蔽掉，`size.width` 就变成在 PetSize 上找 width——找不到。
     // 那两行 Unresolved reference 'width' / 'height' 就是这么来的。
     petSize: PetSize,
+    /**
+     * 绘制区域的确切像素尺寸，由调用方给。
+     *
+     * **不要用 DrawScope.size 算原点**——实测在 LazyColumn 的 item 里
+     * 它可能是 0（垂直约束无界时 fillMaxSize 会塌成 0），
+     * then originY = 0 - baseline*k 变成负数，整幅画布被推到容器上方，
+     * 只剩底部一条边露出来。
+     *
+     * 用户看到的是「Deepy 变成一条蓝色横条」「鲸娘变成 4 个压扁的头」，
+     * 而拖动时 offset 改变又让它短暂露出来，看起来像「拖起来就正常」。
+     */
+    canvasWidthPx: Float,
+    canvasHeightPx: Float,
     modifier: Modifier = Modifier,
     onTap: (leftHalf: Boolean) -> Unit = {},
     onLongPress: () -> Unit = {},
@@ -72,7 +84,6 @@ fun Pet(
     // 画布尺寸（物理像素）：包的画布 × k
     val drawnW = (pack.canvasW * k).roundToInt()
 
-    var containerSize by remember { mutableStateOf(IntSize.Zero) }
 
     // **同步**加载，不走 LaunchedEffect。
     //
@@ -124,7 +135,6 @@ fun Pet(
 
     Canvas(
         modifier = modifier
-            .onSizeChanged { containerSize = it }
             // 点击和拖动分成两个 pointerInput 块是必须的——
             // 合成一个的话 detectTapGestures 和 detectDragGestures 会互相抢，
             // 拖动永远触发不了。
@@ -134,14 +144,14 @@ fun Pet(
             .pointerInput(pack) {
                 detectTapGestures(
                     onTap = { offset ->
-                        val hit = hitRectPx(pack, latestAnim, k, originFor(containerSize, pack, k))
+                        val hit = hitRectPx(pack, latestAnim, k, originFor(canvasWidthPx, canvasHeightPx, pack, k))
                         // Rect.contains 只收 Offset，不收 (x, y) 两个 Float
                         if (hit.contains(offset)) {
-                            onTap(offset.x < containerSize.width / 2f)
+                            onTap(offset.x < canvasWidthPx / 2f)
                         }
                     },
                     onLongPress = { offset ->
-                        val hit = hitRectPx(pack, latestAnim, k, originFor(containerSize, pack, k))
+                        val hit = hitRectPx(pack, latestAnim, k, originFor(canvasWidthPx, canvasHeightPx, pack, k))
                         if (hit.contains(offset)) onLongPress()
                     },
                 )
@@ -162,13 +172,10 @@ fun Pet(
         val img = image ?: return@Canvas
 
         // 画布原点：脚线（pack.baseline）贴在容器底部，水平居中。
-        // 用 DrawScope 自己的 size 而不是 onSizeChanged 记的那个——
-        // 两者理论上一致，但 this.size 是当前这一帧的实测值，不会晚一层。
-        // 显式写 this. 是因为 draw lambda 的接收者是 DrawScope，
-        // 不写的话万一外层有同名变量又会遮蔽。
+        // 尺寸用调用方传进来的，不读 DrawScope.size——原因见参数注释。
         val drawnW = (pack.canvasW * k).roundToInt().toFloat()
-        val originX = ((this.size.width - drawnW) / 2f).roundToInt().toFloat()
-        val originY = this.size.height - pack.baseline * k
+        val originX = ((canvasWidthPx - drawnW) / 2f).roundToInt().toFloat()
+        val originY = canvasHeightPx - pack.baseline * k
 
         val src = sprites.srcRect(anim, cell, s)
         val box = anim.box
@@ -201,14 +208,15 @@ fun Pet(
  * 否则会出现「看起来在这、点上去没反应」。
  */
 private fun originFor(
-    containerSize: IntSize,
+    canvasWidthPx: Float,
+    canvasHeightPx: Float,
     pack: PetPack,
     k: Float,
 ): Pair<Float, Float> {
     val drawnW = (pack.canvasW * k).roundToInt()
     return Pair(
-        ((containerSize.width - drawnW) / 2f).roundToInt().toFloat(),
-        containerSize.height - pack.baseline * k,
+        ((canvasWidthPx - drawnW) / 2f).roundToInt().toFloat(),
+        canvasHeightPx - pack.baseline * k,
     )
 }
 
