@@ -235,6 +235,20 @@ class SettingsStore(
         // 赞助提醒
         val SPONSOR_ALERT_DISMISSED_AT = intPreferencesKey("sponsor_alert_dismissed_at")
 
+        // 宠物。val petPackId: String? 是个 nullable，DataStore 不能存 null，
+        // 所以用空串表示「不显示」，读的时候再转回 null。
+        val PET_PACK_ID = stringPreferencesKey("pet_pack_id")
+        val PET_SIZE = stringPreferencesKey("pet_size")
+
+        // 目标续跑。这两个之前也没持久化——加开关那次只改了内存，
+        // persistSettings 的白名单没跟上，重启直接恢复默认。
+        val ENABLE_GOAL_AUTO_CONTINUATION = booleanPreferencesKey("enable_goal_auto_continuation")
+        val GOAL_CONTINUATION_LIMIT = intPreferencesKey("goal_continuation_limit")
+
+        // 技能自动启用相关的两个内部标记
+        val AUTO_ENABLED_DEFAULT_SKILLS = stringPreferencesKey("auto_enabled_default_skills")
+        val AGENT_CORE_SEED_DONE = booleanPreferencesKey("agent_core_seed_done")
+
         // Uses the same DataStore singleton without starting settings flows or requiring Koin.
         internal suspend fun restoreBeforeInitialization(context: Context, settings: Settings) {
             require(!settings.init) { "Cannot restore uninitialized settings" }
@@ -328,6 +342,23 @@ class SettingsStore(
                 preferences[BACKUP_REMINDER_CONFIG] = JsonInstant.encodeToString(settings.backupReminderConfig)
                 preferences[LAUNCH_COUNT] = settings.launchCount
                 preferences[SPONSOR_ALERT_DISMISSED_AT] = settings.sponsorAlertDismissedAt
+
+                // 宠物。persistSettings 是逐字段手写的白名单，
+                // 新加的 Settings 字段必须在这里显式写一次，否则它永远存不下来——
+                // 之前 petPackId 就是这样：改了内存、落了空。
+                val petId = settings.petPackId
+                if (petId.isNullOrBlank()) {
+                    preferences.remove(PET_PACK_ID)
+                } else {
+                    preferences[PET_PACK_ID] = petId
+                }
+                preferences[PET_SIZE] = settings.petSize
+
+                preferences[ENABLE_GOAL_AUTO_CONTINUATION] = settings.enableGoalAutoContinuation
+                preferences[GOAL_CONTINUATION_LIMIT] = settings.goalContinuationLimit.coerceIn(1, 50)
+                preferences[AUTO_ENABLED_DEFAULT_SKILLS] =
+                    JsonInstant.encodeToString(settings.autoEnabledDefaultSkills)
+                preferences[AGENT_CORE_SEED_DONE] = settings.agentCoreSeedDone
             }
         }
     }
@@ -520,6 +551,21 @@ class SettingsStore(
                 } ?: BackupReminderConfig(),
                 launchCount = preferences[LAUNCH_COUNT] ?: 0,
                 sponsorAlertDismissedAt = preferences[SPONSOR_ALERT_DISMISSED_AT] ?: 0,
+                petPackId = preferences[PET_PACK_ID]?.takeIf { it.isNotBlank() },
+                petSize = preferences[PET_SIZE] ?: "medium",
+                enableGoalAutoContinuation =
+                    preferences[ENABLE_GOAL_AUTO_CONTINUATION] == true,
+                goalContinuationLimit =
+                    (preferences[GOAL_CONTINUATION_LIMIT] ?: 5).coerceIn(1, 50),
+                autoEnabledDefaultSkills = preferences[AUTO_ENABLED_DEFAULT_SKILLS]?.let { raw ->
+                    runCatching {
+                        JsonInstant.decodeFromString<Set<String>>(raw)
+                    }.getOrElse {
+                        Log.w(TAG, "Failed to decode autoEnabledDefaultSkills", it)
+                        emptySet()
+                    }
+                } ?: emptySet(),
+                agentCoreSeedDone = preferences[AGENT_CORE_SEED_DONE] == true,
             )
         }
         .map {
