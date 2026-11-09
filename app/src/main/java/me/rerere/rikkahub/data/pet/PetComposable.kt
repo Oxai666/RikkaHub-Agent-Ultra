@@ -159,8 +159,11 @@ fun Pet(
                         change.consume()
                         onDrag(dragAmount, 0f)
                     },
-                    onHorizontalDragEnd = { onDragEnd() },
-                    onHorizontalDragCancel = { onDragEnd() },
+                    // 参数名是 onDragEnd / onDragCancel，不是 onHorizontalDragEnd。
+                    // 只有 onHorizontalDrag 带 Horizontal 前缀——那是唯一一个
+                    // 表述"拖的是哪个轴"的回调，首尾两个是通用的。
+                    onDragEnd = { onDragEnd() },
+                    onDragCancel = { onDragEnd() },
                 )
             },
     ) {
