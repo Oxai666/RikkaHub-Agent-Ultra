@@ -150,6 +150,10 @@ fun Pet(
                     val startedAt = System.currentTimeMillis()
                     var last = down.position
                     var dragging = false
+                    // 方向判定：第一次超过阈值时看是横着还是竖着。
+                    // 竖着为主 → 这是想滚列表，直接把事件让出去。
+                    var decided = false
+                    var isVertical = false
 
                     while (true) {
                         val event = awaitPointerEvent()
@@ -157,11 +161,22 @@ fun Pet(
                         if (!change.pressed) break
                         val delta = change.position - last
                         last = change.position
-                        // 超过 12px 才算拖动，跟系统 touch slop 一个量级
-                        if (!dragging && (change.position - down.position).getDistance() > 12f) {
-                            dragging = true
-                            onDragStart()
+
+                        if (!decided) {
+                            val total = change.position - down.position
+                            if (total.getDistance() > 12f) {
+                                decided = true
+                                // 谁的位移大就算谁的方向
+                                isVertical = kotlin.math.abs(total.y) > kotlin.math.abs(total.x)
+                                if (isVertical) {
+                                    // 竖着滑 = 想滚消息列表，这里立刻撒手
+                                    return@awaitEachGesture
+                                }
+                                dragging = true
+                                onDragStart()
+                            }
                         }
+
                         if (dragging) {
                             onDrag(delta.x, delta.y)
                             change.consume()

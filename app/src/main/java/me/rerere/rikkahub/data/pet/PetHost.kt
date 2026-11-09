@@ -205,6 +205,11 @@ fun PetHost(
     // Composable 函数体里，不能塞进 with(density) 块——提出来读一次。
     val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
     val containerWidthPx = with(density) { screenWidthDp.dp.toPx() }
+    // 外层 Box 的实际宽度。screenWidth 是整块屏幕，而 PetHost 放在
+    // ChatInput 的 Column 里、左右各有 8dp padding——拿屏宽算拖动边界会偏大
+    // 16dp，拖到最左/最右时画布已经出界但 dragX 还在合法范围内，松手一 coerce
+    // 就是"飞过去"的感觉。
+    var hostWidthPx by remember(packId) { mutableStateOf(0f) }
 
     // Composable 只能有一个根节点，调试文字 + 宠物框要包进 Column
     androidx.compose.foundation.layout.Column(
@@ -218,7 +223,8 @@ fun PetHost(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(containerHeightDp),
+            .height(containerHeightDp)
+            .onSizeChanged { hostWidthPx = it.width.toFloat() },
         contentAlignment = Alignment.TopCenter,
     ) {
     // 内层：尺寸**正好等于画布**，画布原点就是 (0,0)。
@@ -271,8 +277,17 @@ fun PetHost(
                 //
                 // 横向余量 = (容器宽 - 画布宽) / 2，正好是居中位置左右各能挪多远。
                 // 用容器宽一半的话，宠物会被拖到一半还在屏幕外。
+                // 横向边界：画布在容器里居中，左右各能挪 (容器宽 - 画布宽)/2。
+                // 但宠物的外层 Box 是 fillMaxWidth，而内层画布只有 canvasW*k 宽，
+                // 所以真正可挪的距离是「外层宽 - 画布宽」的一半。
+                //
+                // 之前用「屏宽 - 画布宽」，屏宽比外层宽（左右各有 8dp padding），
+                // 算出来的余量偏大——拖到最左边时画布有一截已经出界，
+                // 但 dragX 还在合法范围内，松手后 coerce 回落，看起来就是"飞过去"。
                 val theoreticalWidthPx = pack.canvasW * k
-                val maxX = ((containerWidthPx - theoreticalWidthPx) / 2f).coerceAtLeast(0f)
+                // 优先用实测宽度，没测到再退回屏宽
+                val effectiveWidth = if (hostWidthPx > 0f) hostWidthPx else containerWidthPx
+                val maxX = ((effectiveWidth - theoreticalWidthPx) / 2f).coerceAtLeast(0f)
                 // 纵向能提的最大高度 = 容器给画布留的抬升余量。
                 // 再多就会顶出容器被裁。
                 val maxUp = liftMax
