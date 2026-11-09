@@ -23,12 +23,25 @@ object TermuxDefaults {
     const val MAX_TURN_BUDGET_MS     = 60L * 60L * 1_000L  // 60 min
 
     // --- Per-turn tool-call step cap (app-wide) --------------------------------------------
-    // Default is the 32 that used to be GenerationHandler's hardcoded maxSteps. The ceiling is
-    // the backstop: the wall-clock turn budget is the primary limit, so this only has to stop a
-    // runaway loop from iterating without bound.
-    const val DEFAULT_MAX_TOOL_STEPS = 32
-    const val MIN_MAX_TOOL_STEPS     =  1
-    const val MAX_MAX_TOOL_STEPS     = 500
+    /**
+     * 单轮允许的工具调用步数。
+     *
+     * **不设上限**。原来默认 32、硬顶 500，长任务（解包 → 改 smali → 回编 → 验链
+     * 这类）跑着跑着就撞上，然后静默结束——表现跟「断连」一模一样。
+     *
+     * 现在默认和上限都放到 Int.MAX_VALUE，也就是实际意义上的不限制。
+     * 真正防止失控的是另外两层：
+     *   · MAX_LOOP_GUARD_TRIPS_PER_TURN：同一个工具反复被拦就停
+     *   · 用户随时可以手动停止
+     *
+     * 设置页那个输入框仍然可以调小——想给自己留个保险的用户可以设成 20、50。
+     */
+    // 用 999999 而不是 Int.MAX_VALUE：设置页那个输入框 onValueChange 里
+    // 有 .take(6)，超过 6 位的数字会被截断——Int.MAX_VALUE 会显示成 214748，
+    // 看起来像个 bug。999999 步在任何实际场景下都等于无限。
+    const val DEFAULT_MAX_TOOL_STEPS = 999_999
+    const val MIN_MAX_TOOL_STEPS     =       1
+    const val MAX_MAX_TOOL_STEPS     = 999_999
 
     // --- Verify smoke-test timeout ---------------------------------------------------------
     const val DEFAULT_VERIFY_TIMEOUT_MS =  8_000L   //  8 s
