@@ -78,7 +78,17 @@ class ToolApprovalPreferences(private val context: Context) {
     suspend fun currentYolo(): Boolean = globalYoloFlow.first()
 
     suspend fun setYolo(enabled: Boolean) {
-        store.edit { it[K_GLOBAL_YOLO] = enabled }
+        store.edit {
+            it[K_GLOBAL_YOLO] = enabled
+            // 互斥：开 YOLO 就把无审核模式关掉。
+            //
+            // 两个都开着在功能上没有冲突（无审核模式的判断在前，YOLO 会被短路），
+            // 但状态是骗人的——用户看到 YOLO 显示「已开启」，实际它一点作用都没有，
+            // 因为 HARDLINE 和越界预拒已经被无审核模式关掉了。
+            // 等哪天关掉无审核，行为又会突然变回来。与其留着这种「开关在位但没接线」
+            // 的状态，不如开一个就关另一个，让界面永远反映真实生效的那个。
+            if (enabled) it[K_DANGEROUS_ENABLED] = false
+        }
     }
 
     suspend fun grantAlways(toolName: String) {
@@ -149,8 +159,17 @@ class ToolApprovalPreferences(private val context: Context) {
     suspend fun setDangerousMode(enabled: Boolean) {
         store.edit {
             it[K_DANGEROUS_ENABLED] = enabled
-            // 开启即视为解锁过，免得下次进来又要连点五下
-            if (enabled) it[K_DANGEROUS_UNLOCKED] = true
+            if (enabled) {
+                // 开启即视为解锁过，免得下次进来又要连点五下
+                it[K_DANGEROUS_UNLOCKED] = true
+                // 互斥：开无审核模式就关掉 YOLO。
+                //
+                // 理由是同一个——无审核模式已经把 YOLO 能做的事全做了还多关两道闸，
+                // YOLO 留着只会让界面显示一个「已开启但不起作用」的开关。
+                // 用户从无审核退回来时看到 YOLO 是关的，就知道防护恢复原样了，
+                // 不用再猜「我现在到底在哪个档位」。
+                it[K_GLOBAL_YOLO] = false
+            }
         }
     }
 }

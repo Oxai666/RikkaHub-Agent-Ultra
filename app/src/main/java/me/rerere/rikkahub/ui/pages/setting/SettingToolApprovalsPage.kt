@@ -149,6 +149,16 @@ fun SettingToolApprovalsPage() {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (yolo) {
+                            // 互斥关系要在开之前说清楚，不能等用户开完发现另一个被关了
+                            Text(
+                                text = "开启后会自动关闭「一键审批」——" +
+                                    "无审核模式已经包含它，而且管得更多，两个同时开着" +
+                                    "会让界面显示一个不起作用的开关。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
                         Text(
                             text = "把下面这句话完整抄一遍：",
                             style = MaterialTheme.typography.labelMedium,
