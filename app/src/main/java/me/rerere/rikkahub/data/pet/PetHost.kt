@@ -86,6 +86,9 @@ fun PetHost(
 
     // 连点计数。1.1 秒内点满 3 下 → 挠痒痒。
     // 阈值取 1.1 秒是原版的数字：手机上目标很小，间隔再长一点连点容易点偏。
+    // ⚠ 临时调试：Pet 在 draw 里报上来的实际数值
+    var debugLine by remember(packId) { mutableStateOf("") }
+
     var tapCount by remember { mutableIntStateOf(0) }
     var lastTapAt by remember { mutableLongStateOf(0L) }
     val animatedX by animateFloatAsState(dragX, label = "petDragX")
