@@ -243,9 +243,6 @@ fun ChatInput(
             // 两者互不占位。宠物默认水平居中，跟左下角的按钮不打架。
             Box(modifier = Modifier.fillMaxWidth()) {
                 val customPetPath = settings.customPetPath
-                val petSize = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize)
-                // 素材包/自定义图跟女仆**不互斥**——她可以跟任意一只并排站着。
-                // 所以这里是一行，不是单选。每只各分一半宽，各自主居中。
                 // 素材包/自定义图跟哦鲸鲸**不互斥**，但也不能用 Row 并排——
                 // 并排就等于各分一半宽，两只都拖不过中线。
                 //
