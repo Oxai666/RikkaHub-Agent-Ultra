@@ -20,14 +20,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -96,6 +96,13 @@ fun MaidPetHost(
             context.assets.open("pets/maid/body.png").use { BitmapFactory.decodeStream(it) }
         }.getOrNull()
     }
+    // 气泡也是从原图抠的——那个白色椭圆加两个尾巴圆点，连同深蓝描边一起。
+    // 原来图里的「哦鲸鲸...」被抹掉了，位置留给余额。
+    val bubbleBitmap = remember {
+        runCatching {
+            context.assets.open("pets/maid/bubble.png").use { BitmapFactory.decodeStream(it) }
+        }.getOrNull()
+    }
     if (bitmap == null) return
 
     val aspect = bitmap.width.toFloat() / bitmap.height.toFloat()
@@ -156,50 +163,79 @@ fun MaidPetHost(
         // 气泡。**不用 Popup**——Popup 是独立窗口，会把输入框的圆角和模糊背景切开，
         // 而且定位要自己算全局坐标。直接在 Box 里 offset 飘上去，
         // 它跟着宠物走，宠物在哪气泡就在哪。
+        //
+        // 形状是原图那个白色椭圆 + 两个尾巴圆点，单独抠出来做的贴图。
+        // 没有用 Surface 画圆角矩形——那样出来是 Material 卡片，
+        // 跟立绘不是一套语言。文字直接压在抠图留出的空白区上。
+        val bubbleWidth = 184.dp
+        val bubbleHeight = bubbleWidth * (445f / 512f)
         AnimatedVisibility(
             visible = showBalance,
-            enter = fadeIn(tween(160)) + scaleIn(tween(160), initialScale = 0.85f),
-            exit = fadeOut(tween(140)) + scaleOut(tween(140), targetScale = 0.92f),
-            // 气泡挂在宠物头顶正上方。用固定偏移而不是算容器高——
-            // 容器高是 px 算出来的 Dp，来回换算容易差几个像素，
-            // 而这里只要"在头顶上方"这一个视觉关系。
+            enter = fadeIn(tween(150)) + scaleIn(
+                animationSpec = tween(180),
+                initialScale = 0.78f,
+                // 从小长大，起点在尾巴那侧（右下方），看着是"从嘴里冒出来"
+                transformOrigin = TransformOrigin(0.42f, 0.86f),
+            ),
+            exit = fadeOut(tween(130)) + scaleOut(
+                animationSpec = tween(130),
+                targetScale = 0.92f,
+                transformOrigin = TransformOrigin(0.42f, 0.86f),
+            ),
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .offset(y = if (size == PetSize.LARGE) (-88).dp else (-74).dp),
+                .offset(y = -(bubbleHeight - 14.dp)),
         ) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = 3.dp,
-                shadowElevation = 6.dp,
+            Box(
+                modifier = Modifier
+                    .width(bubbleWidth)
+                    .height(bubbleHeight),
             ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = modelLabel ?: "当前模型",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface,
+                if (bubbleBitmap != null) {
+                    Image(
+                        bitmap = bubbleBitmap.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.FillBounds,
+                        modifier = Modifier.fillMaxSize(),
                     )
-                    if (providerSetting != null &&
-                        providerSetting.balanceOption.enabled &&
-                        providerSetting is ProviderSetting.OpenAI
+                }
+                // 文字区：气泡下方约 22% 是尾巴和圆点，内容要避开。
+                // 左右留白按原图文字的位置量出来的。
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 30.dp, end = 34.dp, top = 34.dp, bottom = 46.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        ProviderBalanceText(
-                            providerSetting = providerSetting,
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    } else {
                         Text(
-                            text = "这个服务商查不了余额",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = modelLabel ?: "当前模型",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            // 跟气泡描边同一个深蓝，字压在白色上才不出戏
+                            color = Color(0xFF1E2F5B),
                         )
+                        if (providerSetting != null &&
+                            providerSetting.balanceOption.enabled &&
+                            providerSetting is ProviderSetting.OpenAI
+                        ) {
+                            ProviderBalanceText(
+                                providerSetting = providerSetting,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color(0xFF1E2F5B),
+                            )
+                        } else {
+                            Text(
+                                text = "这个服务商查不了余额",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF5A6A8C),
+                            )
+                        }
                     }
                 }
             }
@@ -225,10 +261,13 @@ fun MaidPetHost(
                             pressed = true
                             tryAwaitRelease()
                             pressed = false
-                            // 抬手就吐气泡；拖动/取消也一样，
-                            // 因为这里没有拖动手势，release 只有一种含义
-                            showBalance = true
-                            balanceToken++
+                            // 气泡已经在的时候，点它只做 Q 弹——不重弹、不刷新余额。
+                            // 用户要的是"看着余额的时候戳它，它还是那个反应"，
+                            // 而不是每戳一下数字就跳一次。
+                            if (!showBalance) {
+                                showBalance = true
+                                balanceToken++
+                            }
                         },
                     )
                 },
