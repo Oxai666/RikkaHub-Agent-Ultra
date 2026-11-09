@@ -260,41 +260,33 @@ fun SettingPetPage() {
                                 .padding(vertical = 8.dp),
                             contentAlignment = Alignment.BottomCenter,
                         ) {
+                            // 跟聊天页一样是叠着的，不是并排。
+                            // 并排就各占一半宽，两只都拖不过中线。
                             val customPath = settings.customPetPath
                             val hasPrimary = customPath != null || settings.petPackId != null
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.Bottom,
-                            ) {
-                                if (hasPrimary) {
-                                    Box(modifier = Modifier.weight(1f)) {
-                                        if (customPath != null) {
-                                            me.rerere.rikkahub.data.pet.ImagePetHost(
-                                                imagePath = customPath,
-                                                size = PetSize.fromName(settings.petSize),
-                                                modifier = Modifier.fillMaxWidth(),
-                                            )
-                                        } else {
-                                            PetHost(
-                                                packId = settings.petPackId,
-                                                size = PetSize.fromName(settings.petSize),
-                                                mood = PetMood(running = false),
-                                                modifier = Modifier.fillMaxWidth(),
-                                            )
-                                        }
-                                    }
+                            if (hasPrimary) {
+                                if (customPath != null) {
+                                    me.rerere.rikkahub.data.pet.ImagePetHost(
+                                        imagePath = customPath,
+                                        size = PetSize.fromName(settings.petSize),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                } else {
+                                    PetHost(
+                                        packId = settings.petPackId,
+                                        size = PetSize.fromName(settings.petSize),
+                                        mood = PetMood(running = false),
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
                                 }
-                                if (settings.maidPetEnabled) {
-                                    Box(modifier = Modifier.weight(1f)) {
-                                        me.rerere.rikkahub.data.pet.MaidPetHost(
-                                            size = PetSize.fromName(settings.petSize),
-                                            providerSetting = null,
-                                            modelLabel = "预览",
-                                            modifier = Modifier.fillMaxWidth(),
-                                        )
-                                    }
-                                }
+                            }
+                            if (settings.maidPetEnabled) {
+                                me.rerere.rikkahub.data.pet.MaidPetHost(
+                                    size = PetSize.fromName(settings.petSize),
+                                    providerSetting = null,
+                                    modelLabel = "预览",
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
                             }
                         }
                     }

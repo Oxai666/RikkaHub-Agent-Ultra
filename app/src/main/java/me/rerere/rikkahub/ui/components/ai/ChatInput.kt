@@ -246,44 +246,41 @@ fun ChatInput(
                 val petSize = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize)
                 // 素材包/自定义图跟女仆**不互斥**——她可以跟任意一只并排站着。
                 // 所以这里是一行，不是单选。每只各分一半宽，各自主居中。
+                // 素材包/自定义图跟哦鲸鲸**不互斥**，但也不能用 Row 并排——
+                // 并排就等于各分一半宽，两只都拖不过中线。
+                //
+                // 所以是叠在同一层里，各自占满全宽、各有自己的 dragX。
+                // 默认都在中间会重叠，哦鲸鲸的初始位置由 maidPetOffsetX 决定，
+                // 用户把它拖开一次就记住了。
+                val petSize = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize)
                 val hasPrimary = customPetPath != null || settings.petPackId != null
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.Bottom,
-                ) {
-                    if (hasPrimary) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            if (customPetPath != null) {
-                                me.rerere.rikkahub.data.pet.ImagePetHost(
-                                    imagePath = customPetPath,
-                                    size = petSize,
-                                )
-                            } else {
-                                me.rerere.rikkahub.data.pet.PetHost(
-                                    packId = settings.petPackId,
-                                    size = petSize,
-                                    // 不传 mood → 订阅 PetSignal 的全局状态。
-                                    // 跑/完成/等确认/睡觉四个信号由 ChatPage 和各处上报。
-                                )
-                            }
-                        }
-                    }
-                    if (settings.maidPetEnabled) {
-                        // 鲸鱼娘女仆：点一下吐气泡查余额。
-                        // provider 从「这个助手当前用的模型」反查——
-                        // 用户切了模型，气泡里显示的就该是那个模型的钱。
-                        val currentModel = settings.findModelById(
-                            assistant.chatModelId ?: settings.chatModelId
+                if (hasPrimary) {
+                    if (customPetPath != null) {
+                        me.rerere.rikkahub.data.pet.ImagePetHost(
+                            imagePath = customPetPath,
+                            size = petSize,
                         )
-                        Box(modifier = Modifier.weight(1f)) {
-                            me.rerere.rikkahub.data.pet.MaidPetHost(
-                                size = petSize,
-                                providerSetting = currentModel?.findProvider(settings.providers),
-                                modelLabel = currentModel?.displayName?.takeIf { it.isNotBlank() },
-                            )
-                        }
+                    } else {
+                        me.rerere.rikkahub.data.pet.PetHost(
+                            packId = settings.petPackId,
+                            size = petSize,
+                            // 不传 mood → 订阅 PetSignal 的全局状态。
+                            // 跑/完成/等确认/睡觉四个信号由 ChatPage 和各处上报。
+                        )
                     }
+                }
+                if (settings.maidPetEnabled) {
+                    // 哦鲸鲸：点一下吐气泡查余额。
+                    // provider 从「这个助手当前用的模型」反查——
+                    // 用户切了模型，气泡里显示的就该是那个模型的钱。
+                    val currentModel = settings.findModelById(
+                        assistant.chatModelId ?: settings.chatModelId
+                    )
+                    me.rerere.rikkahub.data.pet.MaidPetHost(
+                        size = petSize,
+                        providerSetting = currentModel?.findProvider(settings.providers),
+                        modelLabel = currentModel?.displayName?.takeIf { it.isNotBlank() },
+                    )
                 }
                 // 续写：上一轮被打断（喊停 / 没钱 / 断联）时出现。
                 // 点它不会发一条新消息，而是让模型接着上一条 assistant 往下写。

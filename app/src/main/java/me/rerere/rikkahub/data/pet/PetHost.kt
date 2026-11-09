@@ -169,16 +169,40 @@ fun PetHost(
     // 阈值取 1.1 秒是原版的数字：手机上目标很小，间隔再长一点连点容易点偏。
     var tapCount by remember { mutableIntStateOf(0) }
     var lastTapAt by remember { mutableLongStateOf(0L) }
-    val animatedX by animateFloatAsState(dragX, label = "petDragX")
+
+    // 手是不是按在宠物上拖。
+    //
+    // 这个状态决定动画用哪条曲线，是「拖动不跟手」那个 bug 的关键：
+    // 原来 dragX / dragY 都固定用 spring(stiffness = Low)，
+    // StiffnessLow 是 200——弹簧慢到追不上手指。拖动过程中
+    // 目标值每帧都在变，弹簧永远落后一大截，看起来就是
+    // 「宠物悬在原地不跟手，松手才一下飞过去」。
+    var dragging by remember { mutableStateOf(false) }
+
+    // 拖动中：高刚度直接贴住手指（damping 给满，不要过冲）
+    // 松手后：回到各自原来的手感（X 平滑归位，Y 弹性落地）
+    val followSpec = androidx.compose.animation.core.spring<Float>(
+        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+        stiffness = 10_000f,
+    )
+    val animatedX by animateFloatAsState(
+        targetValue = dragX,
+        animationSpec = if (dragging) followSpec else androidx.compose.animation.core.spring(),
+        label = "petDragX",
+    )
     // 松手落地用带一点回弹的弹簧，不是瞬间归位。
     // mediaBouncy + 低刚度 = 落下去的时候有一点下沉回弹，
     // 比 LinearEasing 直接滑回去更像"掉下来"。
     val animatedY by animateFloatAsState(
         targetValue = dragY,
-        animationSpec = androidx.compose.animation.core.spring(
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
-            stiffness = androidx.compose.animation.core.Spring.StiffnessLow,
-        ),
+        animationSpec = if (dragging) {
+            followSpec
+        } else {
+            androidx.compose.animation.core.spring(
+                dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                stiffness = androidx.compose.animation.core.Spring.StiffnessLow,
+            )
+        },
         label = "petDragY",
     )
 
@@ -270,6 +294,7 @@ fun PetHost(
                 // 长按菜单留给第二期（换宠物 / 藏起来 1 小时 / 设置）
             },
             onDragStart = {
+                dragging = true
                 // 被拎起来：播 drag 反应。
                 // 原版这个动作是循环的，拎着的时候一直保持被抓住的姿势。
                 playReaction(pack.reaction("drag"))
@@ -290,6 +315,7 @@ fun PetHost(
                 dragY = (dragY + dy).coerceIn(-maxUp, 0f)
             },
             onDragEnd = {
+                dragging = false
                 // 横向位置写回持久化。放在这里而不是 onDrag 里，
                 // 是因为拖动过程中每一帧都写 DataStore 太重。
                 if (persistX && dragX != savedOffsetX) {

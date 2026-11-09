@@ -242,6 +242,7 @@ class SettingsStore(
         val PET_OFFSET_X = floatPreferencesKey("pet_offset_x")
         val CUSTOM_PET_PATH = stringPreferencesKey("custom_pet_path")
         val MAID_PET_ENABLED = booleanPreferencesKey("maid_pet_enabled")
+        val MAID_PET_OFFSET_X = floatPreferencesKey("maid_pet_offset_x")
 
         // 目标续跑。这两个之前也没持久化——加开关那次只改了内存，
         // persistSettings 的白名单没跟上，重启直接恢复默认。
@@ -360,6 +361,7 @@ class SettingsStore(
                 settings.customPetPath?.let { preferences[CUSTOM_PET_PATH] = it }
                     ?: preferences.remove(CUSTOM_PET_PATH)
                 preferences[MAID_PET_ENABLED] = settings.maidPetEnabled
+                preferences[MAID_PET_OFFSET_X] = settings.maidPetOffsetX
 
                 preferences[ENABLE_GOAL_AUTO_CONTINUATION] = settings.enableGoalAutoContinuation
                 preferences[GOAL_CONTINUATION_LIMIT] = settings.goalContinuationLimit.coerceIn(1, 50)
@@ -564,6 +566,7 @@ class SettingsStore(
                 customPetPath = preferences[CUSTOM_PET_PATH]?.takeIf { it.isNotBlank() },
                 // 老版本把女仆当素材包存进 petPackId（值 "maid-deepseek"）。
                 // 现在它是独立开关，读到老值就顺手迁过来，不然升级后那只会消失。
+                maidPetOffsetX = preferences[MAID_PET_OFFSET_X] ?: 0f,
                 maidPetEnabled = preferences[MAID_PET_ENABLED]
                     ?: (preferences[PET_PACK_ID] == "maid-deepseek"),
                 enableGoalAutoContinuation =
@@ -994,6 +997,9 @@ data class Settings(
      * 她是独立的、带自己交互（点一下查余额），不是素材包的一种。
      */
     val maidPetEnabled: Boolean = false,
+
+    /** 哦鲸鲸的横向位置（像素），拖到哪记到哪。0 = 居中。 */
+    val maidPetOffsetX: Float = 0f,
 
     /**
      * 用户自己那张图当宠物时，图片在 App 私有目录里的绝对路径。
