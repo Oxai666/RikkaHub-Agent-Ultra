@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.data.pet
 
-import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -14,9 +13,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -105,12 +105,10 @@ fun Pet(
     // 命中区就一直按旧动画算。用 rememberUpdatedState 拿到最新值。
     val latestAnim by rememberUpdatedState(anim)
 
-    val paint = remember {
-        Paint().apply {
-            isAntiAlias = false          // 像素画不插值
-            isFilterBitmap = false
-        }
-    }
+    // 解码好的位图转成 Compose 的 ImageBitmap。
+    // **必须在 Canvas 外面做**：Canvas 的 draw lambda 是 DrawScope.() -> Unit，
+    // 不是 @Composable，里面不能调 remember。
+    val image = remember(sheet) { sheet?.bitmap?.asImageBitmap() }
 
     Canvas(
         modifier = modifier
@@ -149,34 +147,38 @@ fun Pet(
             },
     ) {
         val s = sheet ?: return@Canvas
+        val img = image ?: return@Canvas
+
         // 画布原点：脚线（pack.baseline）贴在容器底部，水平居中。
-        //
-        // 之前写的是 `containerSize.height - drawnH`——那是让**画布底边**贴容器底。
-        // 但脚线在 baseline=48，画布高 52，中间差 4 个逻辑像素，
-        // 所以宠物看起来"悬在输入框上方一段距离"。必须按 baseline 算。
-        val originX = ((containerSize.width - drawnW) / 2f).roundToInt().toFloat()
-        val originY = (containerSize.height - pack.baseline * k).toFloat()
+        // 用 DrawScope 自己的 size 而不是 onSizeChanged 记的那个——
+        // 两者理论上一致，但 size 是当前这一帧的实测值，不会晚一层。
+        val drawnW = (pack.canvasW * k).roundToInt().toFloat()
+        val originX = ((size.width - drawnW) / 2f).roundToInt().toFloat()
+        val originY = size.height - pack.baseline * k
 
         val src = sprites.srcRect(anim, cell, s)
-        // 帧格贴回画布的位置是 anim.box，**不是**整个画布。
-        //
-        // 之前这里写的是 RectF(0, 0, drawnW, drawnH)，等于把 36×24 的帧格
-        // 拉伸到 52×52 的画布上——比例全错，画出来只有中间一块，
-        // 看起来像"缺了一块"。
         val box = anim.box
-        drawIntoCanvas { canvas ->
-            val native = canvas.nativeCanvas
-            native.save()
-            native.translate(originX, originY)
-            val dst = android.graphics.RectF(
-                box.x * k,
-                box.y * k,
-                box.right * k,
-                box.bottom * k,
-            )
-            native.drawBitmap(s.bitmap, src, dst, paint)
-            native.restore()
-        }
+
+        // 用 Compose 的 drawImage，不用 drawIntoCanvas + nativeCanvas。
+        //
+        // 后者要自己 translate、自己管坐标系，任何一处算错都是「空白一片」——
+        // 而且编译期完全看不出来。drawImage 直接收 srcOffset/srcSize/
+        // dstOffset/dstSize 四个矩形，坐标系就是 DrawScope 的像素坐标，
+        // 没有中间状态可以让它错。
+        drawImage(
+            image = img,
+            srcOffset = IntOffset(src.left, src.top),
+            srcSize = IntSize(src.width(), src.height()),
+            dstOffset = IntOffset(
+                (originX + box.x * k).roundToInt(),
+                (originY + box.y * k).roundToInt(),
+            ),
+            dstSize = IntSize(
+                (box.w * k).roundToInt(),
+                (box.h * k).roundToInt(),
+            ),
+            filterQuality = FilterQuality.None,
+        )
     }
 }
 
