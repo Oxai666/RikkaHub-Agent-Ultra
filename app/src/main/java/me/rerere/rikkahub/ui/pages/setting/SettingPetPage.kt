@@ -252,6 +252,8 @@ fun SettingPetPage() {
                     ) {
                         // 不固定高度：PetHost 自己按「画布高度 × 缩放」算，
                         // 定死 140dp 的话大号宠物和带思考云的帧会被裁掉
+                        // 预览跟聊天页一个逻辑：素材包/自定义图 + 女仆可以并排。
+                        // 只放一只的话，开了开关却看不到她，会让人以为是坏的。
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -259,19 +261,40 @@ fun SettingPetPage() {
                             contentAlignment = Alignment.BottomCenter,
                         ) {
                             val customPath = settings.customPetPath
-                            if (customPath != null) {
-                                me.rerere.rikkahub.data.pet.ImagePetHost(
-                                    imagePath = customPath,
-                                    size = PetSize.fromName(settings.petSize),
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            } else {
-                                PetHost(
-                                    packId = settings.petPackId,
-                                    size = PetSize.fromName(settings.petSize),
-                                    mood = PetMood(running = false),
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
+                            val hasPrimary = customPath != null || settings.petPackId != null
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.Bottom,
+                            ) {
+                                if (hasPrimary) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        if (customPath != null) {
+                                            me.rerere.rikkahub.data.pet.ImagePetHost(
+                                                imagePath = customPath,
+                                                size = PetSize.fromName(settings.petSize),
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
+                                        } else {
+                                            PetHost(
+                                                packId = settings.petPackId,
+                                                size = PetSize.fromName(settings.petSize),
+                                                mood = PetMood(running = false),
+                                                modifier = Modifier.fillMaxWidth(),
+                                            )
+                                        }
+                                    }
+                                }
+                                if (settings.maidPetEnabled) {
+                                    Box(modifier = Modifier.weight(1f)) {
+                                        me.rerere.rikkahub.data.pet.MaidPetHost(
+                                            size = PetSize.fromName(settings.petSize),
+                                            providerSetting = null,
+                                            modelLabel = "预览",
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
