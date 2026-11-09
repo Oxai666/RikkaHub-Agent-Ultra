@@ -61,21 +61,29 @@ fun PetHost(
     val liveMood by me.rerere.rikkahub.data.pet.PetSignal.mood.collectAsStateWithLifecycle()
     val effectiveMood = mood ?: liveMood
 
-    // 「睡觉」的计时器：60 秒没回消息就睡。
-    // 用一个自增 token 触发重组——到点把 asleep 置 true。
-    var asleep by remember(packId) { mutableStateOf(false) }
-    LaunchedEffect(packId, effectiveMood.running, liveMood) {
+    // 「睡觉」：每秒 tick 一次，直接从 PetSignal 算，不存中间状态。
+    //
+    // 之前用 `var asleep` 缓存判断结果，有个同步问题：
+    // 那个状态只在 LaunchedEffect 的 delay 到点后才更新，
+    // 而 LaunchedEffect 的 key 里有 liveMood——任何 mood 变化都会重启协程、
+    // delay 从头计时，asleep 就一直是旧值。表现出来就是
+    // 「打断了之后回不到原来的状态，非要等下一轮或再等 60 秒」。
+    //
+    // 改成 tick：每秒 +1 触发重组，shouldSleep 每帧现算，没有中间态。
+    var clockTick by remember(packId) { mutableIntStateOf(0) }
+    LaunchedEffect(packId) {
         if (mood != null) return@LaunchedEffect  // 预览不该睡觉
         while (true) {
-            val until = me.rerere.rikkahub.data.pet.PetSignal.untilSleep()
-            delay(until)
-            asleep = me.rerere.rikkahub.data.pet.PetSignal.shouldSleep()
-            // 睡了就隔 1 秒再看一次，醒了立刻恢复
             delay(1_000L)
+            clockTick++
         }
     }
-    // 有任何活动（在跑、等你点）就不该睡
-    val shouldSleep = asleep && !effectiveMood.running && !effectiveMood.awaitingApproval
+    val shouldSleep = remember(clockTick, effectiveMood) {
+        mood == null &&
+            me.rerere.rikkahub.data.pet.PetSignal.shouldSleep() &&
+            !effectiveMood.running &&
+            !effectiveMood.awaitingApproval
+    }
 
     val finalMood = remember(effectiveMood, shouldSleep) {
         effectiveMood.copy(idleForAWhile = shouldSleep)
