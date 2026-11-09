@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.pet
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -85,6 +86,13 @@ fun PetHost(
     // 思考云、跳起来的帧、Zzz 都会超出 contentBox，
     // 按身体高留空间的话这些全被裁掉。
     val canvasHeightDp = with(density) { (pack.canvasH * k).toDp() }
+    val canvasHeightPx = pack.canvasH * k
+    // 容器宽度用屏宽近似。宠物是放在输入框那一行里的，
+    // 实际可用宽度会窄一点（左右各 8dp padding），拿它算拖动边界差几个像素无所谓。
+    // LocalConfiguration.current 是 @Composable 属性，必须直接写在
+    // Composable 函数体里，不能塞进 with(density) 块——提出来读一次。
+    val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    val containerWidthPx = with(density) { screenWidthDp.dp.toPx() }
 
     Box(
         modifier = modifier
@@ -103,7 +111,11 @@ fun PetHost(
             sprites = sprites,
             anim = anim,
             size = size,
-            modifier = Modifier.fillMaxWidth(),
+            // **必须 fillMaxSize**。Canvas 内部是 Spacer + drawBehind，
+            // 只给 fillMaxWidth 的话高度约束是无界的，它会 collapse 到 0——
+            // containerSize.height 变成 0，originY 算出来是负数，
+            // 画布整个跑到容器上方，看起来就是「预览不全 + 悬空」。
+            modifier = Modifier.fillMaxSize(),
             onTap = { leftHalf ->
                 // 戳一下：左右半身各播一段，纯反馈，不改任何状态
                 playReaction(pack.reaction(if (leftHalf) "tapLeft" else "tapRight"))
@@ -112,8 +124,17 @@ fun PetHost(
                 // 长按菜单留给第二期（换宠物 / 藏起来 1 小时 / 设置）
             },
             onDrag = { dx, dy ->
-                dragX += dx
-                dragY += dy
+                // 拖出边界必须夹住。之前不限的话往下滑能把宠物推到输入框里面，
+                // 再滑远一点就整个跑出可视区——看起来像"一滑就消失"。
+                //
+                // 横向余量 = (容器宽 - 画布宽) / 2，正好是居中位置左右各能挪多远。
+                // 用容器宽一半的话，宠物会被拖到一半还在屏幕外。
+                val canvasWidthPx = pack.canvasW * k
+                val maxX = ((containerWidthPx - canvasWidthPx) / 2f).coerceAtLeast(0f)
+                // 纵向只能往上（负值），最多往上两倍画布高——再远就没意义了
+                val maxUp = canvasHeightPx * 2f
+                dragX = (dragX + dx).coerceIn(-maxX, maxX)
+                dragY = (dragY + dy).coerceIn(-maxUp, 0f)
             },
             onDragEnd = { },
         )
