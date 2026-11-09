@@ -95,11 +95,10 @@ fun PetHost(
     // 思考云、跳起来的帧、Zzz 都会超出 contentBox，
     // 按身体高留空间的话这些全被裁掉。
     val canvasHeightDp = with(density) { (pack.canvasH * k).toDp() }
-    // 理论高度：pack 的画布高 × 缩放。给 onSizeChanged 还没回调的第一帧兜底。
-    val theoreticalHeightPx = pack.canvasH * k
-    // Box 的实际像素尺寸。Pet 拿它算绘制原点——
-    // DrawScope.size 在 LazyColumn item 里可能是 0（见 Pet 的参数注释）。
-    var boxSize by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
+    // 容器宽度也按画布算。**这是这次的关键改动**：
+    // 之前容器是 fillMaxWidth（整个屏幕宽），Pet 在里面居中算 originX。
+    // 现在容器宽 = 画布宽，画布原点就是容器左上角，originX 这个概念消失。
+    val canvasWidthDp = with(density) { (pack.canvasW * k).toDp() }
     // 容器宽度用屏宽近似。宠物是放在输入框那一行里的，
     // 实际可用宽度会窄一点（左右各 8dp padding），拿它算拖动边界差几个像素无所谓。
     // LocalConfiguration.current 是 @Composable 属性，必须直接写在
@@ -107,34 +106,30 @@ fun PetHost(
     val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
     val containerWidthPx = with(density) { screenWidthDp.dp.toPx() }
 
+    // 外层：占满可用宽度，把内层水平居中
     Box(
-        modifier = modifier
-            .fillMaxWidth()
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+    // 内层：尺寸**正好等于画布**，这样 Pet 里画布原点就是 (0,0)
+    Box(
+        modifier = Modifier
+            .width(canvasWidthDp)
             .height(canvasHeightDp)
-            .onSizeChanged { boxSize = it }
             .offset {
                 androidx.compose.ui.unit.IntOffset(
                     animatedX.roundToInt(),
                     animatedY.roundToInt(),
                 )
             },
-        contentAlignment = Alignment.BottomCenter,
     ) {
         Pet(
             pack = pack,
             sprites = sprites,
             anim = anim,
             petSize = size,
-            // 首次布局前 boxSize 还是 Zero，用理论值兜底——
-            // 不兜的话第一帧会按高度 0 画，闪一下才恢复。
-            canvasWidthPx = boxSize.width.toFloat()
-                .takeIf { it > 0f } ?: containerWidthPx,
-            canvasHeightPx = boxSize.height.toFloat()
-                .takeIf { it > 0f } ?: theoreticalHeightPx,
-            // **必须 fillMaxSize**。Canvas 内部是 Spacer + drawBehind，
-            // 只给 fillMaxWidth 的话高度约束是无界的，它会 collapse 到 0——
-            // containerSize.height 变成 0，originY 算出来是负数，
-            // 画布整个跑到容器上方，看起来就是「预览不全 + 悬空」。
+            // 外层 Box 的尺寸严格等于画布尺寸，fillMaxSize 正好铺满，
+            // Pet 里画布原点就是 (0,0)，不需要任何居中或 baseline 计算。
             modifier = Modifier.fillMaxSize(),
             onTap = { leftHalf ->
                 val now = System.currentTimeMillis()
@@ -163,8 +158,8 @@ fun PetHost(
                 //
                 // 横向余量 = (容器宽 - 画布宽) / 2，正好是居中位置左右各能挪多远。
                 // 用容器宽一半的话，宠物会被拖到一半还在屏幕外。
-                val canvasWidthPx = pack.canvasW * k
-                val maxX = ((containerWidthPx - canvasWidthPx) / 2f).coerceAtLeast(0f)
+                val theoreticalWidthPx = pack.canvasW * k
+                val maxX = ((containerWidthPx - theoreticalWidthPx) / 2f).coerceAtLeast(0f)
                 // 纵向只能往上一点点。
                 //
                 // 容器高度正好等于画布高，往上提多少，顶部就裁掉多少。
@@ -188,5 +183,6 @@ fun PetHost(
                 reactionToken++
             },
         )
+    }
     }
 }

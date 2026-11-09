@@ -56,19 +56,6 @@ fun Pet(
     // 会把它遮蔽掉，`size.width` 就变成在 PetSize 上找 width——找不到。
     // 那两行 Unresolved reference 'width' / 'height' 就是这么来的。
     petSize: PetSize,
-    /**
-     * 绘制区域的确切像素尺寸，由调用方给。
-     *
-     * **不要用 DrawScope.size 算原点**——实测在 LazyColumn 的 item 里
-     * 它可能是 0（垂直约束无界时 fillMaxSize 会塌成 0），
-     * then originY = 0 - baseline*k 变成负数，整幅画布被推到容器上方，
-     * 只剩底部一条边露出来。
-     *
-     * 用户看到的是「Deepy 变成一条蓝色横条」「鲸娘变成 4 个压扁的头」，
-     * 而拖动时 offset 改变又让它短暂露出来，看起来像「拖起来就正常」。
-     */
-    canvasWidthPx: Float,
-    canvasHeightPx: Float,
     modifier: Modifier = Modifier,
     onTap: (leftHalf: Boolean) -> Unit = {},
     onLongPress: () -> Unit = {},
@@ -144,14 +131,14 @@ fun Pet(
             .pointerInput(pack) {
                 detectTapGestures(
                     onTap = { offset ->
-                        val hit = hitRectPx(pack, latestAnim, k, originFor(canvasWidthPx, canvasHeightPx, pack, k))
+                        val hit = hitRectPx(pack, latestAnim, k)
                         // Rect.contains 只收 Offset，不收 (x, y) 两个 Float
                         if (hit.contains(offset)) {
-                            onTap(offset.x < canvasWidthPx / 2f)
+                            onTap(offset.x < (pack.canvasW * k) / 2f)
                         }
                     },
                     onLongPress = { offset ->
-                        val hit = hitRectPx(pack, latestAnim, k, originFor(canvasWidthPx, canvasHeightPx, pack, k))
+                        val hit = hitRectPx(pack, latestAnim, k)
                         if (hit.contains(offset)) onLongPress()
                     },
                 )
@@ -171,11 +158,15 @@ fun Pet(
         val s = sheet ?: return@Canvas
         val img = image ?: return@Canvas
 
-        // 画布原点：脚线（pack.baseline）贴在容器底部，水平居中。
-        // 尺寸用调用方传进来的，不读 DrawScope.size——原因见参数注释。
-        val drawnW = (pack.canvasW * k).roundToInt().toFloat()
-        val originX = ((canvasWidthPx - drawnW) / 2f).roundToInt().toFloat()
-        val originY = canvasHeightPx - pack.baseline * k
+        // **画布原点就是容器左上角 (0,0)。**
+        //
+        // PetHost 给的容器尺寸正好等于 pack 的画布 × k，
+        // 所以画布铺满容器，不需要任何居中或 baseline 偏移计算。
+        // 之前算 originY = 容器高 - baseline*k，只要容器高拿错就整体跑偏，
+        // 而容器高在 LazyColumn 里偏偏可能是 0——一条横条就是这么来的。
+        //
+        // 改成「尺寸对齐」之后，originX 和 originY 这两个会错的东西
+        // 直接消失了，只剩下 box 在画布内的固定偏移（来自 pack.json，不会变）。
 
         val src = sprites.srcRect(anim, cell, s)
         val box = anim.box
@@ -191,8 +182,8 @@ fun Pet(
             srcOffset = IntOffset(src.left, src.top),
             srcSize = IntSize(src.right - src.left, src.bottom - src.top),
             dstOffset = IntOffset(
-                (originX + box.x * k).roundToInt(),
-                (originY + box.y * k).roundToInt(),
+                (box.x * k).roundToInt(),
+                (box.y * k).roundToInt(),
             ),
             dstSize = IntSize(
                 (box.w * k).roundToInt(),
@@ -203,22 +194,6 @@ fun Pet(
     }
 }
 
-/**
- * 画布原点在容器里的位置。绘制和命中判定必须用同一个值，
- * 否则会出现「看起来在这、点上去没反应」。
- */
-private fun originFor(
-    canvasWidthPx: Float,
-    canvasHeightPx: Float,
-    pack: PetPack,
-    k: Float,
-): Pair<Float, Float> {
-    val drawnW = (pack.canvasW * k).roundToInt()
-    return Pair(
-        ((canvasWidthPx - drawnW) / 2f).roundToInt().toFloat(),
-        canvasHeightPx - pack.baseline * k,
-    )
-}
 
 /**
  * 命中区，换算到画布坐标（物理像素）。
@@ -231,15 +206,13 @@ private fun hitRectPx(
     pack: PetPack,
     anim: PetAnimation,
     k: Float,
-    origin: Pair<Float, Float>,
 ): androidx.compose.ui.geometry.Rect {
     val box = pack.hitBoxFor(anim)
-    // 加上画布原点，换算成**容器坐标**——触摸事件给的是容器坐标，
-    // 直接拿画布坐标比会整体偏掉一个 origin
+    // 画布原点就是容器左上角，所以画布坐标 == 容器坐标，不用换算
     return androidx.compose.ui.geometry.Rect(
-        left = origin.first + box.x * k,
-        top = origin.second + box.y * k,
-        right = origin.first + box.right * k,
-        bottom = origin.second + box.bottom * k,
+        left = box.x * k,
+        top = box.y * k,
+        right = box.right * k,
+        bottom = box.bottom * k,
     )
 }
