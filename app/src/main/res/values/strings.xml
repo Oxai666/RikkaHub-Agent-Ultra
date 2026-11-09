@@ -902,6 +902,8 @@
   <string name="setting_goal_auto_continuation_desc">Start another round automatically when a goal is not yet met</string>
   <string name="setting_goal_continuation_limit_title">Max continuation rounds</string>
   <string name="setting_goal_continuation_limit_desc">Auto-pauses at the limit, 1–50</string>
+  <string name="setting_page_pet">Pet</string>
+  <string name="setting_page_pet_desc">A little companion on the input bar that shows what the agent is doing</string>
   <string name="setting_page_snapshots">Safety snapshots</string>
   <string name="setting_page_snapshots_desc">Automatic backups taken before irreversible operations</string>
   <string name="setting_page_mcp">MCP</string>

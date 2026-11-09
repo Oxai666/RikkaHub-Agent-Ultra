@@ -872,6 +872,8 @@
   <string name="setting_goal_auto_continuation_desc">一轮回答结束后，如果目标还没达成，自动再起一轮接着推</string>
   <string name="setting_goal_continuation_limit_title">最多续跑轮数</string>
   <string name="setting_goal_continuation_limit_desc">到上限自动暂停，范围 1–50</string>
+  <string name="setting_page_pet">宠物</string>
+  <string name="setting_page_pet_desc">站在输入框上的小宠物，用动作表示 agent 在干什么</string>
   <string name="setting_page_snapshots">安全快照</string>
   <string name="setting_page_snapshots_desc">不可逆操作前的自动备份，可从这恢复</string>
   <string name="setting_page_mcp">MCP</string>
