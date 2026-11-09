@@ -1,8 +1,8 @@
 package me.rerere.rikkahub.data.pet
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -129,60 +129,39 @@ fun Pet(
 
     Canvas(
         modifier = modifier
-            // 手势。
+            // 手势。回到 ff14f71f 时的结构（detectTapGestures + detect*DragGestures
+            // 两个 pointerInput），只把垂直拖动换成水平专用。
             //
-            // 两个必须同时满足的要求：
-            //   1) 画布区域内上下滑动要能滚消息列表（不能有死区）
-            //   2) 在宠物身上左右拖要能移动它
-            //
-            // 关键在 PointerEventPass：
-            //   Main  pass —— 父级（LazyColumn 的滚动）在这里先看到事件
-            //   Final pass —— 父级已经决定完要不要消费，才轮到我们
-            //
-            // 用 Final：父级不消费（不是滚动）时才处理宠物自己的手势。
-            // 这样整块画布区域内上下滑都能滚，不用去猜"是不是宠物"——
-            // 之前用 Main pass + 命中区判断，命中区之外的 down 仍然会被
-            // awaitFirstDown 抓住，父级错过了手势起始点，滑动就废了。
+            // 为什么这么做：
+            //   detectDragGestures     拦所有方向 —— 上下滑动被吃掉（死区）
+            //   awaitEachGesture 手写  能区分方向但会拖坏拖动（上一版实测：
+            //                          拖动中不跟手，松手才跳到目标点）
+            //   detectHorizontalDrag  **只认水平**，垂直事件自动 cancel 掉、
+            //                          父级的滚动接管。正是要的语义。
             .pointerInput(pack) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(
-                        requireUnconsumed = false,
-                        pass = androidx.compose.ui.input.pointer.PointerEventPass.Final,
-                    )
-                    val hit = hitRectPx(pack, latestAnim, k)
-                    // 父级已经消费了（比如在滚动）→ 别抢
-                    if (down.isConsumed) return@awaitEachGesture
-                    // 点在身体之外 → 不归宠物
-                    if (!hit.contains(down.position)) return@awaitEachGesture
-
-                    val startedAt = System.currentTimeMillis()
-                    var last = down.position
-                    var dragging = false
-
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if (!change.pressed) break
-                        // 中途被父级拿走（开始滚动）→ 放弃拖动
-                        if (change.isConsumed && !dragging) break
-                        val delta = change.position - last
-                        last = change.position
-                        if (!dragging && (change.position - down.position).getDistance() > 12f) {
-                            dragging = true
-                            onDragStart()
+                detectTapGestures(
+                    onTap = { offset ->
+                        val hit = hitRectPx(pack, latestAnim, k)
+                        if (hit.contains(offset)) {
+                            onTap(offset.x < (pack.canvasW * k) / 2f)
                         }
-                        if (dragging) {
-                            onDrag(delta.x, delta.y)
-                            change.consume()
-                        }
-                    }
-
-                    if (dragging) {
-                        onDragEnd()
-                    } else if (System.currentTimeMillis() - startedAt < 500) {
-                        onTap(down.position.x < (pack.canvasW * k) / 2f)
-                    }
-                }
+                    },
+                    onLongPress = { offset ->
+                        val hit = hitRectPx(pack, latestAnim, k)
+                        if (hit.contains(offset)) onLongPress()
+                    },
+                )
+            }
+            .pointerInput(pack) {
+                detectHorizontalDragGestures(
+                    onDragStart = { onDragStart() },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        onDrag(dragAmount, 0f)
+                    },
+                    onHorizontalDragEnd = { onDragEnd() },
+                    onHorizontalDragCancel = { onDragEnd() },
+                )
             },
     ) {
         val s = sheet ?: return@Canvas
