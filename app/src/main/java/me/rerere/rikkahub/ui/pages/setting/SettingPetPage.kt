@@ -143,6 +143,28 @@ fun SettingPetPage() {
                 )
             }
 
+            // ── 鲸鱼娘女仆 ──
+            //
+            // 不是素材包：一张抠好的立绘 + 一套专属交互。
+            // 点一下会吐气泡显示当前模型余额，这条只有它有。
+            item {
+                PetChoiceRow(
+                    label = "鲸鱼娘女仆（点一下查余额）",
+                    selected = settings.petPackId == me.rerere.rikkahub.data.pet.MAID_PET_ID &&
+                        settings.customPetPath == null,
+                    onClick = {
+                        scope.launch {
+                            settingsStore.update {
+                                it.copy(
+                                    petPackId = me.rerere.rikkahub.data.pet.MAID_PET_ID,
+                                    customPetPath = null,
+                                )
+                            }
+                        }
+                    },
+                )
+            }
+
             // ── 用一张自己的图 ──
             //
             // 跟素材包互斥：选了图就把 petPackId 清掉，选了素材包就把图清掉。
@@ -223,7 +245,14 @@ fun SettingPetPage() {
                             contentAlignment = Alignment.BottomCenter,
                         ) {
                             val customPath = settings.customPetPath
-                            if (customPath != null) {
+                            if (settings.petPackId == me.rerere.rikkahub.data.pet.MAID_PET_ID && customPath == null) {
+                                me.rerere.rikkahub.data.pet.MaidPetHost(
+                                    size = PetSize.fromName(settings.petSize),
+                                    providerSetting = null,
+                                    modelLabel = "预览",
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            } else if (customPath != null) {
                                 me.rerere.rikkahub.data.pet.ImagePetHost(
                                     imagePath = customPath,
                                     size = PetSize.fromName(settings.petSize),

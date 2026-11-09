@@ -94,6 +94,8 @@ import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.findModelById
+import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getQuickMessagesOfAssistant
@@ -241,7 +243,19 @@ fun ChatInput(
             // 两者互不占位。宠物默认水平居中，跟左下角的按钮不打架。
             Box(modifier = Modifier.fillMaxWidth()) {
                 val customPetPath = settings.customPetPath
-                if (customPetPath != null) {
+                if (settings.petPackId == me.rerere.rikkahub.data.pet.MAID_PET_ID && customPetPath == null) {
+                    // 鲸鱼娘女仆：点一下吐气泡查余额。
+                    // provider 从「这个助手当前用的模型」反查——
+                    // 用户切了模型，气泡里显示的就该是那个模型的钱。
+                    val currentModel = settings.findModelById(
+                        assistant.chatModelId ?: settings.chatModelId
+                    )
+                    me.rerere.rikkahub.data.pet.MaidPetHost(
+                        size = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize),
+                        providerSetting = currentModel?.findProvider(settings.providers),
+                        modelLabel = currentModel?.displayName?.takeIf { it.isNotBlank() },
+                    )
+                } else if (customPetPath != null) {
                     // 用户自己那张图。没有状态、没有素材包，只有一个动作：
                     // 被按的时候压一下。
                     me.rerere.rikkahub.data.pet.ImagePetHost(
