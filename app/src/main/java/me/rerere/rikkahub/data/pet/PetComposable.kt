@@ -63,6 +63,8 @@ fun Pet(
     onDragStart: () -> Unit = {},
     onDrag: (dx: Float, dy: Float) -> Unit = { _, _ -> },
     onDragEnd: () -> Unit = {},
+    /** ⚠ 临时：把绘制时的实际数值传出去，排查完删掉。 */
+    onDebug: (String) -> Unit = {},
 ) {
     val density = LocalDensity.current
     // 每个美术像素占多少物理像素。像素画包这里是整数。
@@ -190,6 +192,15 @@ fun Pet(
                 (box.h * k).roundToInt(),
             ),
             filterQuality = FilterQuality.None,
+        )
+
+        // ⚠ 临时：把这一帧的实际数值报出去
+        onDebug(
+            "k=$k cell=$cell " +
+            "src=[${src.left},${src.top},${src.right},${src.bottom}] " +
+            "dst=[${(box.x*k).toInt()},${(box.y*k).toInt()}," +
+            "${((box.x+box.w)*k).toInt()},${((box.y+box.h)*k).toInt()}] " +
+            "drawScope=${this.size.width.toInt()}x${this.size.height.toInt()}"
         )
 
         // ⚠ 临时调试框：画出 Canvas 的实际边界 + 帧格的目标矩形。

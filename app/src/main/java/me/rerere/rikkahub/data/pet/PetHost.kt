@@ -121,13 +121,27 @@ fun PetHost(
     val screenWidthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
     val containerWidthPx = with(density) { screenWidthDp.dp.toPx() }
 
+    // Composable 只能有一个根节点，调试文字 + 宠物框要包进 Column
+    androidx.compose.foundation.layout.Column(
+        modifier = modifier.fillMaxWidth(),
+    ) {
+    // ⚠ 临时：把 Pet 报上来的数值显示出来
+    if (debugLine.isNotEmpty()) {
+        androidx.compose.material3.Text(
+            text = debugLine,
+            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+            color = androidx.compose.ui.graphics.Color.Red,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+
     // 外层：占满可用宽度，高度 = 画布 + 抬升余量。
     //
     // **对齐必须是 TopCenter，不能是 BottomCenter**：
     // 内层的 offset 里已经含了 liftMax 作为"平时贴底"的基线，
     // 再用 BottomCenter 等于把 liftMax 加两次，画布会被推到容器外面。
     Box(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .height(containerHeightDp),
         contentAlignment = Alignment.TopCenter,
@@ -189,6 +203,7 @@ fun PetHost(
                 dragX = (dragX + dx).coerceIn(-maxX, maxX)
                 dragY = (dragY + dy).coerceIn(-maxUp, 0f)
             },
+            onDebug = { line -> if (line != debugLine) debugLine = line },
             onDragEnd = {
                 // 垂直回弹：提起来是"被拎住"的临时状态，松手就该落地。
                 // 留着悬空会让人以为它挂住了。
@@ -202,6 +217,7 @@ fun PetHost(
                 reactionToken++
             },
         )
+    }
     }
     }
 }
