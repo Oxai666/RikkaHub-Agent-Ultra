@@ -128,7 +128,9 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
         //
         // 回调可能在任意线程，PetSignal 用的是 @Volatile + MutableStateFlow，
         // 跨线程写是安全的。
+        // 一轮结束时问一次「能不能续写」——被打断的回合才显示续写按钮
         job.invokeOnCompletion { cause ->
+            vm.refreshCanContinue()
             when {
                 cause == null ->
                     me.rerere.rikkahub.data.pet.PetSignal.onGenerationFinish()
@@ -153,6 +155,8 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val processingStatus by vm.processingStatus.collectAsStateWithLifecycle()
+    // 续写按钮：只有被打断的回合才显示
+    val canContinue by vm.canContinue.collectAsStateWithLifecycle()
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
@@ -397,6 +401,8 @@ private fun ChatPageContent(
                     voiceState = voiceState,
                     onStopVoiceMode = vm.voiceSession::stop,
                     conversationId = conversation.id.toString(),
+                    canContinue = canContinue,
+                    onContinueClick = { vm.continueGeneration() },
                     onOpenGoal = { showGoalSheet = true },
                     state = inputState,
                     messageQueue = messageQueue,

@@ -42,8 +42,21 @@ class MessageQueue {
     val state = mutableState.asStateFlow()
 
     @Synchronized
-    fun enqueue(parts: List<UIMessagePart>, answer: Boolean = true, reply: CompletableDeferred<String?>? = null) {
-        if (parts.isEmptyInputMessage()) {
+    /**
+     * @param allowEmpty 允许入队一条**空内容**的消息。
+     *
+     * 正常发消息时空内容是没意义的（用户什么都没打），所以默认拒掉。
+     * 但「续写」需要的恰恰是一条不携带用户输入的消息——它的作用只是
+     * 触发一次生成，让模型接着上一句 assistant 往下写。
+     * 那种情况下空内容是有意义的状态标记，不是错误。
+     */
+    fun enqueue(
+        parts: List<UIMessagePart>,
+        answer: Boolean = true,
+        reply: CompletableDeferred<String?>? = null,
+        allowEmpty: Boolean = false,
+    ) {
+        if (!allowEmpty && parts.isEmptyInputMessage()) {
             reply?.complete(null)
             return
         }

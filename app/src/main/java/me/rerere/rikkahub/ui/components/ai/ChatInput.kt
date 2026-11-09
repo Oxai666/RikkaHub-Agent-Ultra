@@ -85,6 +85,7 @@ import me.rerere.ai.provider.ModelType
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.asr.ASRStatus
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.ArrowTurnBackward
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Cancel01
@@ -148,6 +149,9 @@ fun ChatInput(
     onStopVoiceMode: () -> Unit = {},
     /** 会话 id，用来定位这个会话的目标。为空时退回按助手 id 存。 */
     conversationId: String? = null,
+    /** 上一轮被打断了，可以接着写。决定下方那个「续写」按钮显不显示。 */
+    canContinue: Boolean = false,
+    onContinueClick: () -> Unit = {},
     /** 点击旗帜时打开目标面板。 */
     onOpenGoal: () -> Unit = {},
 ) {
@@ -236,6 +240,34 @@ fun ChatInput(
                 // 不传 mood → 订阅 PetSignal 的全局状态。
                 // 跑/完成/等确认/睡觉四个信号由 ChatPage 和各处上报。
             )
+
+            // 续写：上一轮被打断（喊停 / 没钱 / 断联）时出现。
+            // 点它不会发一条新消息，而是让模型接着上一条 assistant 往下写。
+            if (canContinue) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start,
+                ) {
+                    androidx.compose.material3.FilledTonalButton(
+                        onClick = onContinueClick,
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            horizontal = 14.dp,
+                            vertical = 6.dp,
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.ArrowTurnBackward,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        androidx.compose.foundation.layout.Spacer(Modifier.size(6.dp))
+                        Text(
+                            text = "续写",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                }
+            }
 
             PlanStepsBar(plan = currentPlan)
 

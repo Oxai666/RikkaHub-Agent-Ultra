@@ -589,6 +589,10 @@ class ChatService(
                 scope = appScope,
                 onIdle = { removeSession(it) },
                 onGenerationFinished = { id, cause ->
+                    // 记下这一轮是不是被打断的。cause 不为 null 说明是
+                    // 取消（用户喊停）或异常（余额/网络/模型报错），
+                    // 两种都算「可以续写」。
+                    sessions[id]?.lastRunInterrupted = cause != null
                     val session = sessions[id]
                     if (cause != null) session?.messageQueue?.pause()
                     if (session?.state?.value?.currentMessages?.any { message ->
@@ -905,6 +909,44 @@ class ChatService(
         }
     }
 
+    /**
+     * 续写被打断的那一轮。
+     *
+     * 跟 [sendMessage] 的区别只有一条：**不追加用户消息**。
+     * 直接把现有历史再喂一遍给模型，让它接着上一条 assistant 消息往下写。
+     *
+     * 什么时候能续：会话的 lastRunInterrupted 为 true——也就是上一轮
+     * 因为用户喊停、余额不足、网络断开等原因没走完。正常结束的回合不续，
+     * 那种情况再让模型说话就是硬凑。
+     *
+     * 续写成功后把标记清掉，避免连续续写把一段半截话越拉越长。
+     */
+    fun continueGeneration(conversationId: Uuid) {
+        val session = getOrCreateSession(conversationId)
+        synchronized(session) {
+            // 正在跑就别插队
+            if (session.getJob() != null) return
+            // 没有历史就没得续
+            if (session.state.value.currentMessages.isEmpty()) return
+            session.lastRunInterrupted = false
+            if (session.messageQueue.state.value.messages.isEmpty()) {
+                session.messageQueue.resume()
+            }
+            // 空内容 = 续写标记，sendQueuedMessage 见到它就不追加消息。
+            // allowEmpty 是必须的：enqueue 默认会拒绝空内容。
+            session.messageQueue.enqueue(emptyList(), answer = true, allowEmpty = true)
+            dispatchNextQueuedMessage(conversationId)
+        }
+    }
+
+    /** 当前这个会话能不能续写。UI 用它决定显示不显示按钮。 */
+    fun canContinue(conversationId: Uuid): Boolean {
+        val session = sessions[conversationId] ?: return false
+        return session.lastRunInterrupted &&
+            !session.isGenerating &&
+            session.state.value.currentMessages.isNotEmpty()
+    }
+
     /** Enqueue immediately; the result belongs to this item even after edits or later turns. */
     fun enqueueVoiceMessage(conversationId: Uuid, text: String): Deferred<String?> {
         val session = getOrCreateSession(conversationId)
@@ -962,13 +1004,22 @@ class ChatService(
                     ?: settings.getCurrentAssistant()
                 val processedContent = preprocessUserInputParts(content, assistant)
 
-                // 添加消息到列表
-                val withUser = currentConversation.copy(
-                    messageNodes = currentConversation.messageNodes + UIMessage(
-                        role = MessageRole.USER,
-                        parts = processedContent,
-                    ).toMessageNode(),
-                )
+                // 添加消息到列表。
+                //
+                // **content 为空时不追加**——这是「续写」走的路：
+                // 续写的语义是让模型接着上一条 assistant 消息往下写，
+                // 不是发一条新的用户消息开启新回合。
+                // 追加一条空消息会污染历史，而且模型会以为用户说了句空话。
+                val withUser = if (content.isEmpty()) {
+                    currentConversation
+                } else {
+                    currentConversation.copy(
+                        messageNodes = currentConversation.messageNodes + UIMessage(
+                            role = MessageRole.USER,
+                            parts = processedContent,
+                        ).toMessageNode(),
+                    )
+                }
                 saveConversation(conversationId, withUser)
                 session.submittingMessage = null
 

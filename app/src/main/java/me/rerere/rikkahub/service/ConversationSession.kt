@@ -30,6 +30,19 @@ class ConversationSession(
     val state = MutableStateFlow(initial)
     val messageQueue = MessageQueue()
 
+    /**
+     * 上一轮是不是被打断的（用户喊停 / 出错 / 断联）。
+     *
+     * 「续写」按钮靠它决定显不显示：只有被打断的回合才谈得上"接着说"，
+     * 正常结束的回合再续就是硬凑。
+     *
+     * 存在内存里，进程重启后清零——重启之后再续写意义不大，
+     * 用户重新发一句更直接。
+     */
+    @Volatile
+    var lastRunInterrupted: Boolean = false
+        internal set
+
     // 从队列取出到写入会话历史之间，附件仍需作为有效引用保留。
     @Volatile
     var submittingMessage: QueuedMessage? = null

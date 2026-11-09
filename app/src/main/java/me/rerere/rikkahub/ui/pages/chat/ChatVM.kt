@@ -203,6 +203,28 @@ class ChatVM(
      * @param content 消息内容
      * @param answer 是否触发消息生成，如果为false，则仅添加消息到消息列表中
      */
+    // ── 续写 ──
+    // 「这一轮被打断了，能接着写吗」。按钮显不显示看它。
+    private val _canContinue = kotlinx.coroutines.flow.MutableStateFlow(false)
+    val canContinue: kotlinx.coroutines.flow.StateFlow<Boolean> = _canContinue
+
+    /**
+     * 刷新一次续写可用性。
+     *
+     * ChatService 那边是普通函数不是 Flow（它内部状态太多，做成 Flow 要改一大片），
+     * 所以让调用方在「一轮结束」这个时机主动问一次——
+     * ChatPage 已经在监听 loadingJob 了，顺手调一下就行。
+     */
+    fun refreshCanContinue() {
+        _canContinue.value = chatService.canContinue(_conversationId)
+    }
+
+    /** 续写被打断的那一轮：不追加用户消息，直接让模型接着说。 */
+    fun continueGeneration() {
+        chatService.continueGeneration(_conversationId)
+        _canContinue.value = false
+    }
+
     fun handleMessageSend(content: List<UIMessagePart>,answer: Boolean = true) {
         if (content.isEmptyInputMessage()) return
 
