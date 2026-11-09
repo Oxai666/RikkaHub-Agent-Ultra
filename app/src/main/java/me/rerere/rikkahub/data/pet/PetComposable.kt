@@ -1,8 +1,8 @@
 package me.rerere.rikkahub.data.pet
 
 import androidx.compose.foundation.Canvas
-androidx.compose.foundation.gestures.awaitEachGesture
-androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
