@@ -155,8 +155,6 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val processingStatus by vm.processingStatus.collectAsStateWithLifecycle()
-    // 续写按钮：只有被打断的回合才显示
-    val canContinue by vm.canContinue.collectAsStateWithLifecycle()
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
@@ -334,6 +332,9 @@ private fun ChatPageContent(
     val toaster = LocalToaster.current
     val context = LocalContext.current
     val workspaceRepository: WorkspaceRepository = koinInject()
+    // 续写按钮：只有被打断的回合才显示。读在 ChatPageContent 里，
+    // 因为 ChatInput 是在这个函数里调的，声明在外层 ChatPage 用不上。
+    val canContinue by vm.canContinue.collectAsStateWithLifecycle()
     var previewMode by rememberSaveable { mutableStateOf(false) }
     val hazeState = rememberHazeState()
     val assistant = setting.getCurrentAssistant()
