@@ -67,6 +67,17 @@ object PetSignal {
     fun isCelebrating(nowMs: Long = System.currentTimeMillis()): Boolean =
         justFinishedAt > 0L && nowMs - justFinishedAt < CELEBRATE_MS
 
+    /**
+     * 用户主动按了停止。
+     *
+     * 跟出错共用 error 动画，但停留短一点——用户自己喊停的，
+     * 不需要再提醒他"刚才出事了"。
+     */
+    fun onGenerationStopped() {
+        justFailedAt = System.currentTimeMillis()
+        _mood.value = _mood.value.copy(running = false, justFinished = false, justFailed = false)
+    }
+
     /** 是否还在「刚出错」的提示窗口内。 */
     fun isFailing(nowMs: Long = System.currentTimeMillis()): Boolean =
         justFailedAt > 0L && nowMs - justFailedAt < FAIL_HOLD_MS

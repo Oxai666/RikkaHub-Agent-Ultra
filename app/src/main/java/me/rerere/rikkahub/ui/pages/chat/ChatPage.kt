@@ -106,18 +106,38 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     val loadingJob by vm.conversationJob.collectAsStateWithLifecycle()
 
     // ── 给宠物上报状态 ──
-    // 这三个信号分散在这一个文件里，宠物那边订阅 PetSignal 读。
+    // 这些信号分散在这一个文件里，宠物那边订阅 PetSignal 读。
     //
-    // 「在跑 / 刚结束」：loadingJob 从 null 变非 null 是开始，反过来是结束。
-    var wasRunning by remember { mutableStateOf(false) }
+    // 一轮结束分三种，宠物要有三种反应：
+    //   正常完成  → happy 跳两下
+    //   出错      → error（红色 X）
+    //   用户喊停  → 也用 error，但停留短一点
+    //
+    // 判断依据是 Job 的终态。loadingJob 变成 null 之后就取不到了，
+    // 所以先存住上一个 Job。
+    var lastJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     LaunchedEffect(loadingJob) {
-        val running = loadingJob != null
-        if (running && !wasRunning) {
+        val job = loadingJob
+        if (job != null) {
             me.rerere.rikkahub.data.pet.PetSignal.onGenerationStart()
-        } else if (!running && wasRunning) {
-            me.rerere.rikkahub.data.pet.PetSignal.onGenerationFinish()
+            lastJob = job
+        } else {
+            val prev = lastJob ?: return@LaunchedEffect
+            lastJob = null
+            // 用户按停止 → Job 处于 cancelled
+            if (prev.isCancelled) {
+                me.rerere.rikkahub.data.pet.PetSignal.onGenerationStopped()
+            } else {
+                // 正常完成取不到异常；异常完成会取到。
+                // getCompletionExceptionOrNull 对未完成的 Job 会抛，包一层。
+                val cause = runCatching { prev.getCompletionExceptionOrNull() }.getOrNull()
+                if (cause != null) {
+                    me.rerere.rikkahub.data.pet.PetSignal.onGenerationError()
+                } else {
+                    me.rerere.rikkahub.data.pet.PetSignal.onGenerationFinish()
+                }
+            }
         }
-        wasRunning = running
     }
 
     // 「等你确认」：只在真的有工具停在 Pending 时才亮牌子。
