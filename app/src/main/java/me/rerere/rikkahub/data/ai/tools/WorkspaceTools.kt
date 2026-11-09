@@ -666,8 +666,12 @@ private fun kotlinx.serialization.json.JsonObject.absolutePath(name: String): St
     return path
 }
 
-// 免强制审批的可写安全区: 工作区文件目录、临时目录和技能目录
-private val WRITABLE_ROOT_PREFIXES = listOf("/workspace", "/tmp", "/skills")
+// 免强制审批的可写安全区: 工作区文件目录和临时目录。
+//
+// `/skills` 被移除了。技能目录不该是"随便写不弹审批"的区域——
+// 模型能改技能等于能改自己的行为准则，而这条路绕过了 skill_update
+// 那套审批和审计。
+private val WRITABLE_ROOT_PREFIXES = listOf("/workspace", "/tmp")
 
 private fun kotlinx.serialization.json.JsonElement.pathOutsideWritableRoots(name: String): Boolean =
     runCatching {

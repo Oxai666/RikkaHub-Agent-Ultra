@@ -51,11 +51,14 @@ val repositoryModule = module {
                 nativeLibraryDir = File(context.applicationInfo.nativeLibraryDir),
             ),
             // 同一份挂载表既用于 PRoot 的 -b 参数, 也用于文件工具的路径解析, 避免两处漂移
+            //
+            // **`/skills` 不再挂载**。之前 mounts 里有它，于是 AI 在 workspace_shell
+            // 里可以直接 `cat /skills/xxx/SKILL.md`、`vim /skills/xxx/SKILL.md`，
+            // 等于把技能库的读写权限交给了模型。
+            //
+            // 技能只应该通过 skill_* 工具访问——那条路径有审批、有校验、有审计。
+            // shell 是绕过这一切的后门，关掉。
             bindMounts = listOf(
-                WorkspaceBindMount(
-                    source = File(context.filesDir, FileFolders.SKILLS).apply { mkdirs() },
-                    target = "/skills",
-                ),
                 WorkspaceBindMount(
                     source = File(context.filesDir, FileFolders.TOOL_OUTPUTS).apply { mkdirs() },
                     target = "/tool_outputs",
