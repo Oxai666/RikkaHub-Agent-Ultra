@@ -17,7 +17,16 @@ import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
 
 private const val TAG = "ConversationSession"
-private const val IDLE_TIMEOUT_MS = 5_000L
+/**
+ * 参考计数归零后多久回收会话。
+ *
+ * 原来 5 秒——太短了。工具执行、审批等待、队列里还有消息时，
+ * refCount 可能刚好是 0（用户切到别的页面去了），5 秒一到就被回收，
+ * 正在进行的流跟着断掉。用户看到的就是「用久了、调工具时突然断开」。
+ *
+ * 60 秒：足够覆盖任何短暂的空闲窗口，又不至于让内存里的会话堆积。
+ */
+private const val IDLE_TIMEOUT_MS = 60_000L
 
 class ConversationSession(
     val id: Uuid,
@@ -129,7 +138,11 @@ class ConversationSession(
         idleCheckJob?.cancel()
         idleCheckJob = scope.launch {
             delay(IDLE_TIMEOUT_MS)
-            if (refCount.get() <= 0 && !isGenerating) {
+            // 用 isInUse 而不是「refCount <= 0 && !isGenerating」：
+            // 后者漏了「消息队列里还有待发消息」这种情况。
+            // 续写刚入队、还没派发的那一瞬间正好满足前两个条件，
+            // 会话会被当成空闲回收，队列里的东西跟着蒸发。
+            if (!isInUse) {
                 onIdle(id)
             }
         }
