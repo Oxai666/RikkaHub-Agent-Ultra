@@ -582,20 +582,21 @@ class GenerationLoop(
             if (newParts == msg.parts) msg else msg.copy(parts = newParts)
         }
 
-        val turnStartMs = android.os.SystemClock.elapsedRealtime()
         var loopGuardTripCount = 0
 
         for (stepIndex in 0 until maxSteps) {
-            // Wall-clock cap: any single user turn that has been running longer than the
-            // budget is force-ended, regardless of whether the model wants more steps.
-            // This is the second line of defence after maxSteps; without it a model that
-            // discovers many distinct tool calls (each within the loop guard) can still
-            // run for hours.
-            val elapsedMs = android.os.SystemClock.elapsedRealtime() - turnStartMs
-            if (elapsedMs > ToolRuntimeLimits.turnBudgetMs) {
-                Log.w(TAG, "generateText: wall-clock cap (${ToolRuntimeLimits.turnBudgetMs}ms) hit at step #$stepIndex; force-ending turn")
-                break
-            }
+            // 回合预算：**不限**。
+            //
+            // 原来这里有个 10 分钟的墙钟上限，超了就 break——而且是静默 break，
+            // 日志之外没有任何提示。用户看到的就是「执行命令中直接断，没有报错」。
+            //
+            // 26 步工具调用（解包、改 smali、回编、验链）随便就超过 10 分钟，
+            // 这种正常的多步任务被当成 runaway 掐掉，属于误伤。
+            //
+            // 现在不设上限。模型真卡死的话还有两层兜底：
+            //   · maxToolSteps（默认 32 步）
+            //   · MAX_LOOP_GUARD_TRIPS_PER_TURN（同一个工具反复被拦几次就停）
+            // 这两层保证不会无限转圈，只是不再按「跑了多久」来砍。
             // Repeated loop-guard trips mean the model is flailing: it bumps into the
             // guard, picks a different tool, that one also gets guarded, and so on. After
             // N trips we just stop — the model is not going to recover, and every extra
@@ -1253,8 +1254,11 @@ class GenerationLoop(
                             // global ${ToolRuntimeLimits.turnBudgetMs}ms cap. If the budget is
                             // already blown when we start the tool, return a structured
                             // wall-clock envelope instead of even attempting.
-                            val remainingMs = ToolRuntimeLimits.turnBudgetMs -
-                                (android.os.SystemClock.elapsedRealtime() - turnStartMs)
+                            // 工具执行不设墙钟上限。原来这里算「预算还剩多久」，
+                            // 预算用完时 remainingMs 变负数，工具直接被跳过并返回
+                            // tool_cancelled_wall_clock。现在回合本身不限时，
+                            // 单个工具也不该被这个预算砍。
+                            val remainingMs = Long.MAX_VALUE
                             val result = if (remainingMs <= 0L) {
                                 Log.w(TAG, "generateText: ${toolDef.name} skipped — wall-clock budget already exceeded")
                                 listOf(UIMessagePart.Text(json.encodeToString(buildJsonObject {
