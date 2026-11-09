@@ -69,26 +69,33 @@ fun PetHost(
     }
 
     // 该播哪一段：反应优先，否则按状态 + 分档挑。
-    // remember 必须在 Composable 的顶层调用，不能塞进 `?:` 右边——
-    // 那样是条件调用，Compose 的重组位置对不上会直接崩。
     val stateAnim = remember(baseState, tier) { pack.primary(baseState.serial, tier) }
     val anim = reaction ?: stateAnim
 
-    // 拖动偏移：跟手，松手回零
-    var dragX by remember { mutableStateOf(0f) }
+    // 拖动偏移。**记住的**，不是松手回零——
+    // 用户把它拖到哪就是哪，下次进来还在那儿。
+    // 水平竖直都要，只做水平的话"往上拔"这个动作会没反应。
+    var dragX by remember(packId) { mutableStateOf(0f) }
+    var dragY by remember(packId) { mutableStateOf(0f) }
     val animatedX by animateFloatAsState(dragX, label = "petDragX")
+    val animatedY by animateFloatAsState(dragY, label = "petDragY")
 
-    // 高度：身体高度换算成 dp，给上一层留出空位
-    val bodyHeightDp = with(density) {
-        (pack.contentBox.h * pack.screenScale(size, density.density)).toDp()
-    }
+    val k = remember(pack, size, density) { pack.screenScale(size, density.density) }
+    // 容器高度必须按**画布**算，不能按身体算：
+    // 思考云、跳起来的帧、Zzz 都会超出 contentBox，
+    // 按身体高留空间的话这些全被裁掉。
+    val canvasHeightDp = with(density) { (pack.canvasH * k).toDp() }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            // 容器比身体高一截，给跳起来、思考云这些留头顶空间
-            .height(bodyHeightDp * 1.6f)
-            .offset { androidx.compose.ui.unit.IntOffset(animatedX.roundToInt(), 0) },
+            .height(canvasHeightDp)
+            .offset {
+                androidx.compose.ui.unit.IntOffset(
+                    animatedX.roundToInt(),
+                    animatedY.roundToInt(),
+                )
+            },
         contentAlignment = Alignment.BottomCenter,
     ) {
         Pet(
@@ -104,12 +111,11 @@ fun PetHost(
             onLongPress = {
                 // 长按菜单留给第二期（换宠物 / 藏起来 1 小时 / 设置）
             },
-            onDrag = { dx, _ -> dragX += dx },
-            onDragEnd = {
-                // 松手吸附回原位。App 内不记拖动位置——宠物是站在输入框上的，
-                // 记住偏移反而会让它下次出现在奇怪的地方
-                dragX = 0f
+            onDrag = { dx, dy ->
+                dragX += dx
+                dragY += dy
             },
+            onDragEnd = { },
         )
     }
 }

@@ -178,10 +178,12 @@ fun SettingPetPage() {
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         ),
                     ) {
+                        // 不固定高度：PetHost 自己按「画布高度 × 缩放」算，
+                        // 定死 140dp 的话大号宠物和带思考云的帧会被裁掉
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(140.dp),
+                                .padding(vertical = 8.dp),
                             contentAlignment = Alignment.BottomCenter,
                         ) {
                             PetHost(

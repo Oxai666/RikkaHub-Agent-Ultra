@@ -64,7 +64,6 @@ fun Pet(
 
     // 画布尺寸（物理像素）：包的画布 × k
     val drawnW = (pack.canvasW * k).roundToInt()
-    val drawnH = (pack.canvasH * k).roundToInt()
 
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
     var sheet by remember(pack.id, anim.sheet) { mutableStateOf<PetSheet?>(null) }
@@ -108,26 +107,25 @@ fun Pet(
     Canvas(
         modifier = modifier
             .onSizeChanged { containerSize = it }
-            .pointerInput(anim, pack) {
+            // 点击和拖动必须放在**同一个** pointerInput 里。
+            // 分成两个的话后注册的那个会吃掉手势，拖不动。
+            .pointerInput(pack, anim) {
                 detectTapGestures(
                     onTap = { offset ->
-                        val hit = hitRectPx(pack, anim, k)
-                        if (offset.x >= hit.left && offset.x < hit.right &&
-                            offset.y >= hit.top && offset.y < hit.bottom
-                        ) {
-                            onTap(offset.x < drawnW / 2f)
+                        val hit = hitRectPx(pack, anim, k, originFor(containerSize, pack, k))
+                        if (hit.contains(offset.x, offset.y)) {
+                            onTap(offset.x < containerSize.width / 2f)
                         }
                     },
                     onLongPress = { offset ->
-                        val hit = hitRectPx(pack, anim, k)
-                        if (offset.x >= hit.left && offset.x < hit.right &&
-                            offset.y >= hit.top && offset.y < hit.bottom
-                        ) onLongPress()
+                        val hit = hitRectPx(pack, anim, k, originFor(containerSize, pack, k))
+                        if (hit.contains(offset.x, offset.y)) onLongPress()
                     },
                 )
             }
-            .pointerInput(Unit) {
+            .pointerInput(pack) {
                 detectDragGestures(
+                    onDragStart = { },
                     onDrag = { change, drag ->
                         change.consume()
                         onDrag(drag.x, drag.y)
@@ -138,21 +136,51 @@ fun Pet(
             },
     ) {
         val s = sheet ?: return@Canvas
-        // 整幅画布在容器里的偏移：脚线贴容器底，水平居中
+        // 画布原点：脚线（pack.baseline）贴在容器底部，水平居中。
+        //
+        // 之前写的是 `containerSize.height - drawnH`——那是让**画布底边**贴容器底。
+        // 但脚线在 baseline=48，画布高 52，中间差 4 个逻辑像素，
+        // 所以宠物看起来"悬在输入框上方一段距离"。必须按 baseline 算。
         val originX = ((containerSize.width - drawnW) / 2f).roundToInt().toFloat()
-        val originY = (containerSize.height - drawnH).toFloat()
+        val originY = (containerSize.height - pack.baseline * k).toFloat()
+
         val src = sprites.srcRect(anim, cell, s)
+        // 帧格贴回画布的位置是 anim.box，**不是**整个画布。
+        //
+        // 之前这里写的是 RectF(0, 0, drawnW, drawnH)，等于把 36×24 的帧格
+        // 拉伸到 52×52 的画布上——比例全错，画出来只有中间一块，
+        // 看起来像"缺了一块"。
+        val box = anim.box
         drawIntoCanvas { canvas ->
             val native = canvas.nativeCanvas
             native.save()
             native.translate(originX, originY)
             val dst = android.graphics.RectF(
-                0f, 0f, drawnW.toFloat(), drawnH.toFloat(),
+                box.x * k,
+                box.y * k,
+                box.right * k,
+                box.bottom * k,
             )
             native.drawBitmap(s.bitmap, src, dst, paint)
             native.restore()
         }
     }
+}
+
+/**
+ * 画布原点在容器里的位置。绘制和命中判定必须用同一个值，
+ * 否则会出现「看起来在这、点上去没反应」。
+ */
+private fun originFor(
+    containerSize: IntSize,
+    pack: PetPack,
+    k: Float,
+): Pair<Float, Float> {
+    val drawnW = (pack.canvasW * k).roundToInt()
+    return Pair(
+        ((containerSize.width - drawnW) / 2f).roundToInt().toFloat(),
+        containerSize.height - pack.baseline * k,
+    )
 }
 
 /**
@@ -162,12 +190,19 @@ fun Pet(
  * 飘在外面的东西。点它们应该穿透，不然宠物就成了输入框上方一块凭空多出来的
  * 死区。
  */
-private fun hitRectPx(pack: PetPack, anim: PetAnimation, k: Float): androidx.compose.ui.geometry.Rect {
+private fun hitRectPx(
+    pack: PetPack,
+    anim: PetAnimation,
+    k: Float,
+    origin: Pair<Float, Float>,
+): androidx.compose.ui.geometry.Rect {
     val box = pack.hitBoxFor(anim)
+    // 加上画布原点，换算成**容器坐标**——触摸事件给的是容器坐标，
+    // 直接拿画布坐标比会整体偏掉一个 origin
     return androidx.compose.ui.geometry.Rect(
-        left = box.x * k,
-        top = box.y * k,
-        right = box.right * k,
-        bottom = box.bottom * k,
+        left = origin.first + box.x * k,
+        top = origin.second + box.y * k,
+        right = origin.first + box.right * k,
+        bottom = origin.second + box.bottom * k,
     )
 }
