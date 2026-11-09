@@ -1549,6 +1549,13 @@ class GenerationLoop(
                 // 本步的生成耗时起点。用量面板要的是「纯生成耗时」，工具执行时间不算在内，
                 // 所以计时放在 streamText 之前、流结束之后结算。
                 val stepStartMs = android.os.SystemClock.elapsedRealtime()
+                // 本步开始前，这条 assistant 消息已经累计了多少生成耗时。
+                // 流式过程中要用它 + 本步已用时，实时算 generationTimeMs——
+                // 原版 AgentLoop 就是这么干的（每收到一个 chunk 调一次 withStepStats），
+                // 所以它的 tok/s 在生成过程中是活的，工具执行时停在上一步的值。
+                val baseGenerationTimeMs = messages.lastOrNull()
+                    ?.takeIf { it.role == MessageRole.ASSISTANT }
+                    ?.generationTimeMs ?: 0L
                 // armor：只读流监看装饰器。不改编任何 chunk、不断流、异常吞掉只记状态，
                 // 判定结果交给 ArmorTransformer 在下一步决定注入纠正 / 续写。
                 val armorProvider: Provider<ProviderSetting> =
@@ -1613,16 +1620,26 @@ class GenerationLoop(
                         clearRetryStatus(processingStatus)
                     }
                     messages = streamChunkHandler.handle(messages, it)
+                    // 实时结算本步耗时：cumulative = 之前各步 + 本步已用
+                    val elapsedSoFar = android.os.SystemClock.elapsedRealtime() - stepStartMs
+                    if (messages.isNotEmpty() && messages.last().role == MessageRole.ASSISTANT) {
+                        val last = messages.last()
+                        messages = messages.slice(0 until messages.lastIndex) + last.copy(
+                            generationTimeMs = baseGenerationTimeMs + elapsedSoFar,
+                        )
+                    }
                     onUpdateMessages(messages)
                 }
                 // 用量面板的数据源：一步 = 一次 streamText，工具执行不计入生成耗时。
                 // 多步共享同一条 assistant 消息（工具结果写回同一个 message 的 tool part），
                 // 所以这里是累加，不是覆盖。
+                // 耗时在流式过程中已经实时更新过了，这里只补最后一帧 + 步数。
+                // 不再加 stepElapsedMs——否则跟上面的实时累加重复，tps 会被算小一半。
                 val stepElapsedMs = android.os.SystemClock.elapsedRealtime() - stepStartMs
                 if (messages.isNotEmpty() && messages.last().role == MessageRole.ASSISTANT) {
                     val last = messages.last()
                     messages = messages.slice(0 until messages.lastIndex) + last.copy(
-                        generationTimeMs = (last.generationTimeMs ?: 0L) + stepElapsedMs,
+                        generationTimeMs = baseGenerationTimeMs + stepElapsedMs,
                         stepCount = (last.stepCount ?: 0) + 1,
                     )
                     onUpdateMessages(messages)
