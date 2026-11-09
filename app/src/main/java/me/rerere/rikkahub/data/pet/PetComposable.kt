@@ -11,6 +11,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
@@ -97,6 +98,11 @@ fun Pet(
         }
     }
 
+    // pointerInput 的 key 是 pack（不能放 anim，否则每次换动画重建手势、
+    // 拖到一半就断）。但闭包里读的 anim 会停在首次捕获的那个值——
+    // 命中区就一直按旧动画算。用 rememberUpdatedState 拿到最新值。
+    val latestAnim by rememberUpdatedState(anim)
+
     val paint = remember {
         Paint().apply {
             isAntiAlias = false          // 像素画不插值
@@ -107,19 +113,24 @@ fun Pet(
     Canvas(
         modifier = modifier
             .onSizeChanged { containerSize = it }
-            // 点击和拖动必须放在**同一个** pointerInput 里。
-            // 分成两个的话后注册的那个会吃掉手势，拖不动。
-            .pointerInput(pack, anim) {
+            // 点击和拖动分成两个 pointerInput 块是必须的——
+            // 合成一个的话 detectTapGestures 和 detectDragGestures 会互相抢，
+            // 拖动永远触发不了。
+            //
+            // key 里不放 anim：动画每换一次就重建手势处理器，
+            // 正在拖的时候正好换动画，拖动就断了。手势只跟 pack 有关。
+            .pointerInput(pack) {
                 detectTapGestures(
                     onTap = { offset ->
-                        val hit = hitRectPx(pack, anim, k, originFor(containerSize, pack, k))
-                        if (hit.contains(offset.x, offset.y)) {
+                        val hit = hitRectPx(pack, latestAnim, k, originFor(containerSize, pack, k))
+                        // Rect.contains 只收 Offset，不收 (x, y) 两个 Float
+                        if (hit.contains(offset)) {
                             onTap(offset.x < containerSize.width / 2f)
                         }
                     },
                     onLongPress = { offset ->
-                        val hit = hitRectPx(pack, anim, k, originFor(containerSize, pack, k))
-                        if (hit.contains(offset.x, offset.y)) onLongPress()
+                        val hit = hitRectPx(pack, latestAnim, k, originFor(containerSize, pack, k))
+                        if (hit.contains(offset)) onLongPress()
                     },
                 )
             }
