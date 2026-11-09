@@ -157,7 +157,7 @@ fun SettingPetPage() {
                 )
             }
 
-            // ── 鲸鱼娘女仆 ──
+            // ── 哦鲸鲸 ──
             //
             // 独立开关，**跟上面选的互不排斥**。这是它跟素材包最大的区别：
             // 素材包只能站一只，她可以跟任意一只并排。
@@ -176,7 +176,7 @@ fun SettingPetPage() {
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("鲸鱼娘女仆", style = MaterialTheme.typography.bodyLarge)
+                        Text("哦鲸鲸", style = MaterialTheme.typography.bodyLarge)
                         Text(
                             "点一下查当前模型的余额。可以跟上面选的宠物同时站着。",
                             style = MaterialTheme.typography.bodySmall,

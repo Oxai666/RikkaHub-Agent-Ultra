@@ -1,6 +1,6 @@
 package me.rerere.rikkahub.data.pet
 
-/** 这个宠物在 petPackId 里占的值。不是素材包，走专属渲染。 */
+/** 老版本放在 petPackId 里的值，现在只用于升级迁移。 */
 const val MAID_PET_ID = "maid-deepseek"
 
 import android.graphics.BitmapFactory
@@ -55,7 +55,7 @@ import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 /**
- * 鲸鱼娘女仆宠物（"哦鲸鲸…" 那只）。
+ * 哦鲸鲸（鲸鱼娘女仆）。名字取自立绘里那个思考气泡的三个字。
  *
  * 跟另外两种宠物的区别：
  *
@@ -243,7 +243,7 @@ fun MaidPetHost(
 
         Image(
             bitmap = bitmap.asImageBitmap(),
-            contentDescription = "鲸鱼娘",
+            contentDescription = "哦鲸鲸",
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .width(with(density) { bodyW.toDp() })
