@@ -191,6 +191,21 @@ fun Pet(
             ),
             filterQuality = FilterQuality.None,
         )
+
+        // ⚠ 临时调试框：画出 Canvas 的实际边界 + 帧格的目标矩形。
+        // 排查完删掉。红色 = Canvas 占的区域，绿色 = 帧格应该画在哪。
+        drawRect(
+            color = androidx.compose.ui.graphics.Color.Red,
+            topLeft = androidx.compose.ui.geometry.Offset.Zero,
+            size = this.size,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f),
+        )
+        drawRect(
+            color = androidx.compose.ui.graphics.Color.Green,
+            topLeft = androidx.compose.ui.geometry.Offset(box.x * k, box.y * k),
+            size = androidx.compose.ui.geometry.Size(box.w * k, box.h * k),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f),
+        )
     }
 }
 

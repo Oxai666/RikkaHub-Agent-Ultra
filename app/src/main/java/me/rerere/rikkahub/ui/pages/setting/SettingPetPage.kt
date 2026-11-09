@@ -171,6 +171,29 @@ fun SettingPetPage() {
                 item {
                     Text("预览", style = MaterialTheme.typography.titleSmall)
                 }
+                // ⚠ 临时调试信息，排查完删掉
+                item {
+                    val debugPack = remember(settings.petPackId) {
+                        settings.petPackId?.let { sprites.loadPack(it) }
+                    }
+                    val debugK = remember(debugPack, settings.petSize) {
+                        debugPack?.screenScale(
+                            PetSize.fromName(settings.petSize),
+                            context.resources.displayMetrics.density,
+                        )
+                    }
+                    if (debugPack != null && debugK != null) {
+                        Text(
+                            text = "调试 · canvas=${debugPack.canvasW}×${debugPack.canvasH} " +
+                                "k=$debugK " +
+                                "画布px=${(debugPack.canvasW * debugK).toInt()}×" +
+                                "${(debugPack.canvasH * debugK).toInt()} " +
+                                "density=${context.resources.displayMetrics.density}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
