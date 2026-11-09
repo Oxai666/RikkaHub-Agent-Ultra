@@ -153,17 +153,27 @@ fun PetHost(
                 // 用容器宽一半的话，宠物会被拖到一半还在屏幕外。
                 val canvasWidthPx = pack.canvasW * k
                 val maxX = ((containerWidthPx - canvasWidthPx) / 2f).coerceAtLeast(0f)
-                // 纵向只能往上（负值），最多往上半个画布高。
-                // 之前给两倍，拖上去会超出父容器被裁掉——
-                // 用户看到的是"上面有个夹层，滑进去就消失"。
-                val maxUp = canvasHeightPx * 0.5f
+                // 纵向只能往上一点点。
+                //
+                // 容器高度正好等于画布高，往上提多少，顶部就裁掉多少。
+                // 之前给 0.5 倍画布高，提起来头就被切掉——
+                // 用户看到的是"提起来头没了"。
+                // 0.12 倍是能看出"被拎起来"又不裁到身体的量。
+                val maxUp = canvasHeightPx * 0.12f
                 dragX = (dragX + dx).coerceIn(-maxX, maxX)
                 dragY = (dragY + dy).coerceIn(-maxUp, 0f)
             },
             onDragEnd = {
-                // 松手回原位。不记位置——见上面 dragX 那段注释。
-                dragX = 0f
+                // 垂直回弹：提起来是"被拎住"的临时状态，松手就该落地。
+                // 留着悬空会让人以为它挂住了。
                 dragY = 0f
+                // 水平**保留**：左右位置是用户自己摆的，回中间等于白拖。
+                // dragX 不动。
+                //
+                // 反应动画也立刻结束。之前是等 playMsOf 播完才清，
+                // 用户看到的是"松手了还举着双手不放"。
+                reaction = null
+                reactionToken++
             },
         )
     }

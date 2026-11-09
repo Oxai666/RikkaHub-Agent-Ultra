@@ -73,14 +73,22 @@ fun Pet(
     val drawnW = (pack.canvasW * k).roundToInt()
 
     var containerSize by remember { mutableStateOf(IntSize.Zero) }
-    var sheet by remember(pack.id, anim.sheet) { mutableStateOf<PetSheet?>(null) }
 
-    // 解码放到 LaunchedEffect 里——它在 IO 协程上跑，不会卡住首帧
-    LaunchedEffect(pack.id, anim.sheet) {
-        if (sheet == null) {
-            sheet = sprites.sheet(pack.id, anim)
-        }
-    }
+    // **同步**加载，不走 LaunchedEffect。
+    //
+    // 原来是 `var sheet by remember(...) { mutableStateOf(null) }` 加一个
+    // LaunchedEffect 异步填。那样有个隐蔽的竞态：
+    //   · key 变了 → remember 重置成 null → LaunchedEffect 启动
+    //   · 但如果上一轮的协程还没被取消，或者 sprites 内部状态没就绪，
+    //     新协程可能读到 null 然后直接返回
+    //   · sheet 停在 null，而 LaunchedEffect 的 key 没变，不会重试
+    //   · 结果就是这一只一直空白，切走再切回来才重新触发
+    //
+    // 用户看到的现象完全对得上：切来切去「随机」有一只不显示。
+    //
+    // 素材很小（单张 130KB 左右），同步解码几十毫秒，首次会顿一下，
+    // 换来的是「key 一定对应唯一结果」——不会再有中间态。
+    val sheet = remember(pack.id, anim.sheet) { sprites.sheet(pack.id, anim) }
 
     // 当前该画第几格。只有它变化时才重组 Canvas。
     var cell by remember(anim) { mutableIntStateOf(anim.frames.firstOrNull()?.cell ?: 0) }
@@ -112,7 +120,7 @@ fun Pet(
     // 解码好的位图转成 Compose 的 ImageBitmap。
     // **必须在 Canvas 外面做**：Canvas 的 draw lambda 是 DrawScope.() -> Unit，
     // 不是 @Composable，里面不能调 remember。
-    val image = remember(sheet) { sheet?.bitmap?.asImageBitmap() }
+    val image = remember(sheet?.bitmap) { sheet?.bitmap?.asImageBitmap() }
 
     Canvas(
         modifier = modifier
