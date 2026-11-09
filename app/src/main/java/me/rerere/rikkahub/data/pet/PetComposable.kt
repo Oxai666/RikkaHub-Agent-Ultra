@@ -56,6 +56,8 @@ fun Pet(
     modifier: Modifier = Modifier,
     onTap: (leftHalf: Boolean) -> Unit = {},
     onLongPress: () -> Unit = {},
+    /** 拖动真正开始时调一次。用来播"被拎起来"的反应动画。 */
+    onDragStart: () -> Unit = {},
     onDrag: (dx: Float, dy: Float) -> Unit = { _, _ -> },
     onDragEnd: () -> Unit = {},
 ) {
@@ -136,7 +138,7 @@ fun Pet(
             }
             .pointerInput(pack) {
                 detectDragGestures(
-                    onDragStart = { },
+                    onDragStart = { onDragStart() },
                     onDrag = { change, drag ->
                         change.consume()
                         onDrag(drag.x, drag.y)

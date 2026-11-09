@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -73,11 +74,18 @@ fun PetHost(
     val stateAnim = remember(baseState, tier) { pack.primary(baseState.serial, tier) }
     val anim = reaction ?: stateAnim
 
-    // 拖动偏移。**记住的**，不是松手回零——
-    // 用户把它拖到哪就是哪，下次进来还在那儿。
-    // 水平竖直都要，只做水平的话"往上拔"这个动作会没反应。
+    // 拖动偏移。**松手回零**，不记位置。
+    //
+    // 之前做过"记住位置"，但宠物是站在输入框上沿的状态指示器，
+    // 让它能停在半空或者跑进输入框里没有意义，而且用户看到"往上滑能停在上面
+    // 不往下掉"会以为是 bug。拖动只用来触发被拎起来的反应。
     var dragX by remember(packId) { mutableStateOf(0f) }
     var dragY by remember(packId) { mutableStateOf(0f) }
+
+    // 连点计数。1.1 秒内点满 3 下 → 挠痒痒。
+    // 阈值取 1.1 秒是原版的数字：手机上目标很小，间隔再长一点连点容易点偏。
+    var tapCount by remember { mutableIntStateOf(0) }
+    var lastTapAt by remember { mutableLongStateOf(0L) }
     val animatedX by animateFloatAsState(dragX, label = "petDragX")
     val animatedY by animateFloatAsState(dragY, label = "petDragY")
 
@@ -117,11 +125,25 @@ fun PetHost(
             // 画布整个跑到容器上方，看起来就是「预览不全 + 悬空」。
             modifier = Modifier.fillMaxSize(),
             onTap = { leftHalf ->
-                // 戳一下：左右半身各播一段，纯反馈，不改任何状态
-                playReaction(pack.reaction(if (leftHalf) "tapLeft" else "tapRight"))
+                val now = System.currentTimeMillis()
+                tapCount = if (now - lastTapAt > 1100L) 1 else tapCount + 1
+                lastTapAt = now
+                if (tapCount >= 3) {
+                    // 连点三下 → 挠痒痒，播完把计数清零，
+                    // 不然第四次点击又立刻触发一轮
+                    tapCount = 0
+                    playReaction(pack.reaction("tickle"))
+                } else {
+                    playReaction(pack.reaction(if (leftHalf) "tapLeft" else "tapRight"))
+                }
             },
             onLongPress = {
                 // 长按菜单留给第二期（换宠物 / 藏起来 1 小时 / 设置）
+            },
+            onDragStart = {
+                // 被拎起来：播 drag 反应。
+                // 原版这个动作是循环的，拎着的时候一直保持被抓住的姿势。
+                playReaction(pack.reaction("drag"))
             },
             onDrag = { dx, dy ->
                 // 拖出边界必须夹住。之前不限的话往下滑能把宠物推到输入框里面，
@@ -131,12 +153,18 @@ fun PetHost(
                 // 用容器宽一半的话，宠物会被拖到一半还在屏幕外。
                 val canvasWidthPx = pack.canvasW * k
                 val maxX = ((containerWidthPx - canvasWidthPx) / 2f).coerceAtLeast(0f)
-                // 纵向只能往上（负值），最多往上两倍画布高——再远就没意义了
-                val maxUp = canvasHeightPx * 2f
+                // 纵向只能往上（负值），最多往上半个画布高。
+                // 之前给两倍，拖上去会超出父容器被裁掉——
+                // 用户看到的是"上面有个夹层，滑进去就消失"。
+                val maxUp = canvasHeightPx * 0.5f
                 dragX = (dragX + dx).coerceIn(-maxX, maxX)
                 dragY = (dragY + dy).coerceIn(-maxUp, 0f)
             },
-            onDragEnd = { },
+            onDragEnd = {
+                // 松手回原位。不记位置——见上面 dragX 那段注释。
+                dragX = 0f
+                dragY = 0f
+            },
         )
     }
 }
