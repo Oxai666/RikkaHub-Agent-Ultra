@@ -173,9 +173,16 @@ class PetPack(
      * 否则每个像素块大小不一，看起来是糊的。所以像素宠物只能
      * 取整到最近的整数倍，滑块拖动时会有跳变，这是对的。
      */
-    fun screenScaleDp(sizeDp: Float, density: Float): Float =
-        if (pixelArt) devicePixels(PetSize.MEDIUM, density).toFloat()
-        else sizeDp * density / contentBox.h
+    fun screenScaleDp(sizeDp: Float, density: Float): Float {
+        val raw = sizeDp * density / contentBox.h
+        // 像素画必须落在整数倍上，否则每个"像素块"大小不一，看起来是糊的。
+        // 所以只能吸附到最近的整数——拖滑块的时候会有跳变，这是对的。
+        //
+        // 之前这里直接 return devicePixels(PetSize.MEDIUM)，
+        // 也就是无论传什么 sizeDp 都返回同一个值——所以两个素材包
+        // 拖滑块毫无反应，只有不画像素的哦鲸鲸会变。
+        return if (pixelArt) raw.roundToInt().coerceAtLeast(1).toFloat() else raw
+    }
 
     companion object {
         const val IDLE = "idle"
