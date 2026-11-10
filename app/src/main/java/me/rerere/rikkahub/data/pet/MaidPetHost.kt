@@ -1,16 +1,11 @@
 package me.rerere.rikkahub.data.pet
 
 import android.graphics.BitmapFactory
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -42,6 +37,9 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -124,7 +122,22 @@ fun MaidPetHost(
     val savedOffsetX = liveSettings.maidPetOffsetX
 
     var hostWidthPx by remember { mutableFloatStateOf(0f) }
-    var dragX by remember(savedOffsetX) { mutableFloatStateOf(savedOffsetX) }
+    // 宠物在窗口坐标系里的位置。气泡必须用 Popup 画——
+    // 它要飘到宠物头顶上方，超出 ChatInput 这个 bottomBar 的边界，
+    // 普通 Box 里画出去会被父级裁掉（这就是"点了没反应"的真正原因：
+    // 气泡其实弹了，只是被裁没了）。
+    var petWindowPos by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+    // 同 PetHost：不能用 savedOffsetX 当 remember key，
+    // 否则松手写盘 → settingsFlow 推回来 → dragX 被重建，
+    // 第二次拖动就会撞墙、松手才跳过去。
+    var dragX by remember { mutableFloatStateOf(0f) }
+    var dragXInitialized by remember { mutableStateOf(false) }
+    LaunchedEffect(savedOffsetX, liveSettings.init) {
+        if (!dragXInitialized && liveSettings.init) {
+            dragX = savedOffsetX
+            dragXInitialized = true
+        }
+    }
     var grabY by remember { mutableFloatStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
 
@@ -172,69 +185,75 @@ fun MaidPetHost(
             .onSizeChanged { hostWidthPx = it.width.toFloat() },
         contentAlignment = Alignment.TopCenter,
     ) {
-        // 气泡
-        AnimatedVisibility(
-            visible = showBalance,
-            enter = fadeIn(tween(150)) + scaleIn(
-                animationSpec = tween(180),
-                initialScale = 0.78f,
-                transformOrigin = TransformOrigin(0.42f, 0.86f),
-            ),
-            exit = fadeOut(tween(130)) + scaleOut(
-                animationSpec = tween(130),
-                targetScale = 0.92f,
-                transformOrigin = TransformOrigin(0.42f, 0.86f),
-            ),
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = -(bubbleHeight - 14.dp)),
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(bubbleWidth)
-                    .height(bubbleHeight),
+        // 气泡。**必须用 Popup**。
+        //
+        // 它要飘到宠物头顶上方，那已经超出 ChatInput（Scaffold 的 bottomBar）
+        // 的边界了。在普通 Box 里 offset 负值画出去，父级会把超出部分裁掉——
+        // 表现就是"点了宠物有 Q 弹，但气泡不出来"。
+        //
+        // Popup 是独立的窗口层，不受父级裁剪，offset 用窗口坐标算。
+        val bubbleWpx = with(density) { bubbleWidth.toPx() }
+        val bubbleHpx = with(density) { bubbleHeight.toPx() }
+        if (showBalance) {
+            Popup(
+                offset = IntOffset(
+                    (petWindowPos.x + bodyWPx / 2f - bubbleWpx / 2f).roundToInt(),
+                    (petWindowPos.y - bubbleHpx + bodyHPx * 0.12f).roundToInt(),
+                ),
+                properties = PopupProperties(
+                    focusable = false,
+                    // 关键：不裁剪，否则气泡又会被窗口边界吃掉
+                    clippingEnabled = false,
+                ),
+                onDismissRequest = { showBalance = false },
             ) {
-                if (bubbleBitmap != null) {
-                    Image(
-                        bitmap = bubbleBitmap.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(start = 30.dp, end = 34.dp, top = 34.dp, bottom = 46.dp),
-                    contentAlignment = Alignment.Center,
+                        .width(bubbleWidth)
+                        .height(bubbleHeight),
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            text = modelLabel ?: "当前模型",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = Color(0xFF1E2F5B),
+                    if (bubbleBitmap != null) {
+                        Image(
+                            bitmap = bubbleBitmap.asImageBitmap(),
+                            contentDescription = null,
+                            contentScale = ContentScale.FillBounds,
+                            modifier = Modifier.fillMaxSize(),
                         )
-                        if (providerSetting != null &&
-                            providerSetting.balanceOption.enabled &&
-                            providerSetting is ProviderSetting.OpenAI
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(start = 30.dp, end = 34.dp, top = 34.dp, bottom = 46.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
-                            ProviderBalanceText(
-                                providerSetting = providerSetting,
-                                style = MaterialTheme.typography.titleMedium,
+                            Text(
+                                text = modelLabel ?: "当前模型",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                                 color = Color(0xFF1E2F5B),
                             )
-                        } else {
-                            Text(
-                                text = "这个服务商查不了余额",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFF5A6A8C),
-                            )
+                            if (providerSetting != null &&
+                                providerSetting.balanceOption.enabled &&
+                                providerSetting is ProviderSetting.OpenAI
+                            ) {
+                                ProviderBalanceText(
+                                    providerSetting = providerSetting,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = Color(0xFF1E2F5B),
+                                )
+                            } else {
+                                Text(
+                                    text = "这个服务商查不了余额",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color(0xFF5A6A8C),
+                                )
+                            }
                         }
                     }
                 }
@@ -252,6 +271,9 @@ fun MaidPetHost(
                         animatedX.roundToInt(),
                         (animatedY + liftMax).roundToInt(),
                     )
+                }
+                .onGloballyPositioned { coords ->
+                    petWindowPos = coords.localToWindow(androidx.compose.ui.geometry.Offset.Zero)
                 }
                 .pointerInput(Unit) {
                     detectTapGestures(

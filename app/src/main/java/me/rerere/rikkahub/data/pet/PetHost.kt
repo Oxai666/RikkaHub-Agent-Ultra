@@ -160,9 +160,27 @@ fun PetHost(
     }
     val savedOffsetX = if (persistX) liveSettings.petOffsetX else 0f
 
-    // remember(packId, savedOffsetX)：首次进入和切回页面时都用存下来的值初始化。
-    // 之前是 remember(packId) 固定从 0 开始，所以每次回页面都弹回中间。
-    var dragX by remember(packId, savedOffsetX) { mutableStateOf(savedOffsetX) }
+    // ⚠ 这里**不能**把 savedOffsetX 当 remember 的 key。
+    //
+    // 松手时 onDragEnd 会把 dragX 写进 DataStore，写完 settingsFlow 一推，
+    // savedOffsetX 就变了 —— 如果它是 key，dragX 会被整个重建。
+    // 用户紧接着第二次按下时，重建正好发生在拖动中间，
+    // dragX 被拉回旧值：看起来就是"第一次能拖，第二次撞空气墙、
+    // 松手才飞到目标位置"。
+    //
+    // 改成只初始化一次：拿到第一个有效值（DataStore 还没加载完时
+    // 给的是 dummy 的 0，用 NaN 标记"还没初始化"）就锁住，之后不再覆盖。
+    var dragX by remember(packId) { mutableStateOf(0f) }
+    // 只在 DataStore 真正加载完之后认一次位置。
+    // dummy() 阶段 init=false，那时 petOffsetX 恒为 0，
+    // 用它初始化等于把用户上次拖的位置抹掉。
+    var dragXInitialized by remember(packId) { mutableStateOf(false) }
+    LaunchedEffect(savedOffsetX, liveSettings.init) {
+        if (!dragXInitialized && liveSettings.init) {
+            dragX = savedOffsetX
+            dragXInitialized = true
+        }
+    }
     var dragY by remember(packId) { mutableStateOf(0f) }
 
     // 连点计数。1.1 秒内点满 3 下 → 挠痒痒。

@@ -256,6 +256,7 @@ fun ChatInput(
                         me.rerere.rikkahub.data.pet.ImagePetHost(
                             imagePath = customPetPath,
                             size = petSize,
+                            modifier = Modifier.align(Alignment.BottomCenter),
                         )
                     } else {
                         me.rerere.rikkahub.data.pet.PetHost(
@@ -263,6 +264,7 @@ fun ChatInput(
                             size = petSize,
                             // 不传 mood → 订阅 PetSignal 的全局状态。
                             // 跑/完成/等确认/睡觉四个信号由 ChatPage 和各处上报。
+                            modifier = Modifier.align(Alignment.BottomCenter),
                         )
                     }
                 }
@@ -277,6 +279,9 @@ fun ChatInput(
                         size = petSize,
                         providerSetting = currentModel?.findProvider(settings.providers),
                         modelLabel = currentModel?.displayName?.takeIf { it.isNotBlank() },
+                        // 底部对齐：两只容器高度不同（哦鲸鲸的画布接近正方形），
+                        // 不指定就会各自从 Box 顶部排，看起来一个悬在高处。
+                        modifier = Modifier.align(Alignment.BottomCenter),
                     )
                 }
                 // 续写：上一轮被打断（喊停 / 没钱 / 断联）时出现。
