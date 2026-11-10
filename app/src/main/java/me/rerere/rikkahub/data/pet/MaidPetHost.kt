@@ -68,6 +68,21 @@ import kotlin.math.roundToInt
 const val MAID_PET_ID = "maid-deepseek"
 
 /**
+ * 余额缓存。
+ *
+ * 为什么要有：余额是网络请求，几百毫秒起步。如果等用户点了才查，
+ * 气泡会先弹出一个空的/「…」的框，过一下才闪成数字——很难看。
+ *
+ * 所以宠物一显示就预取，点开的时候直接拿缓存。
+ * 点开的同时在后台静默刷新一次，成功了才替换，失败保留旧值。
+ *
+ * TTL 60 秒：够短，数字不会太陈旧；够长，来回切页面不会反复打接口。
+ */
+private val maidBalanceCache = mutableMapOf<String, String>()
+private val maidBalanceCachedAt = mutableMapOf<String, Long>()
+private const val MAID_BALANCE_TTL_MS = 60_000L
+
+/**
  * 哦鲸鲸（鲸鱼娘女仆）。名字取自立绘里那个思考气泡的三个字。
  *
  * 跟另外两种宠物的区别：
@@ -155,20 +170,58 @@ fun MaidPetHost(
     // 当成结果显示出来（"Error: ..."）。这里只要数字，拿不到就是 null，
     // 显示层兜底成「哦鲸鲸」。
     val providerManager: ProviderManager = koinInject()
-    var balanceText by remember(providerSetting?.id) { mutableStateOf<String?>(null) }
-    var balanceLoading by remember(providerSetting?.id) { mutableStateOf(false) }
-    LaunchedEffect(showBalance, providerSetting?.id) {
-        if (!showBalance) return@LaunchedEffect
+    val providerId = providerSetting?.id?.toString()
+
+    // 先用缓存初始化，这样气泡一弹出来数字就已经在了。
+    var balanceText by remember(providerId) {
+        mutableStateOf(providerId?.let { maidBalanceCache[it] })
+    }
+    // 只有"手上真的什么都没有"时才显示加载态。
+    // 有旧值时刷新是静默的，不闪。
+    var balanceLoading by remember(providerId) {
+        mutableStateOf(balanceText == null)
+    }
+
+    // 宠物一显示就预取，不等用户点。
+    LaunchedEffect(providerId) {
         val ps = providerSetting
         if (ps !is ProviderSetting.OpenAI || !ps.balanceOption.enabled) {
-            balanceText = null
+            balanceLoading = false
             return@LaunchedEffect
         }
-        balanceLoading = true
-        balanceText = runCatching {
+        val key = ps.id.toString()
+        val now = System.currentTimeMillis()
+        val cachedAt = maidBalanceCachedAt[key] ?: 0L
+        if (now - cachedAt < MAID_BALANCE_TTL_MS) {
+            balanceLoading = false
+            return@LaunchedEffect
+        }
+        val v = runCatching {
             providerManager.getProviderByType(ps).getBalance(ps)
         }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() && !it.startsWith("Error") }
+        if (v != null) {
+            balanceText = v
+            maidBalanceCache[key] = v
+            maidBalanceCachedAt[key] = now
+        }
         balanceLoading = false
+    }
+
+    // 点开时后台再刷一次。成功了才替换，失败了保留旧值——
+    // 网络抖一下不该让气泡里的数字变成空白。
+    LaunchedEffect(showBalance) {
+        if (!showBalance) return@LaunchedEffect
+        val ps = providerSetting
+        if (ps !is ProviderSetting.OpenAI || !ps.balanceOption.enabled) return@LaunchedEffect
+        val key = ps.id.toString()
+        val v = runCatching {
+            providerManager.getProviderByType(ps).getBalance(ps)
+        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() && !it.startsWith("Error") }
+        if (v != null) {
+            balanceText = v
+            maidBalanceCache[key] = v
+            maidBalanceCachedAt[key] = System.currentTimeMillis()
+        }
     }
 
     LaunchedEffect(balanceToken) {
