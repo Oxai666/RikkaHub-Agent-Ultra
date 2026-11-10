@@ -73,6 +73,14 @@ fun SettingPetPage() {
     // settingsStore.update 是 suspend —— 必须从协程里调，不能直接写在 onClick 里
     val scope = rememberCoroutineScope()
     val sprites = remember { PetSprites(context) }
+    // 有哪些素材包。写死两个：assets/pets/ 里就这俩，
+    // 以后加了再改成扫目录。哦鲸鲸不在这里——它不是素材包，
+    // 是单独渲染的，在列表里手动追加。
+    val packs = remember {
+        listOf("deepy-whale", "whale-girl").mapNotNull { id ->
+            sprites.loadPack(id)?.let { id to it.name }
+        }
+    }
 
     Scaffold(
         topBar = {
