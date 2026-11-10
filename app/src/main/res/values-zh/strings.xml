@@ -143,10 +143,10 @@
   <string name="assistant_compaction_title">压缩对话</string>
   <string name="assistant_detail_compaction_desc">压缩长对话，同时存档完整记录供 AI 检索</string>
   <string name="assistant_compaction_target">压缩大小</string>
-  <string name="assistant_compaction_target_desc">压缩后把上下文缩到多少。单位千 tokens，留空沿用全局设置。</string>
+  <string name="assistant_compaction_target_desc">压缩后把上下文缩到多少。单位 K tokens，留空沿用全局设置。</string>
   <string name="assistant_compaction_threshold">压缩阈值</string>
-  <string name="assistant_compaction_threshold_desc">上下文超过这个量才开始压缩。单位千 tokens，留空沿用全局设置。</string>
-  <string name="assistant_compaction_threshold_unit">千 tokens</string>
+  <string name="assistant_compaction_threshold_desc">上下文超过这个量才开始压缩。单位 K tokens，留空沿用全局设置。</string>
+  <string name="assistant_compaction_threshold_unit">K tokens</string>
   <string name="assistant_compaction_keep">保留消息</string>
   <string name="assistant_compaction_keep_desc">压缩后最近多少条消息原样保留，不参与摘要。</string>
   <string name="assistant_compaction_extra">附加说明</string>
@@ -1874,7 +1874,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_model_page_auto_compaction_tokens">Token阈值</string>
   <string name="setting_model_page_auto_compaction_tokens_desc">输入以千Token为单位的阈值。例如，8k表示8000个Token。</string>
   <string name="setting_model_page_context_compaction_target">压缩目标</string>
-  <string name="setting_model_page_context_compaction_target_desc">以千 Token 为单位设置摘要目标大小。留空时使用当前上下文的 1%（例如上下文为 300k 时使用 3k）。</string>
+  <string name="setting_model_page_context_compaction_target_desc">以 K Token 为单位设置摘要目标大小。留空时使用当前上下文的 1%（例如上下文为 300k 时使用 3k）。</string>
   <string name="setting_model_page_auto_compaction_keep_tool_calls">保留最近的工具调用</string>
   <string name="setting_model_page_auto_compaction_keep_tool_calls_desc">自动压缩会保留这些工具调用的原始输入和输出。设为0时压缩整个当前上下文。</string>
   <string name="setting_model_page_response_stream_retries">Response API 流重试次数</string>
