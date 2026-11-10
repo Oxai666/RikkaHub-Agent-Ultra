@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -199,8 +200,10 @@ fun MaidPetHost(
         label = "maidStretch",
     )
 
-    val bubbleWidth = 184.dp
-    val bubbleHeight = bubbleWidth * (445f / 512f)
+    // 气泡跟着宠物大小走。之前写死 184dp，宠物拖到 96dp 时气泡还是那么大，
+    // 看着像贴上去的。
+    val bubbleWidth = (sizeDp * 6.2f).dp
+    val bubbleHeight = bubbleWidth * (521f / 600f)
 
     Box(
         modifier = modifier
@@ -274,8 +277,10 @@ fun MaidPetHost(
                             }
                             Text(
                                 text = shown,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
+                                // 字号跟着气泡走，气泡跟着宠物走。
+                                // 原来固定 titleMedium（16sp），放在 180dp 的气泡里太小。
+                                fontSize = (sizeDp * 0.92f).sp,
+                                fontWeight = FontWeight.ExtraBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 color = Color(0xFF1E2F5B),
@@ -303,11 +308,16 @@ fun MaidPetHost(
                 }
                 .pointerInput(Unit) {
                     detectTapGestures(
+                        // 抬手复位。**不在这里弹气泡**：
+                        // onPress 的 tryAwaitRelease 在拖动结束时也会返回，
+                        // 所以拖一下宠物就会冒出气泡。
                         onPress = {
                             pressed = true
                             tryAwaitRelease()
                             pressed = false
-                            // 气泡已经在的时候，点它只做 Q 弹——不重弹、不刷新余额。
+                        },
+                        // 只有真正的点击（没被拖动抢走）才弹。
+                        onTap = {
                             if (!showBalance) {
                                 showBalance = true
                                 balanceToken++
