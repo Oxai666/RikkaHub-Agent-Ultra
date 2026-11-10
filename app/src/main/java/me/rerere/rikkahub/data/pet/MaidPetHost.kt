@@ -47,13 +47,16 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import me.rerere.ai.provider.ProviderManager
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.data.datastore.SettingsStore
-import me.rerere.rikkahub.ui.components.ai.ProviderBalanceText
 import org.koin.compose.koinInject
 import kotlin.math.roundToInt
 
@@ -146,6 +149,26 @@ fun MaidPetHost(
     var showBalance by remember { mutableStateOf(false) }
     var balanceToken by remember { mutableIntStateOf(0) }
 
+    // 余额自己查，不用 ProviderBalanceText——那个出错时会把异常文本
+    // 当成结果显示出来（"Error: ..."）。这里只要数字，拿不到就是 null，
+    // 显示层兜底成「哦鲸鲸」。
+    val providerManager: ProviderManager = koinInject()
+    var balanceText by remember(providerSetting?.id) { mutableStateOf<String?>(null) }
+    var balanceLoading by remember(providerSetting?.id) { mutableStateOf(false) }
+    LaunchedEffect(showBalance, providerSetting?.id) {
+        if (!showBalance) return@LaunchedEffect
+        val ps = providerSetting
+        if (ps !is ProviderSetting.OpenAI || !ps.balanceOption.enabled) {
+            balanceText = null
+            return@LaunchedEffect
+        }
+        balanceLoading = true
+        balanceText = runCatching {
+            providerManager.getProviderByType(ps).getBalance(ps)
+        }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() && !it.startsWith("Error") }
+        balanceLoading = false
+    }
+
     LaunchedEffect(balanceToken) {
         if (!showBalance) return@LaunchedEffect
         delay(3_000L)
@@ -196,17 +219,28 @@ fun MaidPetHost(
         val bubbleWpx = with(density) { bubbleWidth.toPx() }
         val bubbleHpx = with(density) { bubbleHeight.toPx() }
         if (showBalance) {
+            // Popup(offset = ...) 的 offset 是**相对父级**的，不是窗口坐标。
+            // 之前直接往里塞 localToWindow 算出来的绝对值，等于把偏移算了两遍，
+            // 气泡整个飞到屏幕外面去——所以看起来"点了没反应"。
+            //
+            // 用 PopupPositionProvider 自己算，它的 calculatePosition 拿到的
+            // anchorBounds 是相对窗口的，返回的也是窗口坐标。
             Popup(
-                offset = IntOffset(
-                    (petWindowPos.x + bodyWPx / 2f - bubbleWpx / 2f).roundToInt(),
-                    (petWindowPos.y - bubbleHpx + bodyHPx * 0.12f).roundToInt(),
-                ),
-                properties = PopupProperties(
-                    focusable = false,
-                    // 关键：不裁剪，否则气泡又会被窗口边界吃掉
-                    clippingEnabled = false,
-                ),
-                onDismissRequest = { showBalance = false },
+                popupPositionProvider = remember(petWindowPos, bodyWPx, bodyHPx) {
+                    object : PopupPositionProvider {
+                        override fun calculatePosition(
+                            anchorBounds: IntRect,
+                            windowSize: IntSize,
+                            layoutDirection: LayoutDirection,
+                            popupContentSize: IntSize,
+                        ): IntOffset {
+                            val x = petWindowPos.x + bodyWPx / 2f - popupContentSize.width / 2f
+                            val y = petWindowPos.y - popupContentSize.height + bodyHPx * 0.12f
+                            return IntOffset(x.roundToInt(), y.roundToInt())
+                        }
+                    }
+                },
+                properties = PopupProperties(focusable = false),
             ) {
                 Box(
                     modifier = Modifier
@@ -231,30 +265,21 @@ fun MaidPetHost(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
+                            // 拿不到余额（不支持 / 网络挂了 / 报错）就显示「哦鲸鲸」。
+                            // 这三个字就是她的名字，比「查询失败」更像她会说的话。
+                            val shown = when {
+                                balanceLoading -> "…"
+                                !balanceText.isNullOrBlank() -> balanceText!!
+                                else -> "哦鲸鲸"
+                            }
                             Text(
-                                text = modelLabel ?: "当前模型",
-                                style = MaterialTheme.typography.labelMedium,
+                                text = shown,
+                                style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 color = Color(0xFF1E2F5B),
                             )
-                            if (providerSetting != null &&
-                                providerSetting.balanceOption.enabled &&
-                                providerSetting is ProviderSetting.OpenAI
-                            ) {
-                                ProviderBalanceText(
-                                    providerSetting = providerSetting,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = Color(0xFF1E2F5B),
-                                )
-                            } else {
-                                Text(
-                                    text = "这个服务商查不了余额",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Color(0xFF5A6A8C),
-                                )
-                            }
                         }
                     }
                 }
