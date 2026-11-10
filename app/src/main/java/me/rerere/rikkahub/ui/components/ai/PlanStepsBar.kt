@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,18 +52,23 @@ fun PlanStepsBar(
     // 依赖 steps.size 而不是整个 plan：新计划（步数变了）要重新显示，
     // 而 explanation 之类的小改动不该打断倒计时。
     val allDone = !plan.isEmpty && plan.steps.all { it.status == PlanStepStatus.COMPLETED }
-    var visibleAfterDone by remember(plan.steps.size) { mutableStateOf(true) }
-    LaunchedEffect(allDone, plan.steps.size) {
-        if (allDone) {
-            visibleAfterDone = true
+    // 用计划内容做 key，而不是 steps.size：
+    // 同一份计划切页面回来时 key 不变，"已经收起来了"这个状态能跟着走，
+    // 不会每次进聊天页都重播一遍"出现 → 三秒 → 消失"。
+    //
+    // rememberSaveable 而不是 remember：切页面时 Composable 会离开组合，
+    // 普通 remember 会丢，回来又是 visible=true 从头播一遍。
+    val planKey = plan.steps.joinToString("|") { "${it.index}:${it.step}" }
+    var doneShown by rememberSaveable(planKey) { mutableStateOf(false) }
+    LaunchedEffect(allDone, planKey) {
+        if (allDone && !doneShown) {
+            // 停 3 秒让用户看到 7/7，然后收起来
             kotlinx.coroutines.delay(3_000L)
-            visibleAfterDone = false
-        } else {
-            visibleAfterDone = true
+            doneShown = true
         }
     }
 
-    AnimatedVisibility(visible = !plan.isEmpty && visibleAfterDone) {
+    AnimatedVisibility(visible = !plan.isEmpty && !(allDone && doneShown)) {
         Column(
             modifier = modifier
                 .fillMaxWidth()

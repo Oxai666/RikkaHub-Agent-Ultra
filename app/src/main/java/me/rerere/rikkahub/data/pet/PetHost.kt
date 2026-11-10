@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.LaunchedEffect
@@ -171,16 +172,20 @@ fun PetHost(
     //
     // 改成只初始化一次：拿到第一个有效值（DataStore 还没加载完时
     // 给的是 dummy 的 0，用 NaN 标记"还没初始化"）就锁住，之后不再覆盖。
+    // 位置只认一次，而且必须等**真实配置**加载完。
+    //
+    // ⚠ 不能拿 liveSettings.init 当判据：settingsFlow 的初始值是
+    // Settings.dummy()，而 dummy() 就是 Settings(init = true)。
+    // 也就是说首次组合时 init 已经是 true，会立刻用 dummy 里的
+    // petOffsetX = 0 把位置初始化掉，之后 o 下面的真实值再也不生效——
+    // 表现就是"切页面/大退重进，宠物全回中间"。
+    //
+    // 正确做法：等流里出现第一个 init = false 的实例（真正的 DataStore 值）。
     var dragX by remember(packId) { mutableStateOf(0f) }
-    // 只在 DataStore 真正加载完之后认一次位置。
-    // dummy() 阶段 init=false，那时 petOffsetX 恒为 0，
-    // 用它初始化等于把用户上次拖的位置抹掉。
-    var dragXInitialized by remember(packId) { mutableStateOf(false) }
-    LaunchedEffect(savedOffsetX, liveSettings.init) {
-        if (!dragXInitialized && liveSettings.init) {
-            dragX = savedOffsetX
-            dragXInitialized = true
-        }
+    LaunchedEffect(packId) {
+        if (!persistX) return@LaunchedEffect
+        val real = settingsStore.settingsFlow.first { !it.init }
+        dragX = real.petOffsetX
     }
     var dragY by remember(packId) { mutableStateOf(0f) }
 
@@ -339,7 +344,9 @@ fun PetHost(
                 // 是因为拖动过程中每一帧都写 DataStore 太重。
                 if (persistX && dragX != savedOffsetX) {
                     val target = dragX
-                    persistScope.launch {
+                    // NonCancellable：切页面时 rememberCoroutineScope 会被取消，
+                    // 写盘正好卡在那一下就会丢。带上它保证这次写一定落盘。
+                    persistScope.launch(kotlinx.coroutines.NonCancellable) {
                         settingsStore.update { it.copy(petOffsetX = target) }
                     }
                 }

@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -135,13 +136,11 @@ fun MaidPetHost(
     // 同 PetHost：不能用 savedOffsetX 当 remember key，
     // 否则松手写盘 → settingsFlow 推回来 → dragX 被重建，
     // 第二次拖动就会撞墙、松手才跳过去。
+    // 同 PetHost：等真实配置，别被 dummy(init = true) 骗了
     var dragX by remember { mutableFloatStateOf(0f) }
-    var dragXInitialized by remember { mutableStateOf(false) }
-    LaunchedEffect(savedOffsetX, liveSettings.init) {
-        if (!dragXInitialized && liveSettings.init) {
-            dragX = savedOffsetX
-            dragXInitialized = true
-        }
+    LaunchedEffect(Unit) {
+        val real = settingsStore.settingsFlow.first { !it.init }
+        dragX = real.maidPetOffsetX
     }
     var grabY by remember { mutableFloatStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
@@ -331,7 +330,7 @@ fun MaidPetHost(
                             grabY = 0f
                             if (dragX != savedOffsetX) {
                                 val target = dragX
-                                persistScope.launch {
+                                persistScope.launch(kotlinx.coroutines.NonCancellable) {
                                     settingsStore.update { s -> s.copy(maidPetOffsetX = target) }
                                 }
                             }
