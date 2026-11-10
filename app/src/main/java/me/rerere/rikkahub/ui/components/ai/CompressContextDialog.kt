@@ -96,7 +96,7 @@ fun CompressContextDialog(
                             targetTokensK = value.filter(Char::isDigit).take(7)
                         },
                         singleLine = true,
-                        suffix = { Text("k") },
+                        suffix = { Text("K") },
                         placeholder = { Text("${(defaultTargetTokens + 999) / 1_000}") },
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Number,

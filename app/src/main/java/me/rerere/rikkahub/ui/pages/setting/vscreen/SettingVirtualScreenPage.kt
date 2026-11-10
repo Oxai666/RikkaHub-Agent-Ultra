@@ -295,11 +295,6 @@ fun SettingVirtualScreenPage() {
                 }
             }
 
-            Text(
-                text = stringResource(R.string.setting_virtual_screen_explain),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

@@ -56,6 +56,19 @@ fun settingsSearchIndex(developerMode: Boolean): List<SettingsSearchEntry> {
             ),
         ),
         SettingsSearchEntry(
+            titleRes = R.string.setting_page_pet,
+            descriptionRes = R.string.setting_page_pet_desc,
+            groupRes = R.string.setting_page_general_settings,
+            route = Screen.SettingPet,
+            keywords = listOf(
+                // 宠物设置页内部的东西：三种宠物、滑块、余额气泡
+                "宠物", "pet", "桌面宠物", "桌宠",
+                "哦鲸鲸", "鲸鱼", "鲸鱼娘", "小鲸鱼", "deepy", "whale",
+                "大小", "尺寸", "缩放", "滑块",
+                "余额", "查余额", "balance",
+            ),
+        ),
+        SettingsSearchEntry(
             titleRes = R.string.setting_page_extensions,
             descriptionRes = R.string.setting_page_extensions_desc,
             groupRes = R.string.setting_page_general_settings,
