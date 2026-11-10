@@ -166,6 +166,17 @@ class PetPack(
     fun screenScale(size: PetSize, density: Float): Float =
         if (pixelArt) devicePixels(size, density).toFloat() else size.dp * density / contentBox.h
 
+    /**
+     * 按**任意 dp 高度**算缩放，不再绑定三档。
+     *
+     * 像素画那类还是走 devicePixels——它必须落在整数倍上，
+     * 否则每个像素块大小不一，看起来是糊的。所以像素宠物只能
+     * 取整到最近的整数倍，滑块拖动时会有跳变，这是对的。
+     */
+    fun screenScaleDp(sizeDp: Float, density: Float): Float =
+        if (pixelArt) devicePixels(PetSize.MEDIUM, density).toFloat()
+        else sizeDp * density / contentBox.h
+
     companion object {
         const val IDLE = "idle"
 

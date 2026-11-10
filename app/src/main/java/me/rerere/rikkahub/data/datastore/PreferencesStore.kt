@@ -243,6 +243,8 @@ class SettingsStore(
         val CUSTOM_PET_PATH = stringPreferencesKey("custom_pet_path")
         val MAID_PET_ENABLED = booleanPreferencesKey("maid_pet_enabled")
         val MAID_PET_OFFSET_X = floatPreferencesKey("maid_pet_offset_x")
+        val PET_PACK_IDS = stringPreferencesKey("pet_pack_ids")
+        val PET_SIZES = stringPreferencesKey("pet_sizes")
 
         // 目标续跑。这两个之前也没持久化——加开关那次只改了内存，
         // persistSettings 的白名单没跟上，重启直接恢复默认。
@@ -362,6 +364,8 @@ class SettingsStore(
                     ?: preferences.remove(CUSTOM_PET_PATH)
                 preferences[MAID_PET_ENABLED] = settings.maidPetEnabled
                 preferences[MAID_PET_OFFSET_X] = settings.maidPetOffsetX
+                preferences[PET_PACK_IDS] = settings.petPackIds
+                preferences[PET_SIZES] = settings.petSizes
 
                 preferences[ENABLE_GOAL_AUTO_CONTINUATION] = settings.enableGoalAutoContinuation
                 preferences[GOAL_CONTINUATION_LIMIT] = settings.goalContinuationLimit.coerceIn(1, 50)
@@ -567,6 +571,16 @@ class SettingsStore(
                 // 老版本把女仆当素材包存进 petPackId（值 "maid-deepseek"）。
                 // 现在它是独立开关，读到老值就顺手迁过来，不然升级后那只会消失。
                 maidPetOffsetX = preferences[MAID_PET_OFFSET_X] ?: 0f,
+                // 多选列表。老版本只有单个 petPackId（还有一版把女仆也塞在里面），
+                // 读到旧的单值就合并进来，升级后不至于一只都不剩。
+                petPackIds = preferences[PET_PACK_IDS] ?: buildString {
+                    preferences[PET_PACK_ID]?.takeIf { it.isNotBlank() }?.let { append(it) }
+                    if (preferences[MAID_PET_ENABLED] == true) {
+                        if (isNotEmpty()) append(',')
+                        append("maid-deepseek")
+                    }
+                },
+                petSizes = preferences[PET_SIZES] ?: "",
                 maidPetEnabled = preferences[MAID_PET_ENABLED]
                     ?: (preferences[PET_PACK_ID] == "maid-deepseek"),
                 enableGoalAutoContinuation =
@@ -1002,6 +1016,22 @@ data class Settings(
     val maidPetOffsetX: Float = 0f,
 
     /**
+     * 同时显示的宠物 id，逗号分隔。
+     *
+     * 为什么不是 Set<String>：Settings 是 data class + DataStore 逐字段存的，
+     * 塞集合要自己序列化。逗号串够用，而且读出错了好恢复。
+     */
+    val petPackIds: String = "",
+
+    /**
+     * 每只宠物的自定义高度，格式 `id:dp,id:dp`。
+     *
+     * 之前是全局三档（22/30/40dp），一是三档差别太小看不出来，
+     * 二是没法给不同的宠物配不同大小。现在是每只一个滑块，16~96dp。
+     */
+    val petSizes: String = "",
+
+    /**
      * 用户自己那张图当宠物时，图片在 App 私有目录里的绝对路径。
      *
      * 为什么不存 content:// URI：相册给的那个 URI 权限是一次性的，
@@ -1250,6 +1280,46 @@ fun Settings.getSelectedASRProvider(): ASRProviderSetting? {
     return selectedASRProviderId?.let { id ->
         asrProviders.find { it.id == id }
     } ?: asrProviders.firstOrNull()
+}
+
+// ── 宠物多选 / 自定义尺寸 ────────────────────────────────────────────────
+
+/** 同时显示的宠物 id。 */
+fun Settings.petIdList(): List<String> =
+    petPackIds.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+
+/**
+ * 某只宠物自定义的高度（dp）。
+ *
+ * 没设过就用 30——那是原来 MEDIUM 的值，升级上来的用户看到的还是原来大小。
+ * 夹在 16~96：再小看不出是什么，再大能把输入框顶出屏幕。
+ */
+fun Settings.petHeightOf(id: String): Float =
+    petSizes.split(',')
+        .map { it.trim() }
+        .firstOrNull { it.startsWith("$id:") }
+        ?.substringAfter(':')
+        ?.toFloatOrNull()
+        ?.coerceIn(16f, 96f)
+        ?: 30f
+
+/** 改某只的高度，返回新的 [Settings.petSizes] 串。 */
+fun Settings.withPetHeight(id: String, dp: Float): String {
+    val kept = petSizes.split(',')
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.startsWith("$id:") }
+    return (kept + "$id:${dp.coerceIn(16f, 96f)}").joinToString(",")
+}
+
+/** 勾上或取消一只，返回新的 [Settings.petPackIds] 串。 */
+fun Settings.withPetToggled(id: String, on: Boolean): String {
+    val ids = petIdList().toMutableList()
+    if (on) {
+        if (!ids.contains(id)) ids.add(id)
+    } else {
+        ids.remove(id)
+    }
+    return ids.joinToString(",")
 }
 
 fun Model.findProvider(providers: List<ProviderSetting>, checkOverwrite: Boolean = true): ProviderSetting? {

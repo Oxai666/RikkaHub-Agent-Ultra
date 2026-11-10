@@ -95,6 +95,8 @@ import me.rerere.rikkahub.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
+import me.rerere.rikkahub.data.datastore.petHeightOf
+import me.rerere.rikkahub.data.datastore.petIdList
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
@@ -242,47 +244,41 @@ fun ChatInput(
             // 现在用 Box 叠起来：宠物照常贴着输入框，按钮浮在左下角，
             // 两者互不占位。宠物默认水平居中，跟左下角的按钮不打架。
             Box(modifier = Modifier.fillMaxWidth()) {
+                // 多选的宠物，各自一份高度。全部叠在同一层里——
+                // 并排会各分一半宽，谁都拖不过中线。
                 val customPetPath = settings.customPetPath
-                // 素材包/自定义图跟哦鲸鲸**不互斥**，但也不能用 Row 并排——
-                // 并排就等于各分一半宽，两只都拖不过中线。
-                //
-                // 所以是叠在同一层里，各自占满全宽、各有自己的 dragX。
-                // 默认都在中间会重叠，哦鲸鲸的初始位置由 maidPetOffsetX 决定，
-                // 用户把它拖开一次就记住了。
-                val petSize = me.rerere.rikkahub.data.pet.PetSize.fromName(settings.petSize)
-                val hasPrimary = customPetPath != null || settings.petPackId != null
-                if (hasPrimary) {
-                    if (customPetPath != null) {
-                        me.rerere.rikkahub.data.pet.ImagePetHost(
-                            imagePath = customPetPath,
-                            size = petSize,
-                            modifier = Modifier.align(Alignment.BottomCenter),
-                        )
-                    } else {
-                        me.rerere.rikkahub.data.pet.PetHost(
-                            packId = settings.petPackId,
-                            size = petSize,
-                            // 不传 mood → 订阅 PetSignal 的全局状态。
-                            // 跑/完成/等确认/睡觉四个信号由 ChatPage 和各处上报。
-                            modifier = Modifier.align(Alignment.BottomCenter),
-                        )
-                    }
-                }
-                if (settings.maidPetEnabled) {
-                    // 哦鲸鲸：点一下吐气泡查余额。
-                    // provider 从「这个助手当前用的模型」反查——
-                    // 用户切了模型，气泡里显示的就该是那个模型的钱。
-                    val currentModel = settings.findModelById(
-                        assistant.chatModelId ?: settings.chatModelId
-                    )
-                    me.rerere.rikkahub.data.pet.MaidPetHost(
-                        size = petSize,
-                        providerSetting = currentModel?.findProvider(settings.providers),
-                        modelLabel = currentModel?.displayName?.takeIf { it.isNotBlank() },
-                        // 底部对齐：两只容器高度不同（哦鲸鲸的画布接近正方形），
-                        // 不指定就会各自从 Box 顶部排，看起来一个悬在高处。
+                if (customPetPath != null) {
+                    me.rerere.rikkahub.data.pet.ImagePetHost(
+                        imagePath = customPetPath,
+                        sizeDp = settings.petHeightOf("custom"),
                         modifier = Modifier.align(Alignment.BottomCenter),
                     )
+                } else {
+                    settings.petIdList().forEach { id ->
+                        val h = settings.petHeightOf(id)
+                        if (id == me.rerere.rikkahub.data.pet.MAID_PET_ID) {
+                            // 哦鲸鲸：点一下吐气泡查余额。
+                            // provider 从「这个助手当前用的模型」反查——
+                            // 用户切了模型，气泡里显示的就该是那个模型的钱。
+                            val currentModel = settings.findModelById(
+                                assistant.chatModelId ?: settings.chatModelId
+                            )
+                            me.rerere.rikkahub.data.pet.MaidPetHost(
+                                sizeDp = h,
+                                providerSetting = currentModel?.findProvider(settings.providers),
+                                modelLabel = currentModel?.displayName?.takeIf { it.isNotBlank() },
+                                modifier = Modifier.align(Alignment.BottomCenter),
+                            )
+                        } else {
+                            me.rerere.rikkahub.data.pet.PetHost(
+                                packId = id,
+                                sizeDp = h,
+                                // 不传 mood → 订阅 PetSignal 的全局状态。
+                                // 跑/完成/等确认/睡觉四个信号由 ChatPage 和各处上报。
+                                modifier = Modifier.align(Alignment.BottomCenter),
+                            )
+                        }
+                    }
                 }
                 // 续写：上一轮被打断（喊停 / 没钱 / 断联）时出现。
                 // 点它不会发一条新消息，而是让模型接着上一条 assistant 往下写。

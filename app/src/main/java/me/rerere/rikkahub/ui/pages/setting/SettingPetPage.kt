@@ -23,6 +23,12 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import kotlin.math.roundToInt
+import me.rerere.rikkahub.data.datastore.petHeightOf
+import me.rerere.rikkahub.data.datastore.petIdList
+import me.rerere.rikkahub.data.datastore.withPetHeight
+import me.rerere.rikkahub.data.datastore.withPetToggled
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -82,7 +88,7 @@ fun SettingPetPage() {
             val saved = copyCustomPetImage(context, uri)
             if (saved != null) {
                 settingsStore.update {
-                    it.copy(customPetPath = saved, petPackId = null)
+                    it.copy(customPetPath = saved, petPackIds = "")
                 }
             }
         }
@@ -120,124 +126,122 @@ fun SettingPetPage() {
                 )
             }
 
-            // ── 选宠物 ──
+            // ── 选宠物（可以多选）──
+            //
+            // 以前是单选：petPackId 一个值，选一只把别的顶掉。
+            // 现在是一组，勾上的都同时站着。哦鲸鲸也只是列表里的一项，
+            // 没有独立开关——它跟素材包平级，区别只是点它有反应。
             item {
-                Text("选一只", style = MaterialTheme.typography.titleSmall)
+                Text("选宠物（可以多选）", style = MaterialTheme.typography.titleSmall)
             }
             item {
                 PetChoiceRow(
                     label = "不显示",
-                    selected = settings.petPackId == null && settings.customPetPath == null,
+                    selected = settings.petIdList().isEmpty() && settings.customPetPath == null,
                     onClick = {
-                        scope.launch { settingsStore.update { it.copy(petPackId = null, customPetPath = null) } }
+                        scope.launch {
+                            settingsStore.update { it.copy(petPackIds = "", customPetPath = null) }
+                        }
                     },
                 )
             }
-            items(packs.size) { index ->
-                val (id, name) = packs[index]
-                PetChoiceRow(
-                    label = name,
-                    selected = settings.petPackId == id && settings.customPetPath == null,
-                    onClick = {
-                        scope.launch { settingsStore.update { it.copy(petPackId = id, customPetPath = null) } }
-                    },
-                )
+            val allPets = packs + (me.rerere.rikkahub.data.pet.MAID_PET_ID to "哦鲸鲸")
+            items(allPets.size) { index ->
+                val (id, name) = allPets[index]
+                val checked = settings.petIdList().contains(id)
+                Column {
+                    PetChoiceRow(
+                        label = if (id == me.rerere.rikkahub.data.pet.MAID_PET_ID) {
+                            "$name（点一下查余额）"
+                        } else {
+                            name
+                        },
+                        selected = checked,
+                        onClick = {
+                            scope.launch {
+                                settingsStore.update { cur ->
+                                    cur.copy(
+                                        petPackIds = cur.withPetToggled(
+                                            id,
+                                            !cur.petIdList().contains(id),
+                                        ),
+                                        customPetPath = null,
+                                    )
+                                }
+                            }
+                        },
+                    )
+                    // 每只自己的大小。只在这只勾上时出现，
+                    // 不然列表里一排滑块没法看。
+                    if (checked) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                text = "${settings.petHeightOf(id).roundToInt()}dp",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Slider(
+                                value = settings.petHeightOf(id),
+                                onValueChange = { v ->
+                                    scope.launch {
+                                        settingsStore.update { cur ->
+                                            cur.copy(petSizes = cur.withPetHeight(id, v))
+                                        }
+                                    }
+                                },
+                                valueRange = 16f..96f,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
             }
 
             // ── 用一张自己的图 ──
-            //
-            // 跟素材包互斥：选了图就把 petPackId 清掉，选了素材包就把图清掉。
-            // 两个都能设的话渲染那边得有个优先级，用户看到的就是"我选了图但它
-            // 还是显示原来那只"。
             item {
                 PetChoiceRow(
                     label = if (settings.customPetPath != null) "我的图片（点击更换）" else "用我自己的图片…",
                     selected = settings.customPetPath != null,
-                    onClick = { pickImage.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    onClick = {
+                        pickImage.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
                 )
             }
-
-            // ── 哦鲸鲸 ──
-            //
-            // 独立开关，**跟上面选的互不排斥**。这是它跟素材包最大的区别：
-            // 素材包只能站一只，她可以跟任意一只并排。
-            item {
+            if (settings.customPetPath != null) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable {
-                            scope.launch {
-                                settingsStore.update { it.copy(maidPetEnabled = !it.maidPetEnabled) }
-                            }
-                        }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        .padding(horizontal = 20.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("哦鲸鲸", style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "点一下查当前模型的余额。可以跟上面选的宠物同时站着。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = settings.maidPetEnabled,
-                        onCheckedChange = {
-                            scope.launch { settingsStore.update { c -> c.copy(maidPetEnabled = it) } }
+                    Text(
+                        text = "${settings.petHeightOf("custom").roundToInt()}dp",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Slider(
+                        value = settings.petHeightOf("custom"),
+                        onValueChange = { v ->
+                            scope.launch {
+                                settingsStore.update { cur ->
+                                    cur.copy(petSizes = cur.withPetHeight("custom", v))
+                                }
+                            }
                         },
+                        valueRange = 16f..96f,
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
-
-            // ── 尺寸 ──
-            if (settings.petPackId != null || settings.customPetPath != null || settings.maidPetEnabled) {
-                item {
-                    Text("大小", style = MaterialTheme.typography.titleSmall)
-                }
-                item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        PetSize.entries.forEach { size ->
-                            val selected = PetSize.fromName(settings.petSize) == size
-                            val label = when (size) {
-                                PetSize.SMALL -> "小"
-                                PetSize.MEDIUM -> "标准"
-                                PetSize.LARGE -> "大"
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(
-                                        if (selected) MaterialTheme.colorScheme.primaryContainer
-                                        else MaterialTheme.colorScheme.surfaceContainerHigh
-                                    )
-                                    .border(
-                                        width = if (selected) 1.5.dp else 0.dp,
-                                        color = if (selected) MaterialTheme.colorScheme.primary
-                                        else androidx.compose.ui.graphics.Color.Transparent,
-                                        shape = RoundedCornerShape(10.dp),
-                                    )
-                                    .clickable {
-                                        scope.launch {
-                                            settingsStore.update {
-                                                it.copy(petSize = size.name.lowercase())
-                                            }
-                                        }
-                                    }
-                                    .padding(vertical = 10.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(label, style = MaterialTheme.typography.bodyMedium)
-                            }
-                        }
-                    }
-                }
 
                 // ── 实时预览 ──
                 item {
@@ -250,47 +254,43 @@ fun SettingPetPage() {
                             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         ),
                     ) {
-                        // 不固定高度：PetHost 自己按「画布高度 × 缩放」算，
-                        // 定死 140dp 的话大号宠物和带思考云的帧会被裁掉
-                        // 预览跟聊天页一个逻辑：素材包/自定义图 + 女仆可以并排。
-                        // 只放一只的话，开了开关却看不到她，会让人以为是坏的。
+                        // 不固定高度：PetHost 自己按「画布高度 × 缩放」算
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 8.dp),
                             contentAlignment = Alignment.BottomCenter,
                         ) {
-                            // 跟聊天页一样是叠着的，不是并排。
-                            // 并排就各占一半宽，两只都拖不过中线。
+                            // 跟聊天页一样：勾上的全叠着，各用自己那份高度。
                             val customPath = settings.customPetPath
-                            val hasPrimary = customPath != null || settings.petPackId != null
-                            if (hasPrimary) {
-                                if (customPath != null) {
-                                    me.rerere.rikkahub.data.pet.ImagePetHost(
-                                        imagePath = customPath,
-                                        size = PetSize.fromName(settings.petSize),
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                } else {
-                                    PetHost(
-                                        packId = settings.petPackId,
-                                        size = PetSize.fromName(settings.petSize),
-                                        mood = PetMood(running = false),
-                                        modifier = Modifier.fillMaxWidth(),
-                                    )
-                                }
-                            }
-                            if (settings.maidPetEnabled) {
-                                me.rerere.rikkahub.data.pet.MaidPetHost(
-                                    size = PetSize.fromName(settings.petSize),
-                                    providerSetting = null,
-                                    modelLabel = "预览",
+                            if (customPath != null) {
+                                me.rerere.rikkahub.data.pet.ImagePetHost(
+                                    imagePath = customPath,
+                                    sizeDp = settings.petHeightOf("custom"),
                                     modifier = Modifier.fillMaxWidth(),
                                 )
+                            } else {
+                                settings.petIdList().forEach { id ->
+                                    val h = settings.petHeightOf(id)
+                                    if (id == me.rerere.rikkahub.data.pet.MAID_PET_ID) {
+                                        me.rerere.rikkahub.data.pet.MaidPetHost(
+                                            sizeDp = h,
+                                            providerSetting = null,
+                                            modelLabel = "预览",
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    } else {
+                                        PetHost(
+                                            packId = id,
+                                            sizeDp = h,
+                                            mood = PetMood(running = false),
+                                            modifier = Modifier.fillMaxWidth(),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
-                }
             }
 
             item {

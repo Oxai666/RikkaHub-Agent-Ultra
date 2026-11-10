@@ -80,7 +80,8 @@ const val MAID_PET_ID = "maid-deepseek"
  */
 @Composable
 fun MaidPetHost(
-    size: PetSize,
+    /** 身体高度（dp）。跟其它宠物一样是每只独立的一份。 */
+    sizeDp: Float,
     providerSetting: ProviderSetting?,
     modelLabel: String?,
     modifier: Modifier = Modifier,
@@ -103,7 +104,7 @@ fun MaidPetHost(
     if (bitmap == null) return
 
     val aspect = bitmap.width.toFloat() / bitmap.height.toFloat()
-    val bodyHPx = with(density) { size.dp.dp.toPx() }
+    val bodyHPx = with(density) { sizeDp.dp.toPx() }
     val bodyWPx = bodyHPx * aspect
     val liftMax = bodyHPx * 0.5f
     val containerHPx = bodyHPx + liftMax

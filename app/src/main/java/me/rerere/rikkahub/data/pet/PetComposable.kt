@@ -39,7 +39,7 @@ import kotlin.math.roundToInt
  * @param pack 当前宠物包
  * @param sprites 素材加载器
  * @param anim 正在播的动画
- * @param petSize 尺寸档
+ * @param sizeDp 身体高度（dp），每只宠物各自一份
  * @param pixelSize 本组件的像素尺寸，由调用方给（用来算缩放）
  * @param onTap 点了身体。参数是「点的左半边还是右半边」
  * @param onLongPress 长按
@@ -55,7 +55,7 @@ fun Pet(
     // 里面有个 `size: Size`（当前绘制区域尺寸）。参数也叫 size 的话
     // 会把它遮蔽掉，`size.width` 就变成在 PetSize 上找 width——找不到。
     // 那两行 Unresolved reference 'width' / 'height' 就是这么来的。
-    petSize: PetSize,
+    sizeDp: Float,
     /**
      * 要不要在右上角画一个红色的像素 X。
      *
@@ -73,7 +73,7 @@ fun Pet(
 ) {
     val density = LocalDensity.current
     // 每个美术像素占多少物理像素。像素画包这里是整数。
-    val k = remember(pack, petSize, density) { pack.screenScale(petSize, density.density) }
+    val k = remember(pack, sizeDp, density) { pack.screenScaleDp(sizeDp, density.density) }
 
     // 画布尺寸（物理像素）：包的画布 × k
     val drawnW = (pack.canvasW * k).roundToInt()

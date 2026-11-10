@@ -43,7 +43,8 @@ import kotlin.math.roundToInt
 @Composable
 fun PetHost(
     packId: String?,
-    size: PetSize,
+    /** 身体高度（dp）。每只宠物各自一份，不再是三档枚举。 */
+    sizeDp: Float,
     /**
      * 外部给的 mood。传 null 表示订阅 [PetSignal] 的全局状态——
      * 聊天页用 null，设置页的预览区传一个固定值（只想看动画，不想受真实状态影响）。
@@ -224,7 +225,7 @@ fun PetHost(
         label = "petDragY",
     )
 
-    val k = remember(pack, size, density) { pack.screenScale(size, density.density) }
+    val k = remember(pack, sizeDp, density) { pack.screenScaleDp(sizeDp, density.density) }
     // 容器高度必须按**画布**算，不能按身体算：
     // 思考云、跳起来的帧、Zzz 都会超出 contentBox，
     // 按身体高留空间的话这些全被裁掉。
@@ -290,7 +291,7 @@ fun PetHost(
             pack = pack,
             sprites = sprites,
             anim = anim,
-            petSize = size,
+            sizeDp = sizeDp,
             showErrorBadge = baseState == PetState.ERROR,
             // 外层 Box 的尺寸严格等于画布尺寸，fillMaxSize 正好铺满，
             // Pet 里画布原点就是 (0,0)，不需要任何居中或 baseline 计算。
