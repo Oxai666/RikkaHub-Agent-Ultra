@@ -215,7 +215,9 @@ fun SettingPetPage() {
                     },
                 )
             }
+            // LazyListScope 不是 @Composable 上下文，Row/Slider 这些必须包进 item。
             if (settings.customPetPath != null) {
+                item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -240,6 +242,7 @@ fun SettingPetPage() {
                         valueRange = 16f..96f,
                         modifier = Modifier.weight(1f),
                     )
+                }
                 }
             }
 
