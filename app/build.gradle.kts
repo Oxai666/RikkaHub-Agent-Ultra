@@ -79,6 +79,20 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
+            // ⚠ 这个 true **不会生效**。
+            //
+            // .github/workflows/build-ultra-release.yml 有个输入项
+            // disable_minify（默认 true），编译前会用 sed 把这一行改成 false。
+            // 所以 CI 打出来的包一直是 R8 关的。写 true 只是为了让
+            // Gradle 本地手跑 assembleRelease 时默认有优化。
+            //
+            // 为什么不开：仓库是开源的，R8 的防逆向价值是零；
+            // 而裁代码的风险很实在——Koin / kotlinx.serialization / Room /
+            // Shizuku AIDL / VscreenCore（靠字符串启动）都靠反射或名字，
+            // keep 规则不全会崩在冷启动，且只在 release 崩、栈还看不清。
+            //
+            // 哪天真要开：先补 app/proguard-rules.pro + proguardFiles，
+            // 再按 启动 → 设置 → 会话 → 虚拟屏 → 技能 的顺序逐个验证。
             optimization {
                 enable = true
             }
