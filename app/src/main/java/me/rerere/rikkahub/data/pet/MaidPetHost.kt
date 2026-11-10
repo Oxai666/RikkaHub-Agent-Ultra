@@ -201,12 +201,20 @@ fun MaidPetHost(
         label = "maidStretch",
     )
 
-    // 气泡跟宠物的比例。原来是 6.2 倍——30dp 的宠物配 186dp 的球，
-    // 看着像头顶顶了个热气球。改成 3.2 倍，气泡略宽于宠物本体。
-    val bubbleWidth = (sizeDp * 3.2f).coerceAtLeast(88f).dp
-    // 高 = 椭圆(62%) + 两个尾巴圆点所占的下方空间
+    // 气泡宽度 = 宠物本体宽度 × 1.55。
+    //
+    // 立绘宽高比 512:541，所以身体宽度 ≈ sizeDp * 0.946。
+    // 再留一点"稍微大一圈"的余量。
+    //
+    // 上下钳位是必须的：
+    //   太窄（<64dp）放不下「$0.20」这种五六个字符
+    //   太宽（>168dp）在 96dp 的宠物头顶就是块遮天蔽日的板子
+    val petWidthDp = sizeDp * 0.946f
+    val bubbleWidth = (petWidthDp * 1.55f).coerceIn(64f, 168f).dp
     val bubbleHeight = bubbleWidth * 0.86f
     val bubbleOvalH = bubbleHeight * 0.62f
+    // 字号跟着**气泡**走而不是宠物：窄气泡里字号必须小，不然放不下。
+    val bubbleFontSize = (bubbleWidth.value * 0.21f).sp
 
     Box(
         modifier = modifier
@@ -260,7 +268,7 @@ fun MaidPetHost(
                     //
                     // 形状照原图：粗描边的白椭圆，左下角两个渐小的圆点。
                     Canvas(modifier = Modifier.fillMaxSize()) {
-                        val strokeW = (sizeDp * 0.075f).dp.toPx().coerceAtLeast(1.5f)
+                        val strokeW = (bubbleWidth.value * 0.022f).dp.toPx().coerceAtLeast(1.2f)
                         val ovalH = bubbleOvalH.toPx()
                         val ovalW = size.width
                         val fill = androidx.compose.ui.graphics.Color.White
@@ -323,12 +331,14 @@ fun MaidPetHost(
                     ) {
                         val shown = when {
                             balanceLoading -> "…"
-                            !balanceText.isNullOrBlank() -> balanceText!!
+                            // 金额前面补一个 $。Kotlin 字符串里 $ 要转义。
+                            !balanceText.isNullOrBlank() -> "\$${balanceText}"
+                            // 拿不到就显示她的名字——比「查询失败」像人话
                             else -> "哦鲸鲸"
                         }
                         Text(
                             text = shown,
-                            fontSize = (sizeDp * 0.72f).sp,
+                            fontSize = bubbleFontSize,
                             fontWeight = FontWeight.ExtraBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
