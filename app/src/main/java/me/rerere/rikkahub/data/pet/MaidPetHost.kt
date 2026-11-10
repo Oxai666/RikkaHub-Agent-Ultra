@@ -6,6 +6,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -200,10 +201,12 @@ fun MaidPetHost(
         label = "maidStretch",
     )
 
-    // 气泡跟着宠物大小走。之前写死 184dp，宠物拖到 96dp 时气泡还是那么大，
-    // 看着像贴上去的。
-    val bubbleWidth = (sizeDp * 6.2f).dp
-    val bubbleHeight = bubbleWidth * (521f / 600f)
+    // 气泡跟宠物的比例。原来是 6.2 倍——30dp 的宠物配 186dp 的球，
+    // 看着像头顶顶了个热气球。改成 3.2 倍，气泡略宽于宠物本体。
+    val bubbleWidth = (sizeDp * 3.2f).coerceAtLeast(88f).dp
+    // 高 = 椭圆(62%) + 两个尾巴圆点所占的下方空间
+    val bubbleHeight = bubbleWidth * 0.86f
+    val bubbleOvalH = bubbleHeight * 0.62f
 
     Box(
         modifier = modifier
@@ -219,8 +222,6 @@ fun MaidPetHost(
         // 表现就是"点了宠物有 Q 弹，但气泡不出来"。
         //
         // Popup 是独立的窗口层，不受父级裁剪，offset 用窗口坐标算。
-        val bubbleWpx = with(density) { bubbleWidth.toPx() }
-        val bubbleHpx = with(density) { bubbleHeight.toPx() }
         if (showBalance) {
             // Popup(offset = ...) 的 offset 是**相对父级**的，不是窗口坐标。
             // 之前直接往里塞 localToWindow 算出来的绝对值，等于把偏移算了两遍，
@@ -250,42 +251,89 @@ fun MaidPetHost(
                         .width(bubbleWidth)
                         .height(bubbleHeight),
                 ) {
-                    if (bubbleBitmap != null) {
-                        Image(
-                            bitmap = bubbleBitmap.asImageBitmap(),
-                            contentDescription = null,
-                            contentScale = ContentScale.FillBounds,
-                            modifier = Modifier.fillMaxSize(),
+                    // 手绘气泡：一个椭圆 + 两个尾巴圆点。
+                    //
+                    // 之前是从原图抠的贴图，问题是：编辑过一次抠图边缘的
+                    // 抗锯齿就崩了（白毛 + 阶梯），而且尺寸固定，宠物放大到
+                    // 96dp 时气泡还那么大。代码画的没有这些问题——
+                    // 尺寸、描边粗细、圆角全都跟着 sizeDp 走。
+                    //
+                    // 形状照原图：粗描边的白椭圆，左下角两个渐小的圆点。
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val strokeW = (sizeDp * 0.075f).dp.toPx().coerceAtLeast(1.5f)
+                        val ovalH = bubbleOvalH.toPx()
+                        val ovalW = size.width
+                        val fill = androidx.compose.ui.graphics.Color.White
+                        val ink = androidx.compose.ui.graphics.Color(0xFF22366B)
+
+                        drawOval(
+                            color = fill,
+                            topLeft = androidx.compose.ui.geometry.Offset(strokeW, strokeW),
+                            size = androidx.compose.ui.geometry.Size(
+                                ovalW - strokeW * 2,
+                                ovalH - strokeW * 2,
+                            ),
+                        )
+                        drawOval(
+                            color = ink,
+                            topLeft = androidx.compose.ui.geometry.Offset(strokeW / 2, strokeW / 2),
+                            size = androidx.compose.ui.geometry.Size(
+                                ovalW - strokeW,
+                                ovalH - strokeW,
+                            ),
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeW),
+                        )
+
+                        // 两个尾巴圆点，往左下递小
+                        val dot1 = ovalW * 0.075f
+                        val dot2 = ovalW * 0.050f
+                        drawCircle(
+                            color = fill,
+                            radius = dot1,
+                            center = androidx.compose.ui.geometry.Offset(ovalW * 0.46f, ovalH + dot1 * 1.35f),
+                        )
+                        drawCircle(
+                            color = ink,
+                            radius = dot1,
+                            center = androidx.compose.ui.geometry.Offset(ovalW * 0.46f, ovalH + dot1 * 1.35f),
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeW),
+                        )
+                        drawCircle(
+                            color = fill,
+                            radius = dot2,
+                            center = androidx.compose.ui.geometry.Offset(ovalW * 0.36f, ovalH + dot1 * 2.9f),
+                        )
+                        drawCircle(
+                            color = ink,
+                            radius = dot2,
+                            center = androidx.compose.ui.geometry.Offset(ovalW * 0.36f, ovalH + dot1 * 2.9f),
+                            style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokeW),
                         )
                     }
+
+                    // 文字：高度严格等于椭圆高，居中——这样字一定在椭圆正中间。
+                    // 之前用整块气泡的 padding 去挤，底部还要给尾巴留位置，
+                    // 算出来的中心天然偏下。
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
-                            .padding(start = 30.dp, end = 34.dp, top = 34.dp, bottom = 46.dp),
+                            .fillMaxWidth()
+                            .height(bubbleOvalH)
+                            .padding(horizontal = bubbleWidth * 0.14f),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                        ) {
-                            // 拿不到余额（不支持 / 网络挂了 / 报错）就显示「哦鲸鲸」。
-                            // 这三个字就是她的名字，比「查询失败」更像她会说的话。
-                            val shown = when {
-                                balanceLoading -> "…"
-                                !balanceText.isNullOrBlank() -> balanceText!!
-                                else -> "哦鲸鲸"
-                            }
-                            Text(
-                                text = shown,
-                                // 字号跟着气泡走，气泡跟着宠物走。
-                                // 原来固定 titleMedium（16sp），放在 180dp 的气泡里太小。
-                                fontSize = (sizeDp * 0.92f).sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = Color(0xFF1E2F5B),
-                            )
+                        val shown = when {
+                            balanceLoading -> "…"
+                            !balanceText.isNullOrBlank() -> balanceText!!
+                            else -> "哦鲸鲸"
                         }
+                        Text(
+                            text = shown,
+                            fontSize = (sizeDp * 0.72f).sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = Color(0xFF22366B),
+                        )
                     }
                 }
             }
