@@ -240,7 +240,6 @@ class SettingsStore(
         val PET_PACK_ID = stringPreferencesKey("pet_pack_id")
         val PET_SIZE = stringPreferencesKey("pet_size")
         val PET_OFFSET_X = floatPreferencesKey("pet_offset_x")
-        val CUSTOM_PET_PATH = stringPreferencesKey("custom_pet_path")
         val MAID_PET_ENABLED = booleanPreferencesKey("maid_pet_enabled")
         val MAID_PET_OFFSET_X = floatPreferencesKey("maid_pet_offset_x")
         val PET_PACK_IDS = stringPreferencesKey("pet_pack_ids")
@@ -360,8 +359,6 @@ class SettingsStore(
                 }
                 preferences[PET_SIZE] = settings.petSize
                 preferences[PET_OFFSET_X] = settings.petOffsetX
-                settings.customPetPath?.let { preferences[CUSTOM_PET_PATH] = it }
-                    ?: preferences.remove(CUSTOM_PET_PATH)
                 preferences[MAID_PET_ENABLED] = settings.maidPetEnabled
                 preferences[MAID_PET_OFFSET_X] = settings.maidPetOffsetX
                 preferences[PET_PACK_IDS] = settings.petPackIds
@@ -567,7 +564,6 @@ class SettingsStore(
                 petPackId = preferences[PET_PACK_ID]?.takeIf { it.isNotBlank() },
                 petSize = preferences[PET_SIZE] ?: "medium",
                 petOffsetX = preferences[PET_OFFSET_X] ?: 0f,
-                customPetPath = preferences[CUSTOM_PET_PATH]?.takeIf { it.isNotBlank() },
                 // 老版本把女仆当素材包存进 petPackId（值 "maid-deepseek"）。
                 // 现在它是独立开关，读到老值就顺手迁过来，不然升级后那只会消失。
                 maidPetOffsetX = preferences[MAID_PET_OFFSET_X] ?: 0f,
@@ -1006,7 +1002,7 @@ data class Settings(
     /**
      * 鲸鱼娘女仆是否同时显示。
      *
-     * 跟 [petPackId] / [customPetPath] **不互斥**——这是它跟另外两种的区别：
+     * 跟 [petPackIds] **不互斥**——勾上就一起显示。
      * 素材包只能选一只，但女仆可以跟任意一只并排站着。
      * 她是独立的、带自己交互（点一下查余额），不是素材包的一种。
      */
@@ -1031,16 +1027,6 @@ data class Settings(
      */
     val petSizes: String = "",
 
-    /**
-     * 用户自己那张图当宠物时，图片在 App 私有目录里的绝对路径。
-     *
-     * 为什么不存 content:// URI：相册给的那个 URI 权限是一次性的，
-     * 重启之后就读不到了。选图时复制一份到 files/pets/custom/ 下，
-     * 存自己的路径才活得久。
-     *
-     * null = 用内置素材包（[petPackId]）。
-     */
-    val customPetPath: String? = null,
 
     val autoEnabledDefaultSkills: Set<String> = emptySet(),
 

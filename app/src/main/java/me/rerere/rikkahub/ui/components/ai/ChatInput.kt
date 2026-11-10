@@ -246,15 +246,7 @@ fun ChatInput(
             Box(modifier = Modifier.fillMaxWidth()) {
                 // 多选的宠物，各自一份高度。全部叠在同一层里——
                 // 并排会各分一半宽，谁都拖不过中线。
-                val customPetPath = settings.customPetPath
-                if (customPetPath != null) {
-                    me.rerere.rikkahub.data.pet.ImagePetHost(
-                        imagePath = customPetPath,
-                        sizeDp = settings.petHeightOf("custom"),
-                        modifier = Modifier.align(Alignment.BottomCenter),
-                    )
-                } else {
-                    settings.petIdList().forEach { id ->
+                settings.petIdList().forEach { id ->
                         val h = settings.petHeightOf(id)
                         if (id == me.rerere.rikkahub.data.pet.MAID_PET_ID) {
                             // 哦鲸鲸：点一下吐气泡查余额。
@@ -278,7 +270,6 @@ fun ChatInput(
                                 modifier = Modifier.align(Alignment.BottomCenter),
                             )
                         }
-                    }
                 }
                 // 续写：上一轮被打断（喊停 / 没钱 / 断联）时出现。
                 // 点它不会发一条新消息，而是让模型接着上一条 assistant 往下写。

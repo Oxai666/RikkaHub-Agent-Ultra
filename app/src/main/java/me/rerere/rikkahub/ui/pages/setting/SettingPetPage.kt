@@ -1,8 +1,5 @@
 package me.rerere.rikkahub.ui.pages.setting
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,7 +27,6 @@ import me.rerere.rikkahub.data.datastore.petIdList
 import me.rerere.rikkahub.data.datastore.withPetHeight
 import me.rerere.rikkahub.data.datastore.withPetToggled
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -78,28 +74,6 @@ fun SettingPetPage() {
     val scope = rememberCoroutineScope()
     val sprites = remember { PetSprites(context) }
 
-    // 选图。PickVisualMedia 是系统相册最省的入口——不需要权限，
-    // 用户选哪张我们就拿哪张的一次性读权限。
-    val pickImage = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            val saved = copyCustomPetImage(context, uri)
-            if (saved != null) {
-                settingsStore.update {
-                    it.copy(customPetPath = saved, petPackIds = "")
-                }
-            }
-        }
-    }
-    // 有哪些包：写死两个。以后加了包再改成扫 assets/pets/
-    val packs = remember {
-        listOf("deepy-whale", "whale-girl").mapNotNull { id ->
-            sprites.loadPack(id)?.let { id to it.name }
-        }
-    }
-
     Scaffold(
         topBar = {
             LargeFlexibleTopAppBar(
@@ -137,10 +111,10 @@ fun SettingPetPage() {
             item {
                 PetChoiceRow(
                     label = "不显示",
-                    selected = settings.petIdList().isEmpty() && settings.customPetPath == null,
+                    selected = settings.petIdList().isEmpty(),
                     onClick = {
                         scope.launch {
-                            settingsStore.update { it.copy(petPackIds = "", customPetPath = null) }
+                            settingsStore.update { it.copy(petPackIds = "") }
                         }
                     },
                 )
@@ -165,7 +139,6 @@ fun SettingPetPage() {
                                             id,
                                             !cur.petIdList().contains(id),
                                         ),
-                                        customPetPath = null,
                                     )
                                 }
                             }
@@ -203,49 +176,6 @@ fun SettingPetPage() {
                 }
             }
 
-            // ── 用一张自己的图 ──
-            item {
-                PetChoiceRow(
-                    label = if (settings.customPetPath != null) "我的图片（点击更换）" else "用我自己的图片…",
-                    selected = settings.customPetPath != null,
-                    onClick = {
-                        pickImage.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    },
-                )
-            }
-            // LazyListScope 不是 @Composable 上下文，Row/Slider 这些必须包进 item。
-            if (settings.customPetPath != null) {
-                item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text(
-                        text = "${settings.petHeightOf("custom").roundToInt()}dp",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Slider(
-                        value = settings.petHeightOf("custom"),
-                        onValueChange = { v ->
-                            scope.launch {
-                                settingsStore.update { cur ->
-                                    cur.copy(petSizes = cur.withPetHeight("custom", v))
-                                }
-                            }
-                        },
-                        valueRange = 16f..96f,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                }
-            }
-
                 // ── 实时预览 ──
                 item {
                     Text("预览", style = MaterialTheme.typography.titleSmall)
@@ -265,15 +195,7 @@ fun SettingPetPage() {
                             contentAlignment = Alignment.BottomCenter,
                         ) {
                             // 跟聊天页一样：勾上的全叠着，各用自己那份高度。
-                            val customPath = settings.customPetPath
-                            if (customPath != null) {
-                                me.rerere.rikkahub.data.pet.ImagePetHost(
-                                    imagePath = customPath,
-                                    sizeDp = settings.petHeightOf("custom"),
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            } else {
-                                settings.petIdList().forEach { id ->
+                            settings.petIdList().forEach { id ->
                                     val h = settings.petHeightOf(id)
                                     if (id == me.rerere.rikkahub.data.pet.MAID_PET_ID) {
                                         me.rerere.rikkahub.data.pet.MaidPetHost(
@@ -290,7 +212,6 @@ fun SettingPetPage() {
                                             modifier = Modifier.fillMaxWidth(),
                                         )
                                     }
-                                }
                             }
                         }
                     }
@@ -339,33 +260,4 @@ private fun PetChoiceRow(
             )
         }
     }
-}
-
-/**
- * 把相册选中的图复制一份到 App 私有目录，返回绝对路径。
- *
- * 为什么必须复制，不能直接存 URI：
- * `PickVisualMedia` 给的是**一次性读权限**，进程重启或被回收之后那个
- * content:// 就打不开了。宠物图要活很久，只能落到自己能读的地方。
- *
- * 目录固定是 `files/pets/custom/`，每次覆盖：
- * 只留一张图，换一张就等于删旧的，不会攒垃圾。
- */
-private suspend fun copyCustomPetImage(
-    context: android.content.Context,
-    uri: android.net.Uri,
-): String? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-    runCatching {
-        val dir = java.io.File(context.filesDir, "pets/custom").apply { mkdirs() }
-        dir.listFiles()?.forEach { it.delete() }
-
-        // 保留原扩展名对解码没影响（BitmapFactory 看文件头），
-        // 但别写成 .png——万一是 jpg，系统相册里点开可能认错。
-        val dest = java.io.File(dir, "sprite.img")
-        context.contentResolver.openInputStream(uri)?.use { input ->
-            dest.outputStream().use { output -> input.copyTo(output) }
-        } ?: return@runCatching null
-
-        if (dest.length() <= 0L) null else dest.absolutePath
-    }.getOrNull()
 }
