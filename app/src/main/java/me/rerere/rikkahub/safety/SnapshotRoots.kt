@@ -68,6 +68,19 @@ object SnapshotRoots {
             sandboxPath == "/workspace" -> filesRoot
             sandboxPath.startsWith("/workspace/") ->
                 File(filesRoot, sandboxPath.removePrefix("/workspace/"))
+            // ⚠ 相对路径按工作区根解析。
+            //
+            // 这是 .snapshots 一直是空目录的真正原因：
+            // 用户敲的是 `cd /workspace && rm -f "新建文本文档.txt"`，
+            // 分析器从命令里拿到的目标就是 `新建文本文档.txt`（没有前导 /）。
+            // 原来这种情况落到 else 分支 → File("新建文本文档.txt")
+            // → 相对 App 进程的 cwd（通常是 /）→ 不存在
+            // → capture 里 `!file.exists()` 判成 existed=false，一个字节都不备份。
+            //
+            // shell 的工作目录是 /workspace，所以相对路径就是相对它。
+            !sandboxPath.startsWith("/") -> File(filesRoot, sandboxPath)
+            // 沙箱里的绝对路径（/etc、/opt）App 进程访问不到，原样返回，
+            // 后面 exists 检查会当成"不存在"，不会误备份。
             else -> File(sandboxPath)
         }
     }

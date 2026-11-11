@@ -213,13 +213,24 @@ object RiskAssessor {
             details = analysis.subcommands.map { "${it.name} → ${it.tier.name}" },
         )
 
-        val snapshot = if (analysis.tier == RiskTier.C_IRREVERSIBLE) {
+        // ⚠ 只要有目标文件就拍，不再看风险等级。
+        //
+        // 原来只有 C_IRREVERSIBLE 才拍。问题是 `rm -f 单个文件` 被判成
+        // B_REVERSIBLE（"可撤销"）—— 于是 .snapshots 里空空如也，
+        // 用户删了文件想找回来，发现从来没有备份过。
+        //
+        // 实际上 rm 之后就没了，跟等级无关。B 档那些"可撤销"的假设
+        // 只在文件工具的 dry-run 里有意义，shell 里删除就是真删。
+        //
+        // required 仍然只在 C 档为 true —— 那个字段现在只影响日志措辞，
+        // "备份失败就拒绝"已经在上一轮砍掉了。
+        val snapshot = if (analysis.targets.isNotEmpty()) {
             SnapshotPlan(
                 scope = SnapshotScope.FILES,
                 targets = analysis.targets.map { SnapshotTarget(path = it, exists = true) },
-                required = true,
-                captureSupported = analysis.targets.isNotEmpty(),
-                noSnapshotAllowed = false,
+                required = analysis.tier == RiskTier.C_IRREVERSIBLE,
+                captureSupported = true,
+                noSnapshotAllowed = true,
             )
         } else {
             SnapshotPlan.NONE
