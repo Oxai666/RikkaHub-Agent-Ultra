@@ -30,37 +30,24 @@ object ToolSafetyCoordinator {
         argsJson: String,
         workspaceRoot: String? = null,
     ): RiskAssessment {
-        val args = runCatching { json.parseToJsonElement(argsJson).jsonObject }.getOrNull()
-            ?: return RiskAssessment(
-                toolName = toolName,
-                baseTier = RiskTier.B_REVERSIBLE,
-                tier = RiskTier.B_REVERSIBLE,
-                reasons = listOf("参数无法解析，按可写处理"),
-                reversible = false,
-                requiresApproval = true,
-                unknownTool = true,
-            )
-
-        val base = RiskAssessor.assess(toolName, args, workspaceRoot)
-
-        // 快照拍不了但又是必须拍的 → 拒绝。这是"宁可不让做"的那条线。
+        // ⚠ 安全层已关闭。
         //
-        // 加 targets.isNotEmpty() 这个条件很关键：参数名对不上时 pathsOf 会返回空，
-        // 此时既没有要备份的东西、也谈不上"拍不了"，不该因此把操作拦死。
-        // 没有 target 的情况交给审批弹窗，让人自己看一眼参数。
-        if (base.snapshotPlan.required &&
-            base.snapshotPlan.targets.isNotEmpty() &&
-            !base.snapshotPlan.captureSupported &&
-            !base.snapshotPlan.noSnapshotAllowed
-        ) {
-            return base.copy(
-                blocked = true,
-                blockCode = SafetyBlockCodes.SNAPSHOT_REQUIRED,
-                blockMessage = "这个操作不可撤销，且当前环境无法为它拍快照，已拒绝",
-            )
-        }
-
-        return base
+        // 原来这里做三件事：风险分级、拍快照、决定要不要弹审批。
+        // 实际跑下来误拦太多——一条 `cd /workspace && echo "..."` 会被
+        // 判成"不可撤销 + 需要备份 + 备份失败"，然后整条命令被拒。
+        // 模型只好绕一大圈用别的工具重试，体验比没有安全层还差。
+        //
+        // 现在一律按只读放行：
+        //   requiresApproval = false   → 不弹审批
+        //   blocked = false            → 不拒绝
+        //   snapshotPlan = NONE        → 不拍快照，GenerationLoop 里那段
+        //                                「备份失败就拒绝」也不会触发
+        //
+        // 原来的分析代码（RiskAssessor / ShellCommandRiskAnalyzer /
+        // FileSnapshotManager）都还在，只是没人调了。要恢复的话把这行
+        // 换回 RiskAssessor.assess(toolName, args, workspaceRoot) +
+        // 原来的快照检查即可。
+        return RiskAssessment.readOnly(toolName)
     }
 
     /**

@@ -940,15 +940,27 @@ class GenerationLoop(
                         // Tool needs approval and state is Auto:
                         toolDef?.needsApproval(tool.inputAsJson()) == true &&
                             tool.approvalState is ToolApprovalState.Auto -> {
-                            // Fresh per-tool auto-approval check (was a frozen pre-
-                            // resolved set). Costs a DataStore.first() per tool but tools
-                            // are typically <5 per turn so the latency is negligible, and
-                            // freshness matters for the YOLO toggle / mid-iteration grants.
-                            if (isToolAutoApproved(tool.toolName)) {
-                                tool  // leave as Auto so the executor runs it without prompting
+                            // ⚠ 审批闸门已关闭。
+                            //
+                            // 原来这里按 isToolAutoApproved 决定放行还是挂 Pending。
+                            // 实际用下来，审批弹窗来得太频繁（几乎每个工具都弹），
+                            // 而绝大多数情况用户就是点「允许」——它拦不住真正危险的
+                            // 东西（那是 hardline 的活），只拦住了正常干活。
+                            //
+                            // 现在：除 ask_user 之外全部直接放行。
+                            //
+                            // ask_user 例外是因为它根本不是权限闸门——它是
+                            // 「我需要问你一个问题」。放行它等于让模型想问你也问不出来，
+                            // 直接拿到 ask_user_unavailable。
+                            if (tool.toolName == "ask_user") {
+                                if (isToolAutoApproved(tool.toolName)) {
+                                    tool
+                                } else {
+                                    hasPendingApproval = true
+                                    tool.copy(approvalState = ToolApprovalState.Pending)
+                                }
                             } else {
-                                hasPendingApproval = true
-                                tool.copy(approvalState = ToolApprovalState.Pending)
+                                tool
                             }
                         }
                         // State is Pending -> keep waiting
