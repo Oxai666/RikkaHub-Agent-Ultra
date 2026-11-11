@@ -603,6 +603,61 @@ class SkillManager(
         return SkillPaths.resolveSkillDir(getSkillsDir(), skillName)
     }
 
+    /**
+     * 捡回被中断的技能写入。
+     *
+     * [saveSkillFileBytesAtomically] 是三步：
+     *
+     *   1. target/SKILL.md  →  .名字.backup.0.tmp/
+     *   2. .名字.staging.0.tmp/  →  target/
+     *   3. 删 .名字.backup.0.tmp/
+     *
+     * 进程如果死在 1 和 2 之间，`skills/<名字>` 就不存在了，完整内容
+     * 全躺在 `.名字.backup.0.tmp` 里 —— 而没有任何地方会去捡它。
+     * 用户看到的就是「改完技能，大退重进，技能没了」。
+     *
+     * 启动跑一次：
+     *   · 有 .backup.tmp 且目标目录不存在 → 改名回去（内容救回来）
+     *   · 目标目录存在                      → 那次写入其实成功了，删掉 backup
+     *   · 所有 .staging.tmp                 → 没写完的，直接删
+     */
+    suspend fun recoverInterruptedSkillWrites() = withContext(Dispatchers.IO) {
+        val root = getSkillsDir()
+        val entries = root.listFiles() ?: return@withContext
+        for (dir in entries) {
+            if (!dir.isDirectory || !dir.name.startsWith(".")) continue
+            // 形如 .<名字>.staging.0.tmp / .<名字>.backup.0.tmp
+            val parts = dir.name.removePrefix(".").split('.')
+            if (parts.size < 4) continue
+            val suffix = parts[parts.size - 3]
+            if (suffix != "staging" && suffix != "backup") continue
+            val skillName = parts.dropLast(3).joinToString(".")
+            if (skillName.isBlank()) continue
+
+            val target = SkillPaths.resolveSkillDir(root, skillName) ?: continue
+
+            if (suffix == "staging") {
+                // 没写完的中间产物，永远不留
+                runCatching { dir.deleteRecursively() }
+                Log.i(TAG, "recover: dropped staging dir for $skillName")
+                continue
+            }
+
+            // suffix == backup
+            if (!target.exists()) {
+                // 目标不见了，说明死在第 1、2 步之间——把备份改回去
+                if (dir.renameTo(target)) {
+                    Log.w(TAG, "recover: restored $skillName from interrupted write")
+                } else {
+                    Log.e(TAG, "recover: FAILED to restore $skillName from ${dir.name}")
+                }
+            } else {
+                // 目标在，说明写入成功了，备份是残留
+                runCatching { dir.deleteRecursively() }
+            }
+        }
+    }
+
     private fun createTempSkillDir(skillsRoot: File, skillName: String, suffix: String): File? {
         repeat(100) { attempt ->
             val candidate = skillsRoot.resolve(".$skillName.$suffix.$attempt.tmp")
@@ -617,8 +672,20 @@ class SkillManager(
         return runCatching {
             val content = skillFile.readText()
             val frontmatter = SkillFrontmatterParser.parse(content)
-            val name = frontmatter["name"]?.takeIf { it.isNotBlank() } ?: return null
-            val description = frontmatter["description"]?.takeIf { it.isNotBlank() } ?: return null
+            // ⚠ 这两个不能 return null。
+            //
+            // 原来是：name 或 description 解析不出来 → 整个技能从列表里消失
+            // （目录还在，listSkills 只是不再报告它）。用户改技能时删掉
+            // description、或者 frontmatter 写坏了，就再也找不到那个技能——
+            // 看起来就是"大退重进之后技能没了"。
+            //
+            // 「描述为空」远没有「技能消失」严重，所以一律兜底：
+            //   name        → 目录名
+            //   description → 空串
+            val name = frontmatter["name"]?.takeIf { it.isNotBlank() }
+                ?: skillDir.name.takeIf { it.isNotBlank() }
+                ?: return null
+            val description = frontmatter["description"]?.takeIf { it.isNotBlank() }.orEmpty()
             SkillMetadata(
                 name = name,
                 description = description,

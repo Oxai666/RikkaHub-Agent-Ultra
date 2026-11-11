@@ -460,7 +460,14 @@ class RikkaHubApp : Application() {
     private fun seedDefaultSkillsIfNeeded() {
         get<AppScope>().launch(Dispatchers.IO) {
             runCatching {
-                get<me.rerere.rikkahub.data.files.SkillManager>().seedDefaultSkillsIfNeeded()
+                val skillManager = get<me.rerere.rikkahub.data.files.SkillManager>()
+                // 先捡回被中断的写入，再 seed。
+                //
+                // 顺序很重要：recover 会把 `.名字.backup.0.tmp` 改名回
+                // `skills/<名字>`。如果先 seed，那些用户自己建的技能
+                // 还没"回来"，seed 的日志和状态就都是错的。
+                skillManager.recoverInterruptedSkillWrites()
+                skillManager.seedDefaultSkillsIfNeeded()
             }.onFailure {
                 Log.e(TAG, "seedDefaultSkillsIfNeeded failed", it)
             }
