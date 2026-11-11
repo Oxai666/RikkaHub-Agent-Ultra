@@ -236,6 +236,34 @@ private fun AssistantPromptContent(
             )
         }
 
+        // 纯净模式。放在破甲下面——两者是相反的方向：
+        // 破甲是想让模型多说，纯净模式是想让模型只看见用户说的话。
+        Card(
+            colors = CustomColors.cardColorsOnSurfaceContainer
+        ) {
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
+                    Text(stringResource(R.string.assistant_page_pure_mode))
+                },
+                description = {
+                    Text(stringResource(R.string.assistant_page_pure_mode_desc))
+                },
+                tail = {
+                    Switch(
+                        checked = assistant.pureMode,
+                        onCheckedChange = {
+                            onUpdate(
+                                assistant.copy(
+                                    pureMode = it
+                                )
+                            )
+                        }
+                    )
+                }
+            )
+        }
+
         Card(
             colors = CustomColors.cardColorsOnSurfaceContainer
         ) {

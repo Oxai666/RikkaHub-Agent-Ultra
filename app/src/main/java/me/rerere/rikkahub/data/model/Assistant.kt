@@ -79,6 +79,23 @@ data class Assistant(
     val allowConversationPromptInjection: Boolean = false, // 允许对话单独绑定提示词注入
     /** 辅助破甲：本轮被判定为拒答/截断时注入纠正与续写指令。默认关闭。 */
     val armorEnabled: Boolean = false,
+
+    /**
+     * 纯净模式：只聊天，别的什么都不带。
+     *
+     * 打开之后：
+     *   · 不给任何工具（本地工具、workspace、MCP、技能全不注入）
+     *   · 不给任何提示词注入（时间提醒、工作区提醒、文档转提示词、OCR、注入模板）
+     *   · 不给技能（技能本质是往 system prompt 里塞内容）
+     *
+     * 保留两样：
+     *   · 系统提示词（assistant.systemPrompt —— 那是用户自己写的）
+     *   · 记忆（assistant 的 memory 块）
+     *
+     * 用途：拿它当纯聊天窗口，不想让模型看见一堆"你现在有这些工具"
+     * 之类的脚手架。
+     */
+    val pureMode: Boolean = false,
     /**
      * 压缩对话。
      *

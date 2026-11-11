@@ -1087,6 +1087,10 @@ class ChatService(
         // through the LLM — the fast-path is a per-user-turn optimisation, not a system-flow.
         if (me.rerere.rikkahub.data.ai.tools.HeadlessConversations.isHeadless(conversationId)) return false
 
+        // 纯净模式不走 fast-path：那条路会用 localTools 直接匹配意图然后调工具，
+        // 而纯模式下工具列表本来就是空的。让它落回正常 LLM 分支。
+        if (assistant.pureMode) return false
+
         // assistant is resolved from the conversation's own assistantId by the caller — do NOT
         // re-read the global getCurrentAssistant() here or a mid-turn assistant switch makes the
         // router read fastPathRouterEnabled / localTools off the wrong assistant.
@@ -1579,6 +1583,12 @@ class ChatService(
         model: Model,
         settings: Settings,
     ): List<Tool> = buildList {
+        // 纯净模式：一个工具都不给。
+        //
+        // 包括本地工具、workspace 工具、技能工具、MCP。
+        // 模型看不到 tools 数组，就不会去调；system prompt 里那些
+        // "你有这些能力"的描述也一并没了（见 transformers 那一段）。
+        if (assistant.pureMode) return@buildList
         if (assistant.enableWebSearch) {
             addAll(createSearchTools(settings))
         }
@@ -1890,13 +1900,34 @@ class ChatService(
                 } else {
                     memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
                 },
-                inputTransformers = buildList {
-                    addAll(inputTransformers)
-                    add(templateTransformer)
-                    add(workspaceReminderTransformer)
+                // 纯净模式：一条提示词注入都不挂。
+                //
+                // inputTransformers 这条链里有 TimeReminder（现在几点了）、
+                // DocumentAsPrompt（把附件正文塞进对话）、OcrTransformer、
+                // PromptInjectionTransformer（对话绑定的注入）、TemplateTransformer
+                // （助手模板里的 {{变量}}）、WorkspaceReminder（你有工作区、有哪些
+                // 工具、路径怎么用……）。
+                //
+                // 这些在正常模式下都是有用的脚手架，但纯净模式的定义就是
+                // 「模型只看见用户说的话」。所以整条链给空。
+                //
+                // 保留下来的两样在参数里，不受这里影响：
+                //   conversationSystemPrompt  系统提示词
+                //   memories                  记忆
+                inputTransformers = if (assistant.pureMode) {
+                    emptyList()
+                } else {
+                    buildList {
+                        addAll(inputTransformers)
+                        add(templateTransformer)
+                        add(workspaceReminderTransformer)
+                    }
                 },
                 outputTransformers = outputTransformers,
                 tools = buildList {
+                    // 纯净模式：不给工具，连 web search 也不给。
+                    // 上面那个 buildToolsForRerun 是另一条路径（重跑），也做了同样处理。
+                    if (assistant.pureMode) return@buildList
                     if (useExternalWebSearch) {
                         addAll(createSearchTools(settings))
                     }

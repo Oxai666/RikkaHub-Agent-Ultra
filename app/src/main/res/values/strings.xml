@@ -142,6 +142,8 @@
     <string name="assistant_compaction_title">Compact conversation</string>
   <string name="assistant_detail_compaction_desc">Compact long chats and archive the full record for the AI to search</string>
   <string name="assistant_compaction_target">Compact to</string>
+  <string name="assistant_page_pure_mode">Pure mode</string>
+  <string name="assistant_page_pure_mode_desc">Chat only. No tools, no prompt injections — only the system prompt and memory are kept.</string>
   <string name="assistant_compaction_target_desc">Target size after compaction. Unit is thousands of tokens; empty means use the global setting.</string>
   <string name="assistant_compaction_threshold">Trigger at</string>
   <string name="assistant_compaction_threshold_desc">Start compacting once the context exceeds this. Unit is thousands of tokens; empty means use the global setting.</string>

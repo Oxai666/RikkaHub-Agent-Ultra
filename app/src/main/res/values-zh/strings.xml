@@ -143,6 +143,8 @@
   <string name="assistant_compaction_title">压缩对话</string>
   <string name="assistant_detail_compaction_desc">压缩长对话，同时存档完整记录供 AI 检索</string>
   <string name="assistant_compaction_target">压缩大小</string>
+  <string name="assistant_page_pure_mode">纯净模式</string>
+  <string name="assistant_page_pure_mode_desc">只聊天。不给任何工具，不注入任何提示词，只保留系统提示词和记忆。</string>
   <string name="assistant_compaction_target_desc">压缩后把上下文缩到多少。单位 K tokens，留空沿用全局设置。</string>
   <string name="assistant_compaction_threshold">压缩阈值</string>
   <string name="assistant_compaction_threshold_desc">上下文超过这个量才开始压缩。单位 K tokens，留空沿用全局设置。</string>
