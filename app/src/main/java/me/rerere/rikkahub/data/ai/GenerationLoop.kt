@@ -847,10 +847,7 @@ class GenerationLoop(
                     //
                     // 目标路径是**沙箱视角**的 /workspace/...，拍快照的代码跑在
                     // App 进程里，必须翻译成 filesDir/workspaces/<id>/files/...
-                    // 才找得到文件。下面那个「备份失败就拒绝」的判断用的是同一个
-                    // 翻译函数——之前那里写的是 File(it.path).exists()，
-                    // 沙箱路径在 App 进程里恒不存在，导致 required 但拍失败时
-                    // 判断恒为 false，直接放行了。
+                    // 才找得到文件。
                     val snapshotWorkspaceId = assistant.workspaceId?.toString()
                     val resolveSnapshotTarget: (String) -> File = { sandboxPath ->
                         me.rerere.rikkahub.safety.SnapshotRoots.resolveTarget(
@@ -880,32 +877,34 @@ class GenerationLoop(
                         }
                     }.getOrNull()
                     val transformed = when {
-                        // 声明必须备份、结果一个文件都没拍到 → 不执行。
-                        // 这条比「直接放行」严格，比「无脑拒绝」宽松：
-                        // 目标文件本来就不存在（没什么可备份）也会走到这里，
-                        // 所以额外判断一下 targets 里有没有真存在的文件。
-                        safetyVerdict.snapshotPlan.required &&
-                            snapshotRecord == null &&
-                            safetyVerdict.snapshotPlan.targets.any {
-                                resolveSnapshotTarget(it.path).exists()
-                            } -> {
-                            Log.w(TAG, "snapshot-required-but-failed ${tool.toolName}")
-                            tool.copy(
-                                approvalState = ToolApprovalState.Denied(
-                                    "这个操作不可撤销，需要先备份目标文件，但备份失败了。" +
-                                        "已拒绝执行，避免造成无法恢复的改动。"
-                                )
-                            )
-                        }
+                        // ⚠ 「声明要备份但备份失败 → 拒绝」那条已经删了。
+                        //
+                        // 它是你截图里那个报错的来源：一条 `cd /workspace && echo "..."`，
+                        // 风险分析判它不可撤销、要求备份，然后备份管线因为沙箱路径
+                        // 翻译不到 App 进程而失败，整条命令被拒。模型只好换工具绕，
+                        // 绕不过就卡死。
+                        //
+                        // 现在：快照照拍，拍不到就记一条日志往下走。
+                        // 正常操作不该因为"备份这事没办成"而执行不了。
 
-                        // blocked 是无条件的：安全层已经判定这条命令不能跑，
+                        // blocked 是：安全层已经判定这条命令不能跑，
                         // 那它就不该出现在任何状态下。之前带了
                         // `&& tool.approvalState is Auto`，模型如果因为上一轮
                         // 审批暂停过、这一轮带着 Pending 状态重放同一条命令，
                         // 就绕过这道闸了。
                         // 无审核模式下这条不生效——那是用户手打一句话开启的，
                         // 但它只取消「拦」，备份照做。
-                        safetyVerdict.blocked && !dangerousMode -> {
+                        // 用户已经点过「允许」的，不再被安全层否掉。
+                        //
+                        // 之前这条是无条件的（注释里还专门解释过为什么去掉 Auto 判断，
+                        // 怕模型带着 Pending 状态重放绕过）。代价就是「打了勾又被拒」：
+                        // 审批弹窗点完 Approved，下一秒这个分支把它改成 Denied。
+                        //
+                        // 现在只拦 Auto 和 Pending 两种状态：Approved 是用户亲手做的
+                        // 决定，安全层不该覆盖它。
+                        safetyVerdict.blocked &&
+                            !dangerousMode &&
+                            tool.approvalState !is ToolApprovalState.Approved -> {
                             Log.w(
                                 TAG,
                                 "safety-blocked ${tool.toolName}: ${safetyVerdict.blockCode}"
@@ -940,27 +939,19 @@ class GenerationLoop(
                         // Tool needs approval and state is Auto:
                         toolDef?.needsApproval(tool.inputAsJson()) == true &&
                             tool.approvalState is ToolApprovalState.Auto -> {
-                            // ⚠ 审批闸门已关闭。
+                            // 逐工具判断：YOLO / Always-Allow / headless 直接放行，
+                            // 其余挂 Pending 等用户点。
                             //
-                            // 原来这里按 isToolAutoApproved 决定放行还是挂 Pending。
-                            // 实际用下来，审批弹窗来得太频繁（几乎每个工具都弹），
-                            // 而绝大多数情况用户就是点「允许」——它拦不住真正危险的
-                            // 东西（那是 hardline 的活），只拦住了正常干活。
-                            //
-                            // 现在：除 ask_user 之外全部直接放行。
-                            //
-                            // ask_user 例外是因为它根本不是权限闸门——它是
-                            // 「我需要问你一个问题」。放行它等于让模型想问你也问不出来，
-                            // 直接拿到 ask_user_unavailable。
-                            if (tool.toolName == "ask_user") {
-                                if (isToolAutoApproved(tool.toolName)) {
-                                    tool
-                                } else {
-                                    hasPendingApproval = true
-                                    tool.copy(approvalState = ToolApprovalState.Pending)
-                                }
-                            } else {
+                            // 分档在 ChatService 那个 isToolAutoApproved lambda 里：
+                            //   ask_user            → 只有 headless 才自动批（要真问人）
+                            //   无审核模式          → 全放行
+                            //   root_shell/shizuku  → 永远不自动批（高权限 shell）
+                            //   其余                → YOLO / 本会话白名单 / 全局白名单
+                            if (isToolAutoApproved(tool.toolName)) {
                                 tool
+                            } else {
+                                hasPendingApproval = true
+                                tool.copy(approvalState = ToolApprovalState.Pending)
                             }
                         }
                         // State is Pending -> keep waiting

@@ -30,24 +30,19 @@ object ToolSafetyCoordinator {
         argsJson: String,
         workspaceRoot: String? = null,
     ): RiskAssessment {
-        // ⚠ 安全层已关闭。
+        // 参数解析不出来就按只读放行，不因为「看不懂参数」把操作拦死。
+        val args = runCatching { json.parseToJsonElement(argsJson).jsonObject }.getOrNull()
+            ?: return RiskAssessment.readOnly(toolName)
+
+        // ⚠ 「快照拍不了就拒绝」那条已经删了。
         //
-        // 原来这里做三件事：风险分级、拍快照、决定要不要弹审批。
-        // 实际跑下来误拦太多——一条 `cd /workspace && echo "..."` 会被
-        // 判成"不可撤销 + 需要备份 + 备份失败"，然后整条命令被拒。
-        // 模型只好绕一大圈用别的工具重试，体验比没有安全层还差。
+        // 原来这里是：snapshotPlan.required && targets 非空 && 拍不了 → blocked。
+        // 误伤太多——一条 `cd /workspace && echo "..."` 会被判成不可撤销 + 需要备份，
+        // 然后因为沙箱路径翻译不上而"备份失败"，整条命令被拒。
         //
-        // 现在一律按只读放行：
-        //   requiresApproval = false   → 不弹审批
-        //   blocked = false            → 不拒绝
-        //   snapshotPlan = NONE        → 不拍快照，GenerationLoop 里那段
-        //                                「备份失败就拒绝」也不会触发
-        //
-        // 原来的分析代码（RiskAssessor / ShellCommandRiskAnalyzer /
-        // FileSnapshotManager）都还在，只是没人调了。要恢复的话把这行
-        // 换回 RiskAssessor.assess(toolName, args, workspaceRoot) +
-        // 原来的快照检查即可。
-        return RiskAssessment.readOnly(toolName)
+        // 现在只做风险分级，不做「拍不了就拒」。快照该拍还是会拍
+        // （GenerationLoop 里那段），拍不到就当没拍到，照常执行。
+        return RiskAssessor.assess(toolName, args, workspaceRoot)
     }
 
     /**
